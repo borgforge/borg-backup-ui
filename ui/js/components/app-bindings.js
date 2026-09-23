@@ -162,6 +162,12 @@
     document.getElementById('bericht-job-sel')?.addEventListener('change', berichtLoad);
     document.getElementById('bericht-borginfo-btn')?.addEventListener('click', berichtLoadBorgInfo);
     document.getElementById('restore-job-sel')?.addEventListener('change', restoreLoadArchives);
+    document.getElementById('restore-archive-filter-mode')?.addEventListener('change', restoreChangeArchiveFilter);
+    document.getElementById('restore-archive-filter-pattern')?.addEventListener('input', restoreEditArchiveFilter);
+    document.getElementById('restore-archive-filter-apply')?.addEventListener('click', restoreApplyArchiveFilter);
+    document.getElementById('restore-archive-filter-pattern')?.addEventListener('keydown', event => {
+      if (event.key === 'Enter') { event.preventDefault(); restoreApplyArchiveFilter(); }
+    });
     document.getElementById('restore-archive-sel')?.addEventListener('change', () => restoreBrowse(''));
     document.getElementById('restore-wizard')?.addEventListener('click', onRestoreRedesignClick);
     document.getElementById('restore-sidebar-search')?.addEventListener('input', renderRestoreJobSidebar);

@@ -2,7 +2,11 @@ from job_fixtures import identified_job, job_id
 from pathlib import Path
 from types import SimpleNamespace
 import json
+import os
+import shutil
+import subprocess
 import sys
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -52,7 +56,7 @@ def test_browse_restore_filters_archives_by_job_prefix_history(tmp_path: Path, m
 
     def fake_run(cmd, capture_output=False, text=False, env=None, timeout=None):
         calls.append(list(cmd))
-        archive_filter = cmd[cmd.index("--glob-archives") + 1]
+        archive_filter = next(arg.split("=", 1)[1] for arg in cmd if arg.startswith("--glob-archives="))
         return SimpleNamespace(
             returncode=0,
             stdout=json.dumps({"archives": payloads.get(archive_filter, [])}),
@@ -67,7 +71,7 @@ def test_browse_restore_filters_archives_by_job_prefix_history(tmp_path: Path, m
 
     result = restore_api.list_archives_with_context(cfg, "testdaten_local")
 
-    assert [cmd[cmd.index("--glob-archives") + 1] for cmd in calls] == [
+    assert [next(arg.split("=", 1)[1] for arg in cmd if arg.startswith("--glob-archives=")) for cmd in calls] == [
         "testdaten-backup-*",
         "oldtestdaten-backup-*",
     ]
@@ -155,3 +159,81 @@ def test_save_job_preserves_previous_archive_prefixes(tmp_path: Path, monkeypatc
         "oldtype-backup",
         "oldertype-backup",
     ]
+
+
+@pytest.mark.parametrize("mode,pattern,expected", [
+    ("all", "ignored-*", []),
+    ("custom", "*-nextcloud-aio", ["--glob-archives=*-nextcloud-aio"]),
+    ("custom", "202*", ["--glob-archives=202*"]),
+    ("custom", "--unusual-*", ["--glob-archives=--unusual-*"]),
+    ("custom", "name with spaces", ["--glob-archives=name with spaces"]),
+])
+def test_external_archive_filter_is_only_a_list_argument(monkeypatch, mode, pattern, expected):
+    calls = []
+    cleaned = []
+    info = {"repo": "ssh://remote/repo", "job": {"archive_prefix": "job-backup"}}
+    monkeypatch.setattr("smb_mount.ensure_smb_mount_for_job", lambda *_: SimpleNamespace(cleanup=lambda: cleaned.append(True)))
+    monkeypatch.setattr(restore_api, "_get_job_repo_info", lambda *_: info)
+    monkeypatch.setattr(restore_api, "ensure_restore_repository_available", lambda *_: None)
+    monkeypatch.setattr(restore_api, "_repository_borg_env", lambda *_: {"SSH_CONTEXT": "preserved"})
+    def run(cmd, **kwargs):
+        calls.append(cmd)
+        assert kwargs["env"] == {"SSH_CONTEXT": "preserved"}
+        assert kwargs.get("shell", False) is False
+        return SimpleNamespace(returncode=0, stdout='{"archives":[]}', stderr="")
+    monkeypatch.setattr(restore_api.subprocess, "run", run)
+    result = restore_api.list_archives_with_context({}, "test_local", filter_mode=mode, archive_filter=pattern)
+    assert calls == [["borg", "list", "--json", *expected, "ssh://remote/repo"]]
+    assert cleaned == [True]
+    assert result["archive_filters"] == []
+    assert result["filter_mode"] == mode
+    assert info["job"] == {"archive_prefix": "job-backup"}
+
+
+@pytest.mark.parametrize("mode,pattern", [
+    ("invalid", "*"), ("custom", ""), ("custom", "   "), ("custom", "x" * 257),
+    ("custom", "foo\nbar"), ("custom", "foo\x00bar"), ("custom", "foo\x7fbar"),
+])
+def test_bad_filter_is_rejected_before_mount_or_borg(monkeypatch, mode, pattern):
+    def forbidden(*args, **kwargs):
+        pytest.fail("Invalid archive filter reached storage")
+    monkeypatch.setattr("smb_mount.ensure_smb_mount_for_job", forbidden)
+    monkeypatch.setattr(restore_api.subprocess, "run", forbidden)
+    with pytest.raises(ValueError, match="filter"):
+        restore_api.list_archives_with_context({}, "test_local", filter_mode=mode, archive_filter=pattern)
+
+
+def test_real_borg_external_archive_can_be_browsed_and_restored(tmp_path, monkeypatch):
+    if not shutil.which("borg"):
+        pytest.skip("Borg binary required for external archive integration")
+    env = {**os.environ, "BORG_CACHE_DIR": str(tmp_path / "cache"),
+           "BORG_SECURITY_DIR": str(tmp_path / "security"),
+           "BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK": "yes"}
+    repo, source, target = (tmp_path / name for name in ("repo", "source", "target"))
+    source.mkdir(); target.mkdir()
+    (source / "hello.txt").write_text("Restored from external archive")
+    external = "20260922_160449-nextcloud-aio"
+    def borg(*args):
+        return subprocess.run(["borg", *args], cwd=source, env=env, check=True, capture_output=True, text=True)
+    borg("init", "--encryption=none", str(repo))
+    for name in ("job-backup-current", "old-backup-previous", external):
+        borg("create", f"{repo}::{name}", "hello.txt")
+    info = {"repo": str(repo), "job": {"archive_prefix": "job-backup", "archive_prefixes": ["old-backup"]}}
+    monkeypatch.setattr("smb_mount.ensure_smb_mount_for_job", lambda *_: _NoopGuard())
+    monkeypatch.setattr(restore_api, "_get_job_repo_info", lambda *_: info)
+    monkeypatch.setattr(restore_api, "ensure_restore_repository_available", lambda *_: None)
+    monkeypatch.setattr(restore_api, "_repository_borg_env", lambda *_: env)
+    monkeypatch.setattr(restore_api, "_validate_target_dir", lambda *_: target)
+    monkeypatch.setattr(restore_api, "acquire_restore_repository_lock", lambda *_: SimpleNamespace(release=lambda: None))
+    def names(**kwargs):
+        return {row["name"] for row in restore_api.list_archives_with_context({}, "test_local", **kwargs)["archives"]}
+    assert names() == {"job-backup-current", "old-backup-previous"}
+    assert names(filter_mode="all") == {"job-backup-current", "old-backup-previous", external}
+    assert names(filter_mode="custom", archive_filter="*-nextcloud-aio") == {external}
+    assert names(filter_mode="custom", archive_filter="202*") == {external}
+    assert names(filter_mode="custom", archive_filter="202") == set()
+    assert restore_api.list_files({}, "test_local", external, "")[0]["name"] == "hello.txt"
+    result = restore_api.start_restore({}, "test_local", external, "hello.txt", str(target), "skip")
+    assert result["items"][0]["restored"]
+    assert (target / "hello.txt").read_text() == "Restored from external archive"
+    assert names() == {"job-backup-current", "old-backup-previous"}

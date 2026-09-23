@@ -20,7 +20,7 @@ function page(language = 'en') {
       const stepNumber = id.startsWith('restore-step-badge-') ? {textContent: ''} : null;
       elements.set(id, {
         value: '', checked: false, disabled: false, textContent: '', style: {}, html: '', dataset: {},
-        setAttribute() {}, querySelector(selector) { return selector === 'span' ? stepNumber : null; },
+        focus() {}, setAttribute() {}, querySelector(selector) { return selector === 'span' ? stepNumber : null; },
         get innerHTML() { return this.html; },
         set innerHTML(value) { this.html = value; if (id.endsWith('-sel')) this.value = ''; },
         appendChild() {}, classList: {
@@ -666,4 +666,67 @@ test('failed history entries retain their technical details', async () => {
   const html = get('restore-history-detail-failed-history').innerHTML;
   assert.ok(html.includes('Destination full'));
   assert.ok(html.includes('Borg diagnostic'));
+});
+
+for (const language of ['de', 'en']) test(`archive filter modes reset selection and preserve raw patterns (${language})`, async () => {
+  const {context, get, state, labels} = page(language);
+  state.job = 'job-id'; get('restore-job-sel').value = 'job-id';
+  const calls = [];
+  context.fetch = async url => { calls.push(url); return response({archives: [{name: '20260922_160449-nextcloud-aio'}]}); };
+  state.archive = 'old'; state.selections = [{path: 'old.txt'}]; state.precheck = {ok: true};
+  get('restore-confirm-check').checked = true;
+  get('restore-archive-filter-mode').value = 'all';
+  await context.restoreChangeArchiveFilter();
+  assert.ok(calls[0].endsWith('filter_mode=all'));
+  assert.equal(state.archive, ''); assert.equal(state.selections.length, 0);
+  assert.equal(state.precheck, null); assert.equal(get('restore-confirm-check').checked, false);
+  get('restore-archive-filter-mode').value = 'custom';
+  await context.restoreChangeArchiveFilter();
+  assert.equal(state.archives.length, 0); assert.equal(calls.length, 1);
+  assert.ok(get('restore-archive-list').innerHTML.includes(labels.restore.archiveFilterApplyHint));
+  get('restore-archive-filter-pattern').value = '';
+  await context.restoreApplyArchiveFilter();
+  assert.equal(calls.length, 1);
+  assert.equal(context.messages.at(-1).message, labels.restore.archiveFilterInvalid);
+  get('restore-archive-filter-pattern').value = '202*';
+  await context.restoreApplyArchiveFilter();
+  assert.equal(new URL(calls[1], 'http://test').searchParams.get('archive_filter'), '202*');
+  assert.equal(state.archives[0].name, '20260922_160449-nextcloud-aio');
+  get('restore-job-sel').value = 'different-job';
+  await context.restoreLoadArchives();
+  assert.equal(state.archiveFilterMode, 'job');
+  assert.equal(state.archiveFilterPattern, '');
+  assert.equal(calls.at(-1), '/api/restore/archives?job=different-job');
+});
+
+test('editing a custom pattern discards pending archives, file listings and prechecks', async () => {
+  const {context, get, state} = page();
+  state.job = 'job-id'; get('restore-job-sel').value = 'job-id';
+  state.archiveFilterMode = 'custom';
+  get('restore-archive-filter-pattern').value = '*-aio';
+  const oldList = deferred(); context.fetch = () => oldList.promise;
+  const listing = context.restoreApplyArchiveFilter();
+  get('restore-archive-filter-pattern').value = '202*';
+  context.restoreEditArchiveFilter();
+  oldList.resolve(response({archives: [{name: 'obsolete'}]}));
+  await listing;
+  assert.equal(state.archives.length, 0);
+  context.fetch = async () => response({archives: [{name: '2026-aio'}]});
+  await context.restoreApplyArchiveFilter();
+  get('restore-archive-sel').value = '2026-aio';
+  const oldFiles = deferred(); context.fetch = () => oldFiles.promise;
+  const browsing = context.restoreBrowse('');
+  context.restoreEditArchiveFilter();
+  oldFiles.resolve(response({files: [{name: 'obsolete'}]}));
+  await browsing;
+  assert.equal(state.files.length, 0);
+  state.archive = '2026-aio'; state.selectedPath = 'data';
+  get('restore-target-path').value = '/mnt/user/test';
+  const oldCheck = deferred(); context.fetch = () => oldCheck.promise;
+  const checking = context.restoreRunPrecheck();
+  context.restoreEditArchiveFilter();
+  oldCheck.resolve(response({ok: true}));
+  await checking;
+  assert.equal(state.precheck, null);
+  assert.equal(state.archive, '');
 });

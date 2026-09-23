@@ -571,7 +571,13 @@ Select the job whose archive you want to browse. The sidebar groups jobs by loca
 
 #### Step 2: Select Archive
 
-Select an archive from the repository. The list is limited to archive prefixes belonging to the job. The current pattern, for example `testdata-backup-*`, is shown above the list. If the job's type ID was changed previously, a compact information popover also shows the stored historical patterns. This keeps older archives in the currently assigned repository available without offering archives from other jobs in a shared repository.
+Select an archive from the repository assigned to the job. **Show archives** offers three options:
+
+- **Archives of this job** (default): Uses the job's current and stored historical prefixes, for example `testdata-backup-*`. The information popover shows historical patterns.
+- **All archives in repository**: Shows archives regardless of their name or creating application.
+- **Custom filter**: Enter a Borg name pattern and select **Apply** or press **Enter**. `*` matches any number of characters, `?` matches one character. For example, `*-nextcloud-aio` matches `20260922_160449-nextcloud-aio`; `202*` matches names starting with `202`. The pattern is used as entered, without adding a hyphen or wildcard.
+
+The filter applies only to this restore selection. Backup names and retention rules stay unchanged. Changing the filter clears the selected archive, files and precheck. Selecting another job or reopening the page resets the filter to **Archives of this job**. External archives still require a job assigned to their repository and valid repository credentials.
 
 If no archives are visible, check repository access, passphrase, storage status, and the displayed archive pattern. After a job repository change, older archives remain in the previous repository and do not appear here; the change neither moves nor copies them.
 

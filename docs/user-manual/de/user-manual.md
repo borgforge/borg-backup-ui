@@ -571,7 +571,13 @@ Wählen Sie den Job, dessen Archiv Sie durchsuchen möchten. Die Sidebar gruppie
 
 #### Schritt 2: Archiv auswählen
 
-Wählen Sie ein Archiv aus dem Repository. Die Liste wird auf die zum Job gehörenden Archivpräfixe begrenzt. Das aktuelle Muster, beispielsweise `testdaten-backup-*`, steht oberhalb der Liste. Wurde die Typ-ID des Jobs früher geändert, zeigt ein kompaktes Informations-Popover zusätzlich die gespeicherten historischen Muster. So bleiben ältere Archive innerhalb des aktuell zugeordneten Repositorys erreichbar, ohne Archive anderer Jobs in einem gemeinsam genutzten Repository anzubieten.
+Wählen Sie ein Archiv aus dem Repository, das dem Job zugeordnet ist. **Archive anzeigen** bietet drei Optionen:
+
+- **Archive dieses Jobs** (Standard): Verwendet das aktuelle und die gespeicherten früheren Job-Präfixe, zum Beispiel `testdaten-backup-*`. Das Informationsfenster zeigt die früheren Muster.
+- **Alle Archive im Repository**: Zeigt Archive unabhängig vom Namen und der Anwendung, die sie erstellt hat.
+- **Eigener Filter**: Borg-Namensmuster eingeben und mit **Anwenden** oder **Enter** laden. `*` steht für beliebig viele Zeichen, `?` für ein Zeichen. Beispielsweise findet `*-nextcloud-aio` das Archiv `20260922_160449-nextcloud-aio`; `202*` findet Namen, die mit `202` beginnen. Das Muster wird unverändert verwendet, ohne Bindestrich oder Platzhalter anzuhängen.
+
+Der Filter gilt nur für diese Restore-Auswahl. Backup-Namen und Aufbewahrungsregeln bleiben unverändert. Ein Filterwechsel löscht die Archiv- und Dateiauswahl sowie die Vorprüfung. Bei einem anderen Job oder beim erneuten Öffnen der Seite gilt wieder **Archive dieses Jobs**. Für externe Archive ist weiterhin ein Job mit diesem Repository und gültigen Repository-Zugangsdaten erforderlich.
 
 Wenn keine Archive sichtbar sind, prüfen Sie Repository-Zugriff, Passphrase, Storage-Status und das angezeigte Archivmuster. Nach einem Wechsel des Job-Repositorys bleiben frühere Archive im alten Repository und erscheinen hier nicht; sie werden durch die Änderung weder verschoben noch kopiert.
 

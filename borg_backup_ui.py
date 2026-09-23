@@ -2307,7 +2307,11 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         job_key = (qs.get("job") or [""])[0]
         if not job_key:
             raise ValueError("job parameter is required")
-        return list_archives_with_context(self.config, job_key)
+        return list_archives_with_context(
+            self.config, job_key,
+            filter_mode=(qs.get("filter_mode") or ["job"])[0],
+            archive_filter=(qs.get("archive_filter") or [""])[0],
+        )
 
     def _get_restore_files(self, qs_str: str) -> dict:
         self._require_data_dir_ready(read_only=True)

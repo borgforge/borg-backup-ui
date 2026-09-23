@@ -61,7 +61,8 @@ def test_restore_navigation_reads_without_changing_data_directories(
         expected = {"dirs": result, "allowed_roots": ["/mnt/user"]}
     for _ in range(3):
         assert getattr(handler, method)(query) == expected
-    downstream.assert_called_with(handler.config, *args)
+    kwargs = {"filter_mode": "job", "archive_filter": ""} if method == "_get_restore_archives" else {}
+    downstream.assert_called_with(handler.config, *args, **kwargs)
     assert set(data.rglob("*")) == set(paths) - {data}
     assert {p: (p.stat().st_mtime_ns, p.stat().st_ctime_ns) for p in paths} == before
 
@@ -110,3 +111,16 @@ def test_actual_actions_still_fail_when_storage_write_probe_fails(handler_and_da
         with pytest.raises(OSError, match="simulated storage write failure"):
             args = ({},) if method == "_start_restore_test_from_body" else ()
             getattr(handler, method)(*args)
+
+
+@pytest.mark.parametrize("query,mode,pattern", [
+    ("job=example&filter_mode=all", "all", ""),
+    ("job=example&filter_mode=custom&archive_filter=%2A-nextcloud-aio", "custom", "*-nextcloud-aio"),
+    ("job=example&filter_mode=custom&archive_filter=a%2Bb%20%26%20c%3F", "custom", "a+b & c?"),
+])
+def test_restore_archive_query_preserves_explicit_filter(handler_and_data, monkeypatch, query, mode, pattern):
+    handler, _ = handler_and_data
+    downstream = Mock(return_value={"archives": []})
+    monkeypatch.setattr(restore_api, "list_archives_with_context", downstream)
+    assert handler._get_restore_archives(query) == {"archives": []}
+    downstream.assert_called_once_with(handler.config, "example", filter_mode=mode, archive_filter=pattern)
