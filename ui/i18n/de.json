@@ -1404,7 +1404,7 @@
     "archiveScopeCustom": "Eigener Filter",
     "archivePattern": "Namensmuster",
     "archiveFilterApply": "Anwenden",
-    "archivePatternHelp": "* steht für beliebig viele Zeichen, ? für ein Zeichen. Beispiel: *-nextcloud-aio",
+    "archivePatternHelp": "* steht für beliebig viele Zeichen, ? für ein Zeichen. Beispiel: documents-*",
     "archiveScopeHelp": "Der Filter gilt nur für diese Archivauswahl. Backup-Namen und Aufbewahrung bleiben unverändert.",
     "archiveFilterApplyHint": "Namensmuster eingeben und mit Anwenden oder Enter laden.",
     "archiveFilterInvalid": "Bitte ein Namensmuster mit 1–256 Zeichen ohne Steuerzeichen eingeben.",

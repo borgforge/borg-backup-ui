@@ -4,6 +4,7 @@
 
 - Add job, repository-wide and custom Borg glob modes to Browse & Restore. Keep historical job prefixes as the default and pass custom patterns unchanged, without adding a hyphen or wildcard.
 - Reset archive/file selection and precheck on filter edits, discard stale list responses, and restore the job default when changing jobs or reopening the page. Document the modes in German and English.
+- Use the neutral `documents-*` example and keep pattern guidance directly below the input field, with responsive two-column controls.
 - Restrict the change to archive listing; backup naming, retention and stored job configuration are unchanged. No migration is required.
 
 ## Pending - Optional Prometheus metrics and Grafana dashboard (#534)

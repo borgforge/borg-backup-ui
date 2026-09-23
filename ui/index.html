@@ -649,7 +649,7 @@
             <div class="restore-archive-filter-controls">
               <div>
                 <label for="restore-archive-filter-mode" class="form-label" data-i18n="restore.archiveScope">Archive anzeigen</label>
-                <select id="restore-archive-filter-mode" class="form-input" aria-describedby="restore-archive-filter-help">
+                <select id="restore-archive-filter-mode" class="form-input">
                   <option value="job" data-i18n="restore.archiveScopeJob">Archive dieses Jobs</option>
                   <option value="all" data-i18n="restore.archiveScopeAll">Alle Archive im Repository</option>
                   <option value="custom" data-i18n="restore.archiveScopeCustom">Eigener Filter</option>
@@ -658,12 +658,12 @@
               <div id="restore-archive-filter-custom" class="hidden">
                 <label for="restore-archive-filter-pattern" class="form-label" data-i18n="restore.archivePattern">Namensmuster</label>
                 <div class="restore-archive-filter-entry">
-                  <input id="restore-archive-filter-pattern" class="form-input mono" type="text" maxlength="256" placeholder="*-nextcloud-aio" autocomplete="off" spellcheck="false" aria-describedby="restore-archive-pattern-help" disabled>
+                  <input id="restore-archive-filter-pattern" class="form-input mono" type="text" maxlength="256" placeholder="documents-*" autocomplete="off" spellcheck="false" aria-describedby="restore-archive-pattern-help restore-archive-filter-help" disabled>
                   <button id="restore-archive-filter-apply" type="button" class="btn btn-secondary" data-i18n="restore.archiveFilterApply">Anwenden</button>
+                  <small id="restore-archive-pattern-help" data-i18n="restore.archivePatternHelp">* steht für beliebig viele Zeichen, ? für ein Zeichen. Beispiel: documents-*</small>
+                  <p id="restore-archive-filter-help" data-i18n="restore.archiveScopeHelp">Der Filter gilt nur für diese Archivauswahl. Backup-Namen und Aufbewahrung bleiben unverändert.</p>
                 </div>
-                <small id="restore-archive-pattern-help" data-i18n="restore.archivePatternHelp">* steht für beliebig viele Zeichen, ? für ein Zeichen. Beispiel: *-nextcloud-aio</small>
               </div>
-              <p id="restore-archive-filter-help" data-i18n="restore.archiveScopeHelp">Der Filter gilt nur für diese Archivauswahl. Backup-Namen und Aufbewahrung bleiben unverändert.</p>
             </div>
             <div id="restore-archive-filter-summary" class="restore-archive-filter-summary"></div>
             <label class="form-label form-label-required"><span class="form-required-marker" aria-hidden="true">*</span><span data-i18n="restore.selectArchive">2. Archiv auswählen</span></label>

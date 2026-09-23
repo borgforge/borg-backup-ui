@@ -1404,7 +1404,7 @@
     "archiveScopeCustom": "Custom filter",
     "archivePattern": "Name pattern",
     "archiveFilterApply": "Apply",
-    "archivePatternHelp": "* matches any number of characters, ? matches one character. Example: *-nextcloud-aio",
+    "archivePatternHelp": "* matches any number of characters, ? matches one character. Example: documents-*",
     "archiveScopeHelp": "This filter applies only to this archive selection. Backup names and retention stay unchanged.",
     "archiveFilterApplyHint": "Enter a name pattern and select Apply or press Enter to load archives.",
     "archiveFilterInvalid": "Enter a name pattern with 1–256 characters and no control characters.",

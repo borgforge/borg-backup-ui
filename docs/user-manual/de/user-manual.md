@@ -575,7 +575,7 @@ Wählen Sie ein Archiv aus dem Repository, das dem Job zugeordnet ist. **Archive
 
 - **Archive dieses Jobs** (Standard): Verwendet das aktuelle und die gespeicherten früheren Job-Präfixe, zum Beispiel `testdaten-backup-*`. Das Informationsfenster zeigt die früheren Muster.
 - **Alle Archive im Repository**: Zeigt Archive unabhängig vom Namen und der Anwendung, die sie erstellt hat.
-- **Eigener Filter**: Borg-Namensmuster eingeben und mit **Anwenden** oder **Enter** laden. `*` steht für beliebig viele Zeichen, `?` für ein Zeichen. Beispielsweise findet `*-nextcloud-aio` das Archiv `20260922_160449-nextcloud-aio`; `202*` findet Namen, die mit `202` beginnen. Das Muster wird unverändert verwendet, ohne Bindestrich oder Platzhalter anzuhängen.
+- **Eigener Filter**: Borg-Namensmuster eingeben und mit **Anwenden** oder **Enter** laden. `*` steht für beliebig viele Zeichen, `?` für ein Zeichen. Beispielsweise findet `documents-*` das Archiv `documents-2026-09-22`; `202*` findet Namen, die mit `202` beginnen. Das Muster wird unverändert verwendet, ohne Bindestrich oder Platzhalter anzuhängen.
 
 Der Filter gilt nur für diese Restore-Auswahl. Backup-Namen und Aufbewahrungsregeln bleiben unverändert. Ein Filterwechsel löscht die Archiv- und Dateiauswahl sowie die Vorprüfung. Bei einem anderen Job oder beim erneuten Öffnen der Seite gilt wieder **Archive dieses Jobs**. Für externe Archive ist weiterhin ein Job mit diesem Repository und gültigen Repository-Zugangsdaten erforderlich.
 
