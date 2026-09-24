@@ -1,8 +1,107 @@
-"""history_api.py – Liest alle .status-Dateien und gibt sie als Liste zurück."""
+"""Backup status history and confined access to retained history logs."""
 
+import errno
 import json
+import os
+import stat
 from datetime import datetime
 from pathlib import Path
+
+
+LEGACY_LOG_DIR = Path("/mnt/user/Logs")
+_LOG_SUFFIXES = {".log", ".txt"}
+
+
+def _read_regular_history_log(path: Path) -> str:
+    """Read a previously authorized, absolute canonical log path as UTF-8.
+
+    Pin each directory by descriptor and refuse symlinks while opening, so a
+    path component replaced after authorization cannot redirect the read.
+    Non-regular files raise ValueError; OS errors propagate to the caller.
+    All descriptors close on both success and failure. Linux/Unraid is required.
+    """
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    directory_fd = os.open(path.anchor, directory_flags)
+    try:
+        for name in path.parts[1:-1]:
+            next_fd = os.open(name, directory_flags, dir_fd=directory_fd)
+            os.close(directory_fd)
+            directory_fd = next_fd
+        file_fd = os.open(
+            path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+            dir_fd=directory_fd,
+        )
+    finally:
+        os.close(directory_fd)
+    try:
+        if not stat.S_ISREG(os.fstat(file_fd).st_mode):
+            raise ValueError("Log file must be a regular file")
+        with os.fdopen(file_fd, "r", encoding="utf-8", errors="replace", closefd=False) as handle:
+            return handle.read()
+    finally:
+        os.close(file_fd)
+
+
+def get_history_log(config: dict, file_path: str) -> dict:
+    """Read a .log/.txt file only within configured or legacy log storage.
+
+    ``file_path`` must already be URL-decoded once. Relative paths are anchored
+    to GLOBAL_LOG_DIR, never the process working directory. Canonical paths
+    must stay below GLOBAL_LOG_DIR or the explicit legacy /mnt/user/Logs root;
+    configured root symlinks and links staying within these roots are supported.
+    The current/legacy basename fallback preserves references to moved logs.
+
+    Returns the existing ``exists``, ``content``, ``path`` response, including
+    ``exists=False`` for missing allowed files. Traversal, escaping symlinks and
+    unauthorized paths raise PermissionError; malformed requests and special
+    files raise ValueError. Other read failures raise RuntimeError.
+    """
+    from config_api import read_expanded_conf
+
+    if not file_path:
+        raise ValueError("file is required")
+    if "\x00" in file_path:
+        raise ValueError("Invalid log file path")
+    requested = Path(file_path)
+    if ".." in requested.parts:
+        raise PermissionError("Log file is outside the allowed log directories")
+    if requested.suffix.lower() not in _LOG_SUFFIXES:
+        raise ValueError("Invalid file type")
+
+    conf = read_expanded_conf(config)
+    current_log_dir = Path(str(conf.get("GLOBAL_LOG_DIR", "")).strip() or LEGACY_LOG_DIR)
+    roots = (current_log_dir.resolve(), LEGACY_LOG_DIR.resolve())
+    candidates = [
+        requested if requested.is_absolute() else current_log_dir / requested,
+        current_log_dir / requested.name,
+        LEGACY_LOG_DIR / requested.name,
+    ]
+    denied = False
+    for candidate in dict.fromkeys(candidates):
+        try:
+            resolved = candidate.resolve()
+            if not any(resolved.is_relative_to(root) for root in roots):
+                denied = True
+                continue
+            if resolved.suffix.lower() not in _LOG_SUFFIXES:
+                denied = True
+                continue
+            content = _read_regular_history_log(resolved)
+            return {"exists": True, "content": content, "path": str(resolved)}
+        except FileNotFoundError:
+            continue
+        except RuntimeError as exc:
+            # Path.resolve() reports symlink loops as RuntimeError on Python 3.11.
+            raise PermissionError("Log file path cannot be safely resolved") from exc
+        except OSError as exc:
+            if exc.errno in (errno.ELOOP, errno.ENOTDIR):
+                raise PermissionError("Log file path cannot be safely opened") from exc
+            if isinstance(exc, PermissionError):
+                raise PermissionError("Log file cannot be read") from exc
+            raise RuntimeError("Unable to read log file") from exc
+    if denied:
+        raise PermissionError("Log file is outside the allowed log directories")
+    return {"exists": False, "content": "", "path": str(candidates[0])}
 
 
 

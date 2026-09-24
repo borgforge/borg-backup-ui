@@ -2185,37 +2185,14 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         return export_jobs_bundle(self.config, keys if keys else None)
 
     def _get_log_file(self, query_string: str) -> dict:
-        from urllib.parse import parse_qs, unquote
-        from config_api import read_expanded_conf
+        """Read a history log through the configured/legacy directory boundary.
+
+        Decode the query once; authorization of paths and safe file opening
+        are delegated to get_history_log. Its errors use the normal API map.
+        """
+        from history_api import get_history_log
         qs = parse_qs(query_string)
-        file_path = unquote((qs.get("file") or [""])[0])
-        if not file_path:
-            raise ValueError("file is required")
-        requested = Path(file_path)
-        if requested.suffix.lower() not in (".log", ".txt"):
-            raise ValueError("Invalid file type")
-
-        # Preferred: exact path from status entry.
-        candidates = [requested]
-        # Fallback: current configured log directory + same filename.
-        conf = read_expanded_conf(self.config)
-        current_log_dir = Path(str(conf.get("GLOBAL_LOG_DIR", "")).strip() or "/mnt/user/Logs")
-        candidates.append(current_log_dir / requested.name)
-        # Legacy fallback:
-        candidates.append(Path("/mnt/user/Logs") / requested.name)
-
-        resolved = None
-        for p in candidates:
-            if p.exists():
-                resolved = p
-                break
-        if resolved is None:
-            return {"exists": False, "content": "", "path": str(candidates[0])}
-        try:
-            content = resolved.read_text(encoding="utf-8", errors="replace")
-            return {"exists": True, "content": content, "path": str(resolved)}
-        except OSError as e:
-            raise RuntimeError(f"Read error: {e}") from e
+        return get_history_log(self.config, (qs.get("file") or [""])[0])
 
     def _get_history(self, query_string: str) -> dict:
         from history_api import get_history_data
