@@ -45,7 +45,6 @@ history listing, application page, and log-viewer asset.
 
 The fix is tracked privately under GHSA-h4gr-4cm5-92gr. During confidential
 development, run tests locally with temporary files below the repository.
-Do not run the public test-channel deployment. The current `mr-preflight.sh`
-requires a branch pushed to public `origin`, so it is not the private source
-attestation workflow; private packaging and coordinated publication require
-a separate follow-up.
+Do not run the public test-channel deployment. Use `mr-preflight.sh --security`
+and the [private packaging workflow](security-release-workflow.md). Maintainer
+testing and coordinated publication remain separate, explicit steps.

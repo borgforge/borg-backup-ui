@@ -5,6 +5,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
+python3 "$SCRIPT_DIR/security_workflow.py" guard-public
 NAME="borg-backup-ui"
 TEST_BRANCH="${TEST_BRANCH:-test-channel}"
 VERSION="${1:-$(date +%Y.%m.%d.%H%M)}"
@@ -43,29 +44,15 @@ RUN_DIR="$(mktemp -d "${TMP_ROOT}/test-${VERSION}.XXXXXX")"
 STAGE_DIR="${RUN_DIR}/source"
 OUTPUT_DIR="${RUN_DIR}/output"
 RELEASES_DIR="${RUN_DIR}/releases"
-mkdir -p "$STAGE_DIR" "$OUTPUT_DIR" "$RELEASES_DIR"
 
 cleanup() {
   rm -rf "$RUN_DIR"
 }
 trap cleanup EXIT
 
-echo "==> Exportiere attestierten Commit in Repository-lokales Staging"
-git -C "$REPO_DIR" archive "$SOURCE_COMMIT" | tar -x -C "$STAGE_DIR"
-BUILT_AT="$(git -C "$REPO_DIR" show -s --format=%cI "$SOURCE_COMMIT")"
-python3 "$SCRIPT_DIR/release_workflow.py" prepare-build-tree \
-  --root "$STAGE_DIR" \
-  --version "$VERSION" \
-  --source-commit "$SOURCE_COMMIT" \
-  --base-sha "$SOURCE_BASE_SHA" \
-  --source-digest "$SOURCE_DIGEST" \
-  --built-at "$BUILT_AT" >/dev/null
-
-echo "==> Baue isoliertes Testpaket"
-BUILD_PREPARED=1 \
-BUILD_OUTPUT_DIR="$OUTPUT_DIR" \
-BUILD_RELEASES_DIR="$RELEASES_DIR" \
-  "$STAGE_DIR/plugin/build.sh" "$VERSION"
+echo "==> Baue attestierten Kandidaten ohne Veroeffentlichung"
+bash "$SCRIPT_DIR/build-candidate.sh" "$VERSION" "$SOURCE_COMMIT" \
+  "$SOURCE_BASE_SHA" "$SOURCE_DIGEST" "$RUN_DIR"
 
 PKG_FILE="${RELEASES_DIR}/${NAME}-${VERSION}.txz"
 PLG_FILE="${STAGE_DIR}/${NAME}.plg"

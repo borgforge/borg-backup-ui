@@ -1,7 +1,10 @@
 # Release workflow
 
-This document defines the only supported path from a source change to a test
-package and, after explicit approval, to a stable release.
+This document defines the normal public path from a source change to a test
+package and, after explicit approval, to a stable release. Confidential advisory
+fixes use [the private security workflow](security-release-workflow.md) instead
+of the public test-channel. Both paths share the package builder and artifact
+verification, and require explicit approval before stable publication.
 
 ## Goals
 
@@ -28,8 +31,9 @@ and preserves headings, spacing and nested lists. The version block copied to
 stable is identical to the tested changelog; there is no separate stable text.
 Changing tested notes requires a new committed, verified test candidate.
 
-Do not run `plugin/build.sh` directly. It is an internal builder that accepts
-only an exported and prepared source tree created by the deployment workflow.
+Do not run `plugin/build.sh` or `plugin/build-candidate.sh` directly. These are
+internal builders for exported, prepared source trees. The public/private
+entrypoints first verify the appropriate attestation and remote commit.
 
 ## 2. Final source preflight
 

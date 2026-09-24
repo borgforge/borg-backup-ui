@@ -277,6 +277,33 @@ Beschreibungen ASCII-sicher formulieren:
 
 ## Build- und Release-Regeln
 
+### Vertrauliche Security-Advisories
+
+Bei ausdruecklich vertraulicher Bearbeitung gilt
+`docs/maintainer/security-release-workflow.md` statt des oeffentlichen
+Test-Channel-Ablaufs. Das private Advisory ersetzt bis zur Offenlegung das
+oeffentliche Issue. Keine oeffentlichen Issues, PRs, Testpakete oder Details
+der Luecke vor der abgestimmten Freigabe erstellen.
+
+* Privaten Fork ueber einen expliziten Remote und das Advisory verifizieren;
+  `origin` bleibt das Hauptprojekt. Bot-Kontentrennung gilt weiterhin.
+* Mit `security_workflow.py init` den lokalen Security-Kontext aktivieren.
+* Finalen Commit nur in den privaten Fork pushen; danach
+  `./plugin/mr-preflight.sh --security` genau einmal fuer diesen Stand.
+* `python3 plugin/security_workflow.py build <version>` erstellt den lokalen
+  privaten Testkandidaten. Kein `deploy-test.sh` fuer vertrauliche Fixes.
+* Bei gesperrtem PR-API-Zugang erstellt der Maintainer den privaten PR selbst;
+  kein automatischer Wechsel auf andere Konten oder oeffentliche PRs.
+* Paket, Manifest, Tests und Herkunftsnachweis nur privat bereitstellen.
+* Release-Vorbereitung erst nach ausdruecklicher Test-/Release-Freigabe.
+  `promote-release.sh <version> --security-candidate <pfad>` bleibt lokal.
+* `--publish-security <GHSA>` ist eine gesonderte oeffentliche Aktion und darf
+  nur nach ausdruecklich abgestimmter Veroeffentlichungsfreigabe ausgefuehrt
+  werden. Code-PR und Release-Artefakte bleiben getrennt; das Paket wird
+  byte-identisch uebernommen.
+
+Die nachfolgenden Regeln gelten fuer den normalen oeffentlichen Ablauf.
+
 Vor Abschluss jeder Codeaenderung:
 
 ```text

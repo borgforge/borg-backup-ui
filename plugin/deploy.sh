@@ -18,6 +18,7 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
+python3 "$SCRIPT_DIR/security_workflow.py" guard-public
 NAME="borg-backup-ui"
 PLUGIN_DIR="/boot/config/plugins/${NAME}"
 

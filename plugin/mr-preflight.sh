@@ -5,6 +5,13 @@ set -euo pipefail
 # Usage:
 #   ./plugin/mr-preflight.sh
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [[ "${1:-}" == "--security" && $# -eq 1 ]]; then
+  exec python3 "$SCRIPT_DIR/security_workflow.py" preflight
+fi
+[[ $# -eq 0 ]] || { echo 'Usage: mr-preflight.sh [--security]' >&2; exit 2; }
+python3 "$SCRIPT_DIR/security_workflow.py" guard-public
+
 branch="$(git rev-parse --abbrev-ref HEAD)"
 if [[ "$branch" == "main" || "$branch" == "master" ]]; then
   echo "Fehler: Du bist auf '$branch'. Bitte auf einem Feature/Hotfix-Branch arbeiten."

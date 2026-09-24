@@ -2,6 +2,8 @@
 # Publish one immutable test-channel snapshot without retaining package history.
 
 set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+python3 "$SCRIPT_DIR/security_workflow.py" guard-public
 
 if [ "$#" -ne 6 ]; then
   echo "Usage: $0 <remote> <branch> <manifest> <package> <message> <tmp-root>" >&2

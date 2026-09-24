@@ -2,7 +2,7 @@
 # build.sh – Erstellt das Unraid Plugin Package (.txz) für borg-backup-ui
 #
 # Internal package builder. Release metadata and provenance must already have
-# been prepared in an exported staging tree by deploy-test.sh.
+# been prepared in an exported staging tree by the shared candidate builder.
 #
 # Das erzeugte .txz enthält:
 #   boot/config/plugins/borg-backup-ui/   → persistente App-Dateien (Flash)
@@ -39,6 +39,7 @@ if [ "${BUILD_PREPARED}" != "1" ]; then
   echo "ERROR: Direkte Paket-Builds sind deaktiviert." >&2
   echo "       Zuerst den finalen Commit pushen und ./plugin/mr-preflight.sh ausfuehren." >&2
   echo "       Testpakete anschliessend mit ./plugin/deploy-test.sh <version> bauen." >&2
+  echo "       Vertrauliche Fixes: python3 plugin/security_workflow.py build <version>." >&2
   exit 1
 fi
 
