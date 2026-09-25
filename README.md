@@ -196,6 +196,18 @@ feature requests, and design discussions. When reporting runtime problems,
 include the generated support bundle where possible and remove private
 infrastructure details before sharing logs publicly.
 
+## ❤️ Support the Project
+
+Borg Backup UI is free and open source.
+
+If Borg Backup UI makes your backups easier and you'd like to support its
+continued development and maintenance, you can support BorgForge on Ko-fi.
+
+[![Support BorgForge on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/borgforge)
+
+Donations are completely optional. Bug reports, feedback, feature suggestions,
+and contributions are just as appreciated!
+
 ## License
 
 - Project: MIT, see [LICENSE](LICENSE)
