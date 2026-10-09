@@ -3152,7 +3152,7 @@
       "confirmDelete": "Dieses Skript löschen? Zugeordnete Skripte können nicht gelöscht werden.",
       "saved": "Syntax geprüft und gespeichert.",
       "deleted": "Skript gelöscht.",
-      "validationHint": "Beim Speichern wird nur die Syntax geprüft; das Skript wird nicht ausgeführt. Laufzeitfehler sind weiterhin möglich."
+      "validationHint": "Beim Speichern wird die Bash-Syntax geprüft. Das Skript wird dabei nicht ausgeführt. Fehler während der Ausführung können daher trotzdem auftreten."
     }
   }
 }

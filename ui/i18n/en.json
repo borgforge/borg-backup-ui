@@ -3152,7 +3152,7 @@
       "confirmDelete": "Delete this script? Assigned scripts cannot be deleted.",
       "saved": "Syntax checked and saved.",
       "deleted": "Script deleted.",
-      "validationHint": "Saving checks syntax only; it does not execute the script. Runtime errors are still possible."
+      "validationHint": "Saving checks the Bash syntax. The script is not executed during this check. Errors may therefore still occur when the script runs."
     }
   }
 }
