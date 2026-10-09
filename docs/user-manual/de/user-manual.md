@@ -253,11 +253,13 @@ Ist Docker- beziehungsweise VM-Steuerung deaktiviert, werden die zugehörigen Au
 
 > **Warnung:** Appdata- und VM-Backups können Warnungen oder inkonsistente Daten erzeugen, wenn während des Backups Dateien geändert werden. Stoppen Sie bei vollständigen Appdata- oder Domains-Backups möglichst alle betroffenen Dienste.
 
-Das planmäßige Herunterfahren einer VM wird als Information gemeldet. Erst ein fehlgeschlagener Shutdown oder Neustart erzeugt eine Warnung beziehungsweise einen Fehler. Nach jedem Lauf werden nur die Container und VMs wieder gestartet, die vor diesem Lauf tatsächlich aktiv waren.
+Das planmäßige Herunterfahren einer VM wird als Information gemeldet. Erst ein fehlgeschlagener Shutdown oder Neustart erzeugt eine Warnung beziehungsweise einen Fehler. Es werden nur die vom Job gestoppten Container und VMs wieder gestartet, die vor diesem Lauf tatsächlich aktiv waren.
+
+Nach Abschluss der Archiverstellung (`borg create`) werden die vom Job gestoppten Container und VMs sofort wieder gestartet, auch bei Borg-Warnungen. Erst danach laufen Aufbewahrung (`prune`), Speicherbereinigung (`compact`) und eine fällige Repository-Prüfung (`check`). Diese Wartung verlängert die Ausfallzeit der Dienste nicht. Bei Fehlern oder Abbruch der Archiverstellung erfolgt der Neustart weiterhin beim Aufräumen. Schlägt ein Neustart fehl, wird der Neustart auch für die andere Dienstgruppe versucht; der Lauf endet als Fehler und die Wartung wird nicht gestartet.
 
 #### Neustart-Priorität für Docker-Container
 
-Die Priorität bestimmt ausschließlich, in welcher Reihenfolge die von Borg Backup UI gestoppten Container nach einem Job wieder gestartet werden. Sie ändert weder die Stopp-Reihenfolge noch die normale Unraid-Autostart-Reihenfolge.
+Die Priorität bestimmt ausschließlich, in welcher Reihenfolge die von Borg Backup UI gestoppten Container nach der Archiverstellung wieder gestartet werden. Sie ändert weder die Stopp-Reihenfolge noch die normale Unraid-Autostart-Reihenfolge.
 
 Konfigurieren Sie das Label für jeden betroffenen Container direkt in Unraid:
 

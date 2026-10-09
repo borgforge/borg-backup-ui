@@ -146,11 +146,12 @@ class VmManager:
     """
     Verwaltet KVM/libvirt VMs für Borg Backup.
 
-    Typischer Workflow im borg_backup_VMs.py Skript:
+    Typical workflow around archive creation:
         vm_manager = VmManager(VmConfig.from_config(env))
         result = vm_manager.shutdown_all()    # Warnung + Countdown + Shutdown
-        # ... borg create / maintenance ...
+        # ... borg create ...
         vm_manager.start_all(result)          # VMs neu starten
+        # ... borg prune / compact / check ...
     """
 
     def __init__(self, config: Optional[VmConfig] = None) -> None:

@@ -253,11 +253,13 @@ When Docker or VM control is disabled, the related selection step is skipped. Fo
 
 > **Warning:** Appdata and VM backups can produce warnings or inconsistent data if files change during the backup. For full appdata or domains backups, stop all affected services where possible.
 
-A planned VM shutdown is reported as informational. Only a failed shutdown or restart produces a warning or error. After every run, only the containers and VMs that were actually running before that run are started again.
+A planned VM shutdown is reported as informational. Only a failed shutdown or restart produces a warning or error. Only containers and VMs stopped by the job that were actually running before that run are started again.
+
+Once archive creation (`borg create`) finishes, containers and VMs stopped by the job are restarted immediately, including when Borg reports warnings. Retention (`prune`), space reclamation (`compact`), and any due repository check (`check`) run afterwards and do not extend service downtime. If archive creation fails or is cancelled, cleanup still restarts the stopped workloads. If a restart fails, recovery is still attempted for the other workload type; the run ends as an error and maintenance does not start.
 
 #### Docker Container Restart Priority
 
-The priority controls only the order in which containers stopped by Borg Backup UI are started again after a job. It does not control the stop order or Unraid's normal autostart order.
+The priority controls only the order in which containers stopped by Borg Backup UI are started again after archive creation. It does not control the stop order or Unraid's normal autostart order.
 
 Configure the label on each affected container in Unraid:
 

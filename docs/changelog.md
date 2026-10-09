@@ -1,5 +1,10 @@
 # Changelog
 
+## Pending - Restart services before repository maintenance (#552)
+
+- Recover Docker containers and VMs immediately after successful or warning-only archive creation, before prune, compact, and check. Preserve cleanup recovery for failed or cancelled creation.
+- Share the existing recovery handling between early restart and final cleanup, including independent recovery attempts, persistent restart failures, and cancellation protection. Update the wizard flow preview and both manuals.
+
 ## Pending - Restore archive filter options (#537)
 
 - Add job, repository-wide and custom Borg glob modes to Browse & Restore. Keep historical job prefixes as the default and pass custom patterns unchanged, without adding a hyphen or wildcard.
