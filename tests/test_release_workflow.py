@@ -185,8 +185,6 @@ def test_release_notes_reject_unknown_category(tmp_path: Path) -> None:
 def test_stable_promotion_preserves_complete_categorized_notes(tmp_path: Path, monkeypatch) -> None:
     # Execute the actual promotion transformation locally; no GitHub or package
     # publication is involved. Run twice to cover replacement of an existing block.
-    script = (ROOT / "plugin/promote-release.sh").read_text()
-    transform = script.split("<<'PY'\n", 1)[1].split("\nPY\n", 1)[0]
     stable_path = tmp_path / "borg-backup-ui.plg"
     stable_path.write_text((ROOT / "borg-backup-ui.plg").read_text())
     (tmp_path / "borg_backup_ui.py").write_text('APP_VERSION = "old"\n')
@@ -215,10 +213,7 @@ def test_stable_promotion_preserves_complete_categorized_notes(tmp_path: Path, m
     monkeypatch.setattr(release_workflow, "source_digest", lambda *_args: "source")
 
     for _ in range(2):
-        subprocess.run(
-            [sys.executable, "-", str(tmp_path), str(test_path), version, md5, json.dumps(provenance)],
-            input=transform, text=True, capture_output=True, check=True,
-        )
+        release_workflow.promote_artifacts(tmp_path, test_path, version, md5, provenance)
         stable = stable_path.read_text()
         assert f"###{version}###\n{notes}\n\n" in stable
         assert stable.count(f"###{version}###") == 1
@@ -399,7 +394,9 @@ def test_test_deploy_requires_attestation_and_exact_commit() -> None:
 
     assert "verify-attestation" in script
     assert "rewrite-package-installer" in script
-    assert 'git -C "$REPO_DIR" archive "$SOURCE_COMMIT"' in script
+    assert "build-candidate.sh" in script
+    shared = (ROOT / "plugin/build-candidate.sh").read_text()
+    assert 'git -C "$REPO_DIR" archive "$SOURCE_COMMIT"' in shared
     assert 'REMOTE_SHA" != "$SOURCE_COMMIT' in script
     assert "pytest -q" not in script
 
@@ -412,13 +409,7 @@ def test_stable_promotion_reuses_exact_package_from_clean_current_main() -> None
     assert 'LOCAL_SHA" != "$MAIN_SHA' in script
     assert 'cp "$TEST_PKG"' in script
     assert 'if [[ "$RELEASE_PACKAGE_SHA256" != "$TEST_PACKAGE_SHA256" ]]' in script
-    assert "tested_package_install" in script
-    assert "package_install_re.sub(lambda _match: package_install_replacement" in script
-    assert "legacy_package_file_re.sub(lambda _match: package_install_replacement" in script
-    assert "tested_post_install" in script
-    assert "post_install_re.sub(lambda _match: tested_post_install.group(0)" in script
-    assert "max_changelog_releases = 3" in script
-    assert "stable = limit_changelog(stable)" in script
+    assert "promote-artifacts" in script
     assert "plugin/build.sh" not in script
 
 

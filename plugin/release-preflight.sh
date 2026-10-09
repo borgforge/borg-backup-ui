@@ -6,6 +6,15 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
 branch="$(git -C "$REPO_DIR" branch --show-current)"
+SECURITY_CANDIDATE=""
+if [[ "${1:-}" == "--security-candidate" && $# -eq 2 ]]; then
+  SECURITY_CANDIDATE="$(realpath "$2")"
+  python3 "$SCRIPT_DIR/security_workflow.py" verify --candidate "$SECURITY_CANDIDATE" >/dev/null
+elif [[ $# -ne 0 ]]; then
+  echo 'Usage: release-preflight.sh [--security-candidate directory]' >&2
+  exit 2
+fi
+
 
 case "$branch" in
   codex/release-*|release-*) ;;
@@ -16,7 +25,11 @@ case "$branch" in
 esac
 
 echo "==> Hole origin/main und origin/test-channel"
-git -C "$REPO_DIR" fetch origin main test-channel >/dev/null 2>&1
+if [[ -n "$SECURITY_CANDIDATE" ]]; then
+  git -C "$REPO_DIR" fetch origin main >/dev/null 2>&1
+else
+  git -C "$REPO_DIR" fetch origin main test-channel >/dev/null 2>&1
+fi
 
 echo "==> Pruefe sauberen Arbeitsbaum"
 if [[ -n "$(git -C "$REPO_DIR" status --porcelain=v1 --untracked-files=all)" ]]; then
@@ -72,7 +85,12 @@ fi
 
 version="$(sed -n 's/.*<!ENTITY version   "\([^"]*\)">.*/\1/p' "$REPO_DIR/borg-backup-ui.plg" | head -n1)"
 package="$REPO_DIR/releases/borg-backup-ui-${version}.txz"
-test_manifest="$(git -C "$REPO_DIR" show origin/test-channel:borg-backup-ui-test.plg)"
+if [[ -n "$SECURITY_CANDIDATE" ]]; then
+  python3 "$SCRIPT_DIR/security_workflow.py" verify --candidate "$SECURITY_CANDIDATE" --version "$version" >/dev/null
+  test_manifest="$(cat "$SECURITY_CANDIDATE/release-template.plg")"
+else
+  test_manifest="$(git -C "$REPO_DIR" show origin/test-channel:borg-backup-ui-test.plg)"
+fi
 test_version="$(sed -n 's/.*<!ENTITY version   "\([^"]*\)">.*/\1/p' <<<"$test_manifest" | head -n1)"
 if [[ -z "$version" || "$version" != "$test_version" ]]; then
   echo "Fehler: Stable-Version ${version:-<leer>} entspricht nicht dem aktuellen Test-Channel ${test_version:-<leer>}." >&2
@@ -82,7 +100,11 @@ fi
 mkdir -p "$REPO_DIR/.release-tmp"
 test_package="$(mktemp "$REPO_DIR/.release-tmp/release-preflight-${version}.XXXXXX.txz")"
 trap 'rm -f "$test_package"' EXIT
-git -C "$REPO_DIR" show "origin/test-channel:releases/borg-backup-ui-${version}.txz" >"$test_package"
+if [[ -n "$SECURITY_CANDIDATE" ]]; then
+  cp "$SECURITY_CANDIDATE/borg-backup-ui-${version}.txz" "$test_package"
+else
+  git -C "$REPO_DIR" show "origin/test-channel:releases/borg-backup-ui-${version}.txz" >"$test_package"
+fi
 stable_sha="$(sha256sum "$package" | awk '{print $1}')"
 test_sha="$(sha256sum "$test_package" | awk '{print $1}')"
 if [[ "$stable_sha" != "$test_sha" ]]; then

@@ -118,6 +118,15 @@ def test_test_channel_publisher_replaces_snapshot_with_exact_lease(tmp_path: Pat
     remote = tmp_path / "remote.git"
     work = tmp_path / "work"
     work.mkdir()
+    # Exercise the real publisher in an isolated ordinary checkout. The source
+    # checkout may legitimately have an active private advisory guard.
+    subprocess.run(["git", "init", "-b", "main", str(work)], check=True, capture_output=True)
+    (work / "plugin").mkdir()
+    for name in ("publish-test-snapshot.sh", "security_workflow.py", "release_workflow.py"):
+        target = work / "plugin" / name
+        target.write_bytes((ROOT / "plugin" / name).read_bytes())
+        target.chmod(0o755)
+    publisher = work / "plugin" / "publish-test-snapshot.sh"
     subprocess.run(["git", "init", "--bare", str(remote)], check=True, capture_output=True)
 
     env = os.environ.copy()
@@ -192,7 +201,7 @@ def test_test_channel_publisher_uses_exact_force_with_lease() -> None:
 
 
 def test_release_promotion_copies_tested_display_title_and_settings_launch_target() -> None:
-    script = (ROOT / "plugin" / "promote-release.sh").read_text(encoding="utf-8")
+    script = (ROOT / "plugin" / "release_workflow.py").read_text(encoding="utf-8")
 
     assert "Test manifest has no tested display title" in script
     assert "display_title" in script
@@ -220,7 +229,7 @@ def test_release_workflow_generates_safe_uninstall_payload_cleanup() -> None:
 
 
 def test_release_promotion_copies_tested_remove_handler() -> None:
-    script = (ROOT / "plugin" / "promote-release.sh").read_text(encoding="utf-8")
+    script = (ROOT / "plugin" / "release_workflow.py").read_text(encoding="utf-8")
 
     assert "remove_handler_re" in script
     assert "Test manifest has no remove handler block" in script

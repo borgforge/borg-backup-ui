@@ -11,6 +11,29 @@ MAIN_BRANCH="${MAIN_BRANCH:-main}"
 TEST_BRANCH="${TEST_BRANCH:-test-channel}"
 RELEASE_BRANCH="${RELEASE_BRANCH:-codex/release-${VERSION}}"
 TMP_ROOT="${REPO_DIR}/.release-tmp"
+SECURITY_CANDIDATE=""
+PUBLISH_SECURITY=""
+shift || true
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --security-candidate) SECURITY_CANDIDATE="${2:?Missing candidate}"; shift 2;;
+    --publish-security) PUBLISH_SECURITY="${2:?Missing advisory}"; shift 2;;
+    *) echo "Unknown argument: $1" >&2; exit 2;;
+  esac
+done
+if [[ -n "$SECURITY_CANDIDATE" ]]; then
+  SECURITY_CANDIDATE="$(realpath "$SECURITY_CANDIDATE")"
+  python3 "$SCRIPT_DIR/security_workflow.py" verify --candidate "$SECURITY_CANDIDATE" --version "$VERSION" >/dev/null
+  if [[ -z "$PUBLISH_SECURITY" ]]; then
+    exec python3 "$SCRIPT_DIR/security_workflow.py" prepare-release --candidate "$SECURITY_CANDIDATE" --version "$VERSION"
+  fi
+  python3 "$SCRIPT_DIR/security_workflow.py" authorize-publication \
+    --candidate "$SECURITY_CANDIDATE" --advisory "$PUBLISH_SECURITY"
+else
+  [[ -z "$PUBLISH_SECURITY" ]] || { echo 'Private candidate required' >&2; exit 2; }
+  python3 "$SCRIPT_DIR/security_workflow.py" guard-public
+fi
+
 
 if [[ ! "$VERSION" =~ ^[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[0-9]{4}$ ]]; then
   echo "Usage: ./plugin/promote-release.sh <YYYY.MM.DD.HHMM>" >&2
@@ -22,7 +45,11 @@ if ! command -v gh >/dev/null 2>&1; then
 fi
 
 echo "==> Promote tested ${NAME} ${VERSION} to stable"
-git -C "$REPO_DIR" fetch --prune origin "$MAIN_BRANCH" "$TEST_BRANCH"
+if [[ -n "$SECURITY_CANDIDATE" ]]; then
+  git -C "$REPO_DIR" fetch --prune origin "$MAIN_BRANCH"
+else
+  git -C "$REPO_DIR" fetch --prune origin "$MAIN_BRANCH" "$TEST_BRANCH"
+fi
 
 CURRENT_BRANCH="$(git -C "$REPO_DIR" branch --show-current)"
 LOCAL_SHA="$(git -C "$REPO_DIR" rev-parse HEAD)"
@@ -51,8 +78,13 @@ cleanup() {
 trap cleanup EXIT
 
 echo "==> Lade getestetes Manifest und exaktes Paket"
-git -C "$REPO_DIR" show "origin/${TEST_BRANCH}:${NAME}-test.plg" > "$TEST_PLG"
-git -C "$REPO_DIR" show "origin/${TEST_BRANCH}:releases/${NAME}-${VERSION}.txz" > "$TEST_PKG"
+if [[ -n "$SECURITY_CANDIDATE" ]]; then
+  cp "$SECURITY_CANDIDATE/release-template.plg" "$TEST_PLG"
+  cp "$SECURITY_CANDIDATE/${NAME}-${VERSION}.txz" "$TEST_PKG"
+else
+  git -C "$REPO_DIR" show "origin/${TEST_BRANCH}:${NAME}-test.plg" > "$TEST_PLG"
+  git -C "$REPO_DIR" show "origin/${TEST_BRANCH}:releases/${NAME}-${VERSION}.txz" > "$TEST_PKG"
+fi
 
 TEST_VERSION="$(sed -n 's/.*<!ENTITY version   "\([^"]*\)">.*/\1/p' "$TEST_PLG" | head -n1)"
 if [[ "$TEST_VERSION" != "$VERSION" ]]; then
@@ -92,7 +124,10 @@ fi
 echo "==> Erstelle Repository-lokalen Release-Arbeitsbaum"
 ORIGIN_URL="$(git -C "$REPO_DIR" remote get-url origin)"
 git clone --quiet "$ORIGIN_URL" "$WORKTREE"
-git -C "$WORKTREE" fetch --quiet origin "$MAIN_BRANCH" "$TEST_BRANCH"
+git -C "$WORKTREE" fetch --quiet origin "$MAIN_BRANCH"
+if [[ -z "$SECURITY_CANDIDATE" ]]; then
+  git -C "$WORKTREE" fetch --quiet origin "$TEST_BRANCH"
+fi
 
 if git -C "$WORKTREE" ls-remote --exit-code --heads origin "$RELEASE_BRANCH" >/dev/null 2>&1; then
   git -C "$WORKTREE" switch --quiet --track "origin/${RELEASE_BRANCH}"
@@ -104,180 +139,9 @@ fi
 mkdir -p "${WORKTREE}/releases"
 cp "$TEST_PKG" "${WORKTREE}/releases/${NAME}-${VERSION}.txz"
 
-python3 - "$WORKTREE" "$TEST_PLG" "$VERSION" "$PKG_MD5" "$PROVENANCE_JSON" <<'PY'
-import hashlib
-import json
-import re
-import sys
-from pathlib import Path
-
-worktree = Path(sys.argv[1])
-test_manifest = Path(sys.argv[2])
-version = sys.argv[3]
-md5 = sys.argv[4]
-provenance = json.loads(sys.argv[5])
-stable_path = worktree / "borg-backup-ui.plg"
-app_path = worktree / "borg_backup_ui.py"
-package_install_begin = "<!-- BEGIN borg-backup-ui package installer -->"
-package_install_end = "<!-- END borg-backup-ui package installer -->"
-max_changelog_releases = 3
-package_install_re = re.compile(
-    re.escape(package_install_begin) + r".*?" + re.escape(package_install_end),
-    re.DOTALL,
-)
-post_install_re = re.compile(
-    r'<FILE Name="/tmp/borg-backup-ui-install\.sh" Run="/bin/bash">\s*'
-    r"<INLINE>.*?</INLINE>\s*</FILE>",
-    re.DOTALL,
-)
-remove_handler_re = re.compile(
-    r'<FILE Name="/tmp/borg-backup-ui-remove\.sh" Run="/bin/bash" Method="remove">\s*'
-    r"<INLINE>.*?</INLINE>\s*</FILE>",
-    re.DOTALL,
-)
-legacy_package_file_re = re.compile(
-    r'<FILE Name="&bootdir;/&name;-&version;\.txz" Run="upgradepkg --install-new">\s*'
-    r"<URL>&pkgurl;</URL>\s*"
-    r"<MD5>[^<]*</MD5>\s*"
-    r"</FILE>",
-    re.DOTALL,
-)
-
-stable = stable_path.read_text(encoding="utf-8")
-already_promoted = f"###{version}###" in stable
-test = test_manifest.read_text(encoding="utf-8")
-block_match = re.search(
-    rf"###{re.escape(version)}###\n(?:.*?)(?=\n###[^#\n]+###\n|\n\]\]>|\Z)",
-    test,
-    re.DOTALL,
-)
-if not block_match:
-    raise SystemExit(f"Test manifest has no exact changelog block for {version}")
-tested_block = block_match.group(0).strip() + "\n\n"
-
-stable = re.sub(r'<!ENTITY version\s+"[^"]*">', f'<!ENTITY version   "{version}">', stable, count=1)
-tested_package_install = package_install_re.search(test)
-if tested_package_install:
-    package_install_replacement = tested_package_install.group(0)
-    if package_install_re.search(stable):
-        stable = package_install_re.sub(lambda _match: package_install_replacement, stable, count=1)
-    elif legacy_package_file_re.search(stable):
-        stable = legacy_package_file_re.sub(lambda _match: package_install_replacement, stable, count=1)
-    else:
-        raise SystemExit("Stable manifest has no package install block to replace")
-else:
-    stable = re.sub(r"<MD5>[^<]*</MD5>", f"<MD5>{md5}</MD5>", stable, count=1)
-
-tested_post_install = post_install_re.search(test)
-if not tested_post_install:
-    raise SystemExit("Test manifest has no post-install block")
-if not post_install_re.search(stable):
-    raise SystemExit("Stable manifest has no post-install block to replace")
-stable = post_install_re.sub(lambda _match: tested_post_install.group(0), stable, count=1)
-
-tested_remove_handler = remove_handler_re.search(test)
-if not tested_remove_handler:
-    raise SystemExit("Test manifest has no remove handler block")
-if not remove_handler_re.search(stable):
-    raise SystemExit("Stable manifest has no remove handler block to replace")
-stable = remove_handler_re.sub(lambda _match: tested_remove_handler.group(0), stable, count=1)
-
-stable = re.sub(
-    rf"###{re.escape(version)}###\n(?:.*?)(?=\n###[^#\n]+###\n|\n\]\]>|\Z)",
-    "",
-    stable,
-    flags=re.DOTALL,
-)
-if "<![CDATA[\n" not in stable:
-    raise SystemExit("Stable manifest has no changelog CDATA section")
-stable = stable.replace("<![CDATA[\n", "<![CDATA[\n" + tested_block, 1)
-
-def limit_changelog(manifest: str) -> str:
-    start_marker = "<![CDATA[\n"
-    end_marker = "\n]]>"
-    start = manifest.find(start_marker)
-    end = manifest.find(end_marker, start + len(start_marker))
-    if start < 0 or end < 0:
-        raise SystemExit("Stable manifest has no changelog CDATA section")
-    body_start = start + len(start_marker)
-    body = manifest[body_start:end]
-    blocks = list(
-        re.finditer(
-            r"###[^#\n]+###\n.*?(?=\n###[^#\n]+###|\Z)",
-            body.strip(),
-            re.DOTALL,
-        )
-    )
-    if len(blocks) <= max_changelog_releases:
-        return manifest
-    kept = "\n\n".join(match.group(0).strip() for match in blocks[:max_changelog_releases])
-    return manifest[:body_start] + kept + "\n" + manifest[end:]
-
-stable = limit_changelog(stable)
-
-title = re.search(r'<PLUGIN\b[^>]*\bTitle="([^"]+)"', test, re.DOTALL)
-if not title:
-    raise SystemExit("Test manifest has no tested display title")
-display_title = title.group(1)
-if re.search(r'<PLUGIN\b[^>]*\bTitle="[^"]*"', stable, re.DOTALL):
-    stable = re.sub(
-        r'(<PLUGIN\b[^>]*?)\bTitle="[^"]*"',
-        lambda match: match.group(1) + f'Title="{display_title}"',
-        stable,
-        count=1,
-        flags=re.DOTALL,
-    )
-else:
-    stable = re.sub(
-        r'(<PLUGIN\b[^>]*?\bname="[^"]*")',
-        lambda match: match.group(1) + f'\n        Title="{display_title}"',
-        stable,
-        count=1,
-        flags=re.DOTALL,
-    )
-
-launch = re.search(r'<PLUGIN\b[^>]*\blaunch="([^"]+)"', test, re.DOTALL)
-if not launch:
-    raise SystemExit("Test manifest has no tested launch target")
-launch_target = launch.group(1)
-if re.search(r'<PLUGIN\b[^>]*\blaunch="[^"]*"', stable, re.DOTALL):
-    stable = re.sub(
-        r'(<PLUGIN\b[^>]*?)\blaunch="[^"]*"',
-        lambda match: match.group(1) + f'launch="{launch_target}"',
-        stable,
-        count=1,
-        flags=re.DOTALL,
-    )
-else:
-    stable = re.sub(
-        r'(<PLUGIN\b[^>]*?\bversion="[^"]*")',
-        lambda match: match.group(1) + f'\n        launch="{launch_target}"',
-        stable,
-        count=1,
-        flags=re.DOTALL,
-    )
-stable_path.write_text(stable, encoding="utf-8")
-
-app = app_path.read_text(encoding="utf-8")
-app = re.sub(r'APP_VERSION = "[^"]*"', f'APP_VERSION = "{version}"', app, count=1)
-app_path.write_text(app, encoding="utf-8")
-
-# Consume only the release-note fragments that were hashed into this exact
-# tested package. Newer fragments remain pending for the next release.
-for item in provenance.get("release_note_fragments", []):
-    relative = Path(str(item.get("path", "")))
-    if relative.is_absolute() or relative.parts[:2] != ("release-notes", "pending") or ".." in relative.parts:
-        raise SystemExit(f"Unsafe release-note fragment path in provenance: {relative}")
-    path = worktree / relative
-    if not path.exists():
-        if already_promoted:
-            continue
-        raise SystemExit(f"Tested release-note fragment is missing: {relative}")
-    actual = hashlib.sha256(path.read_bytes()).hexdigest()
-    if actual != item.get("sha256"):
-        raise SystemExit(f"Tested release-note fragment changed after the test build: {relative}")
-    path.unlink()
-PY
+python3 "$SCRIPT_DIR/release_workflow.py" promote-artifacts \
+  --root "$WORKTREE" --manifest "$TEST_PLG" --version "$VERSION" \
+  --md5 "$PKG_MD5" --provenance "$PROVENANCE_JSON"
 
 # Keep only the newest five stable packages in main.
 mapfile -t release_files < <(find "${WORKTREE}/releases" -maxdepth 1 -type f -name "${NAME}-*.txz" | sort)
@@ -308,14 +172,18 @@ fi
 git -C "$WORKTREE" push -u origin "$RELEASE_BRANCH"
 
 echo "==> Fuehre ausschliesslich Release-Artefakt-Preflight aus"
-"${WORKTREE}/plugin/release-preflight.sh"
+if [[ -n "$SECURITY_CANDIDATE" ]]; then
+  "${WORKTREE}/plugin/release-preflight.sh" --security-candidate "$SECURITY_CANDIDATE"
+else
+  "${WORKTREE}/plugin/release-preflight.sh"
+fi
 
 PR_BODY="${RUN_DIR}/pr-body.md"
 printf '%s\n' \
   'Promotes the exact tested Borg Backup UI package to the stable channel.' \
   '' \
   'Changes:' \
-  "- Promotes test-channel version ${VERSION}." \
+  "- Promotes verified candidate version ${VERSION}." \
   "- Reuses the byte-identical tested package (SHA-256: ${TEST_PACKAGE_SHA256})." \
   "- Verifies tested deployable source digest against origin/${MAIN_BRANCH}." \
   '- Keeps only the newest five stable packages.' \

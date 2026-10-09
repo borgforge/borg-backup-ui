@@ -5,6 +5,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
+if python3 "$SCRIPT_DIR/security_workflow.py" status 2>/dev/null; then
+  echo "Private security context: candidate files stay below .release-tmp/security."
+  exit 0
+fi
 NAME="borg-backup-ui"
 TEST_BRANCH="${TEST_BRANCH:-test-channel}"
 
