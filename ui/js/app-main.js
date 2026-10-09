@@ -57,6 +57,9 @@
     '/ui/js/components/toast.js',
     '/ui/js/components/app-bindings.js',
     '/ui/js/pages/storage.js',
+    '/ui/vendor/prism/prism-core.min.js',
+    '/ui/vendor/prism/prism-bash.min.js',
+    '/ui/js/components/bash-editor.js',
     '/ui/js/pages/settings.js',
     '/ui/js/pages/setup-wizard.js',
     '/ui/js/pages/help.js',
@@ -74,6 +77,7 @@
     if (idx >= sources.length) return;
     const script = document.createElement('script');
     script.src = sources[idx];
+    if (sources[idx] === '/ui/vendor/prism/prism-core.min.js') script.setAttribute('data-manual', '');
     script.defer = false;
     script.onload = function () {
       if (sources[idx] === '/ui/js/components/i18n.js') {

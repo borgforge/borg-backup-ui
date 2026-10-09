@@ -968,6 +968,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                 "/api/repositories/archives": lambda: self._get_repository_archives(parsed.query),
                 "/api/repositories/archive-files": lambda: self._get_repository_archive_files(parsed.query),
                 "/api/settings": self._get_settings,
+                "/api/settings/scripts": self._get_job_scripts,
                 "/api/settings/basic": self._get_settings_basic,
                 "/api/setup-status": self._get_setup_status,
                 "/api/settings/backup-history": self._get_settings_backup_history,
@@ -1019,6 +1020,9 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/storages/test": self._post_storage_target_test,
             "/api/repositories": self._post_repository,
             "/api/notification-profiles": self._post_apprise_profile,
+            "/api/settings/scripts": self._save_job_script,
+            "/api/settings/scripts/import": self._import_job_script,
+            "/api/settings/scripts/export": self._export_job_script,
             "/api/notification-profiles/validate": self._post_apprise_profile_validate,
             "/api/notification-profiles/test": self._post_apprise_profile_test,
             "/api/repositories/validate": self._post_repository_validate,
@@ -1112,6 +1116,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/repositories": self._delete_repository,
             "/api/repositories/archive": self._delete_repository_archive,
             "/api/notification-profiles": self._delete_apprise_profile,
+            "/api/settings/scripts": self._delete_job_script,
             "/api/auth/users": self._delete_auth_user,
             "/api/settings/homepage-widget-token": self._delete_homepage_widget_token,
         }
@@ -1147,6 +1152,32 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "content": text,
             "format": "markdown" if path.suffix.lower() == ".md" else "text",
         }
+
+    def _get_job_scripts(self) -> dict:
+        """Return script source and current job assignments to administrators only."""
+        from job_scripts import list_scripts_with_assignments
+        return list_scripts_with_assignments(self.config)
+
+    def _save_job_script(self) -> dict:
+        """Validate Bash syntax and persist an explicitly submitted script."""
+        from job_scripts import save_script
+        return save_script(self.config, self._read_json_body())
+
+    def _delete_job_script(self) -> dict:
+        """Remove an unreferenced script selected by its query ID."""
+        from job_scripts import delete_script
+        identifier = (parse_qs(urlparse(self.path).query).get("id") or [""])[0]
+        return delete_script(self.config, identifier)
+
+    def _import_job_script(self) -> dict:
+        """Validate an uploaded Bash file and return an unsaved admin editor draft."""
+        from job_scripts import import_script
+        return import_script(self._read_json_body())
+
+    def _export_job_script(self) -> dict:
+        """Return syntax-checked Bash source for an administrator's download."""
+        from job_scripts import export_script
+        return export_script(self._read_json_body())
 
     def _get_apprise_profiles(self, query: str = "") -> dict:
         from apprise_profiles_api import get_profile, list_profiles
@@ -3931,7 +3962,7 @@ btn.addEventListener('click',doRecovery);
             self.send_header("Content-Length", str(len(content)))
             cache_control = (
                 "no-store"
-                if path in {"/api/widget/summary", "/api/settings/homepage-widget-token", "/api/settings/prometheus", "/api/repositories/key-export", "/api/wizard/new-job-id"}
+                if path in {"/api/widget/summary", "/api/settings/scripts", "/api/settings/scripts/import", "/api/settings/scripts/export", "/api/settings/homepage-widget-token", "/api/settings/prometheus", "/api/repositories/key-export", "/api/wizard/new-job-id"}
                 else "no-cache"
             )
             self.send_header("Cache-Control", cache_control)

@@ -171,6 +171,7 @@ function newJobWizardContext(language = 'en') {
     vm.runInContext(`${name} = () => {};`, context);
   }
   vm.runInContext(`
+    wizardLoadScripts = async () => { wizardState.hooksLoaded = true; };
     wizardLoadStorageTargets = wizardLoadRepositories = wizardLoadRuntimeInventory = async () => {};
     wizardSelectedStorage = wizardSelectedRepository = () => ({});
     _wizardRuntimeMode = () => 'none';
@@ -238,7 +239,7 @@ for (const language of ['de', 'en']) {
       assert.equal(elements.get('wizard-next-btn').disabled, true);
       assert.equal(elements.get('wizard-error-1').classList.contains('hidden'), false);
       assert.ok(elements.get('wizard-error-1').textContent.includes(language === 'de' ? 'erneut öffnen' : 'reopen'));
-      assert.equal(vm.runInContext('_wizardValidate(9)', context), false);
+      assert.equal(vm.runInContext('_wizardValidate(10)', context), false);
     }
   });
 }

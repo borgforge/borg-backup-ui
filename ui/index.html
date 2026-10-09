@@ -1473,6 +1473,11 @@
       <div class="wizard-step-line"></div>
       <button type="button" class="wizard-step" id="wstep-dot-9" data-wizard-step="9" onclick="wizardGoToStep(9)" disabled>
         <div class="wizard-step-dot">9</div>
+        <div class="wizard-step-label" data-i18n="wizard.stepScripts">Pre-/Post-Skripte</div>
+      </button>
+      <div class="wizard-step-line"></div>
+      <button type="button" class="wizard-step" id="wstep-dot-10" data-wizard-step="10" onclick="wizardGoToStep(10)" disabled>
+        <div class="wizard-step-dot">10</div>
         <div class="wizard-step-label" data-i18n="wizard.stepPreview">Flow-Vorschau</div>
       </button>
     </div>
@@ -1868,6 +1873,18 @@
       <!-- Step 9: Flow-Vorschau & Speichern -->
       <div id="wizard-step-9" class="wizard-step-body hidden">
         <div id="wizard-error-9" class="status-message error hidden"></div>
+        <p data-i18n="wizard.scriptsDescription">Allgemeine Skripte am Anfang und Ende des gesamten Jobs.</p>
+        <p class="help-text" data-i18n="wizard.scriptsReferences">Zentral verwaltete Skripte: Änderungen gelten ab dem nächsten Jobstart. Laufende Jobs behalten ihre Kopie.</p>
+        <div class="form-group"><label class="form-label" for="wiz-pre-script" data-i18n="wizard.preScript">Pre-Skript</label><select class="form-select" id="wiz-pre-script"><option value="">—</option></select></div>
+        <div class="form-group"><label class="form-label" for="wiz-post-script" data-i18n="wizard.postScript">Post-Skript</label><select class="form-select" id="wiz-post-script"><option value="">—</option></select></div>
+        <div class="form-group"><label class="form-label" for="wiz-post-when" data-i18n="wizard.postWhen">Post ausführen</label><select class="form-select" id="wiz-post-when">
+          <option value="success" data-i18n="wizard.postSuccess">Bei Erfolg (einschließlich Borg-Warnungen)</option>
+          <option value="always" data-i18n="wizard.postAlways">Auch bei Fehler, Überspringen oder Abbruch</option>
+        </select></div>
+        <p class="help-text" data-i18n="wizard.scriptsManage">Skripte unter Einstellungen → Skripte anlegen und bearbeiten.</p>
+      </div>
+      <div id="wizard-step-10" class="wizard-step-body hidden">
+        <div id="wizard-error-10" class="status-message error hidden"></div>
         <div id="wizard-preview-loading" class="loading-spinner hidden">
           <div class="spinner"></div><span data-i18n="wizard.loadingPreview">Lade Flow-Vorschau...</span>
         </div>
@@ -1910,7 +1927,7 @@
       <div style="flex:1"></div>
       <button class="btn btn-secondary" id="wizard-cancel-btn" data-i18n="jobs.cancel">Abbrechen</button>
       <button class="btn btn-primary" id="wizard-next-btn" data-i18n="wizard.next">Weiter</button>
-      <button class="btn btn-primary hidden" id="wizard-save-btn" data-step="9">
+      <button class="btn btn-primary hidden" id="wizard-save-btn" data-step="10">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
           <polyline points="20 6 9 17 4 12"/>
         </svg>

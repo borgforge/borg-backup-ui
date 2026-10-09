@@ -94,10 +94,11 @@ def test_wizard_preview_exposes_stable_step_codes_and_english_fallbacks(monkeypa
     flow = generate_flow_preview(params, {}, Path("/tmp/scripts"))
 
     assert [step["code"] for step in flow["step_codes"]] == [
-        "prechecks",
         "resourceLocksAcquire",
+        "prechecks",
         "borgCreate",
         "borgMaintenance",
+        "repositoryStats",
         "statusNotification",
         "resourceLocksRelease",
     ]

@@ -170,6 +170,8 @@ function renderHistoryRow(e, idx) {
           ${detailGroup(historyT('lastCheck'), e.repository_check_date, 'datetime')}
           ${detailGroup(historyT('nextCheck'), e.repository_next_check, 'datetime')}
           ${detailGroup(historyT('checkStatus'), e.repository_check_status, 'wide')}
+          ${detailGroup(historyT('backupExitCode'), e.backup_exit_code != null ? String(e.backup_exit_code) : null, 'wide')}
+          ${detailGroup(historyT('hookResults'), Object.entries(e.hook_results || {}).map(([phase, result]) => `${phase}: ${result.name} — ${historyT('hookStates.' + result.status)} (exit ${result.exit_code})`).join('; '), 'wide')}
           ${e.log_file ? `
           <div class="history-detail-group history-detail-group--log">
             <div class="history-detail-label">${escHtml(historyT('logFile'))}</div>
@@ -183,9 +185,26 @@ function renderHistoryRow(e, idx) {
     </tr>`;
 }
 
+/** Describe recorded hook failures without displaying arbitrary raw error text.
+ * Older entries without hook results retain the generic localized error.
+ */
 function historyRunDetailMessage(entry) {
   const status = String(entry?.status || '').toLowerCase();
-  if (status === 'error') return historyT('backupFailedDetails');
+  if (status === 'error') {
+    const failures = ['pre', 'post'].filter(phase =>
+      ['failed', 'timeout', 'launch_failed'].includes(entry?.hook_results?.[phase]?.status));
+    if (!failures.length) return historyT('backupFailedDetails');
+    const messages = failures.map(phase => {
+      const result = entry.hook_results[phase];
+      return historyT(`${phase}ScriptFailureDetails`, {
+        name: result.name || '—',
+        status: historyT(`hookStates.${result.status}`),
+        code: result.exit_code ?? '—',
+      });
+    });
+    if (failures.includes('pre')) messages.push(historyT('backupNotStarted'));
+    return messages.join(' ');
+  }
   if (status !== 'skipped') return '';
 
   const skipKey = `dashboard.skipReasons.${entry?.skip_reason_code || 'skipped'}`;

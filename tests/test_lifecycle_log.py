@@ -1,8 +1,12 @@
 from job_fixtures import identified_job, job_id
+import json
+import logging
 import os
 from pathlib import Path
 import sys
 from types import SimpleNamespace
+
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -83,6 +87,66 @@ def test_backup_finish_emits_lifecycle_summary(tmp_path: Path, monkeypatch):
     assert "exit_code=0" in text
     assert "duration_seconds=45" in text
     assert "status_file=" in text
+
+
+@pytest.mark.parametrize('outcomes', [
+    {'pre': ('failed', 41)},
+    {'pre': ('timeout', 124)},
+    {'pre': ('launch_failed', 2)},
+    {'post': ('failed', 42)},
+    {'pre': ('failed', 41), 'post': ('failed', 42)},
+])
+def test_script_failures_identify_causes_in_log_status_and_notification(
+    tmp_path, monkeypatch, caplog, outcomes,
+):
+    job = BackupJob(_backup_job_config(tmp_path))
+    job._completion_repo_info = (0, ('unknown', 'unknown', 'unknown'))
+    notifications = []
+    monkeypatch.setattr(job, '_send_notification_event', lambda *args: notifications.append(args))
+    monkeypatch.setattr(job, '_emit_lifecycle_finished', lambda **kwargs: None)
+    if 'pre' not in outcomes:
+        job.set_result(0)
+        job.backup_exit_code = 0
+    for phase, (status, code) in outcomes.items():
+        job.record_hook_result(phase, {'name': 'Test', 'status': status, 'exit_code': code})
+    with caplog.at_level(logging.INFO):
+        job._do_finish()
+        job._do_finish()  # Finalization must not notify twice.
+    saved = json.loads(job._last_status_file.read_text())
+    assert saved['exit_code'] == 2 and saved['status'] == 'error'
+    assert saved['backup_exit_code'] == (None if 'pre' in outcomes else 0)
+    assert len(notifications) == 1 and notifications[0][0] == 'backup_failed'
+    assert 'Backup job failed (job exit 2)' in caplog.text
+    assert 'BACKUP FAILED' in caplog.text
+    assert 'BACKUP COMPLETED' not in caplog.text
+    assert 'Borg backup failed' not in caplog.text
+    for phase, (status, code) in outcomes.items():
+        message = f'{phase.title()} script {status} (exit {code})'
+        assert message in caplog.text
+        assert message in saved['error_message']
+        assert message in notifications[0][2]
+        assert saved['hook_results'][phase]['exit_code'] == code
+    assert ('Backup was not started' in caplog.text) == ('pre' in outcomes)
+    assert ('Backup was not started' in notifications[0][2]) == ('pre' in outcomes)
+
+
+@pytest.mark.parametrize('code,cancelled,heading', [
+    (0, False, 'BACKUP COMPLETED'),
+    (1, False, 'BACKUP COMPLETED WITH WARNINGS'),
+    (2, False, 'BACKUP FAILED'),
+    (130, True, 'BACKUP CANCELLED'),
+])
+def test_backup_log_footer_matches_final_result(tmp_path, monkeypatch, caplog, code, cancelled, heading):
+    job = BackupJob(_backup_job_config(tmp_path))
+    job.set_result(code)
+    if cancelled:
+        job.set_cancelled()
+    monkeypatch.setattr(job, '_send_notification_event', lambda *args: None)
+    monkeypatch.setattr(job, '_save_status', lambda duration: None)
+    monkeypatch.setattr(job, '_emit_lifecycle_finished', lambda **kwargs: None)
+    with caplog.at_level(logging.INFO):
+        job._do_finish()
+    assert [record.message.strip() for record in caplog.records if record.message.strip().startswith('BACKUP ')] == [heading]
 
 
 def test_backup_exit_refreshes_unraid_widget_cache_after_status_and_lock_release(tmp_path: Path, monkeypatch):

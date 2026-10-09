@@ -345,6 +345,28 @@ Beispiel:
 
 Dieser Ausdruck startet täglich um 03:00 Uhr.
 
+#### Schritt 9: Pre-/Post-Skripte
+
+Unter **Einstellungen > Skripte** verwalten Administratoren wiederverwendbare Bash-Skripte mit Name, Beschreibung und Timeout (1–86400 Sekunden). **Prüfen und speichern** prüft die Syntax, ohne das Skript auszuführen. Syntaxfehler nennen die Zeile; erfolgreiche Syntaxprüfung garantiert keinen erfolgreichen Lauf.
+
+Die Skriptauswahl zeigt die Anzahl zugeordneter Jobs. Die standardmäßig eingeklappte Liste **Verwendet von** zeigt zunächst nur die Jobanzahl. Aufgeklappt listet sie die Jobs mit Speicherort, Pre-/Post-Zuordnung und Post-Ausführungsbedingung auf, einschließlich deaktivierter Jobs. Solange Zuordnungen bestehen, bleibt **Löschen** gesperrt. Der Bash-Editor bietet lokale Syntaxhervorhebung und Zeilennummern. Bei einem Syntaxfehler springt er zur gemeldeten Zeile und markiert sie; bei einer Meldung hinter dem Dateiende wird die letzte Zeile markiert. Die farbige Darstellung ersetzt keine Syntaxprüfung.
+
+**Duplizieren** übernimmt den aktuellen Editorinhalt, Beschreibung und Timeout als neuen, ungespeicherten Entwurf ohne Job-Zuordnungen. **Importieren (.sh)** öffnet ebenfalls einen neuen Entwurf und überschreibt keine gespeicherten Skripte. Zulässig sind UTF-8-Textdateien bis 64 KiB mit `#!/bin/bash`, `#!/usr/bin/bash` oder `#!/usr/bin/env bash` in der ersten Zeile, jeweils ohne zusätzliche Optionen. UTF-8-BOM und Windows-Zeilenenden werden normalisiert. Die Endung allein reicht nicht: Der Server prüft die Bash-Kennzeichnung und führt `bash -n` aus, ohne das Skript zu starten. Erst **Prüfen und speichern** legt den Entwurf an. **Exportieren (.sh)** prüft den aktuellen Editorinhalt und lädt nur den Skripttext herunter, ohne Beschreibung, Timeout oder Zuordnungen. Fehlt eine unterstützte Bash-Shebang, wird `#!/bin/bash` vorangestellt. Der Export speichert keine Editoränderungen.
+
+Im Wizard wählen Sie optional ein Pre- und ein Post-Skript. Beide sind allgemeine Hooks für den gesamten Job, unabhängig von Docker/VM-Steuerung. Nach lokaler Initialisierung und erfolgreicher Sperrübernahme läuft Pre vor allen Backup-Vorbereitungen, insbesondere vor Netzwerk-Mounts und Repositoryzugriffen. Post läuft nach Backup, früher Docker-/VM-Wiederherstellung, Wartung, abschließender Repository-Statistik und Freigaben-Cleanup gemäß Jobeinstellungen. Danach werden nur noch Abschlussstatus und Benachrichtigungen erzeugt und Sperren freigegeben.
+
+- Pre: Jeder Exitcode ungleich 0 oder Timeout verhindert den Backupstart.
+- Post: **Bei Erfolg** umfasst Borg-Warnungen (Exit 1). **Auch bei Fehler, Überspringen oder Abbruch** erlaubt Aufräumaktionen nach einem fehlgeschlagenen oder abgebrochenen Lauf, auch bei fehlgeschlagenem Pre. Ein Konflikt bei der anfänglichen Sperrübernahme startet keinen Job und führt keine Hooks aus.
+- Fehler in Post setzen den Gesamtjob auf Fehler. History zeigt die Skriptergebnisse und den Exitcode von `borg create` separat; ein bereits erstelltes Archiv bleibt erhalten.
+- Pre ist abbrechbar. Post gehört zum abschließenden Aufräumen und kann nicht über **Abbrechen** unterbrochen werden; sein Timeout bleibt wirksam. Unterprozesse werden bei Ende, Timeout oder Abbruch beendet.
+- Jobs speichern zentrale Referenzen. Änderungen gelten ab dem nächsten Start für alle zugeordneten Jobs; laufende Jobs behalten beide beim Start eingelesenen Definitionen. Zugeordnete Skripte können nicht gelöscht werden.
+
+Skripte laufen mit den Rechten des Backupdienstes (auf Unraid normalerweise root), mit nicht-interaktiver Standardeingabe und einer bereinigten Umgebung ohne geerbte Borg-Zugangsdaten. Verfügbar sind `BBUI_JOB_ID`, `BBUI_HOOK_PHASE` (`pre`/`post`) und für Post `BBUI_JOB_RESULT` (`success`, `warning`, `failed`, `cancelled`, `skipped`). Ausgeführte Skripte erhalten eigene Phasen-Trenner im Joblog mit Name, Ausgabe und Ergebnis (maximal 64 KiB pro Skript); geben Sie keine Zugangsdaten aus. Ein Wake-Skript muss selbst warten, bis der Server bereit ist. Bei mehreren Jobs auf demselben Server müssen Wake-/Sleep-Skripte die gemeinsame Nutzung berücksichtigen.
+
+Bei Skriptfehlern nennen Log und History die betroffene Phase und den Skript-Exitcode. Ein fehlgeschlagenes Pre wird ausdrücklich als „Backup wurde nicht gestartet“ gekennzeichnet. Der Job-Exitcode 2 beschreibt den fehlgeschlagenen Gesamtlauf und ist vom Skript-Exitcode getrennt. Der Log-Abschluss unterscheidet Erfolg, Warnung, Fehler und Abbruch.
+
+Die Definitionen liegen in `<Datenverzeichnis>/config/job-scripts.json`; sichern Sie diese Datei mit dem Datenverzeichnis. Jobexporte enthalten die Referenzen, nicht den Skriptinhalt. Bei Übertragung auf ein anderes System müssen Skripte dort angelegt und die Zuordnungen im Wizard angepasst werden. Die [sechs Testskripte und Testmatrix](../../examples/job-hooks/README.md) decken Erfolg, Laufzeit- und Syntaxfehler ab.
+
 #### Flow-Vorschau
 
 Der letzte Schritt zeigt eine technische Vorschau des geplanten Ablaufs. Hier werden Repository, zu sichernde Ordner oder Dateien, Docker-/VM-Auswahl und geplante Aktionen zusammengefasst.

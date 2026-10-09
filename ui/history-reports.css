@@ -45,7 +45,8 @@
   padding: var(--ui-space-2) var(--ui-space-3);
   border-right: 1px solid var(--ui-color-border);
   border-bottom: 1px solid var(--ui-color-border);
-  background: var(--ui-color-surface-subtle);
+  /* Apply the translucent surface once on the panel, including empty cells. */
+  background: transparent;
 }
 .history-detail-group--log { grid-column: 1 / -1; }
 .history-detail-group--archive { grid-column: span 2; }

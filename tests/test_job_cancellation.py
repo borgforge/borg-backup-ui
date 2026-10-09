@@ -155,7 +155,7 @@ def test_runner_defers_cancellation_until_runtime_stop_finishes():
 
     assert docker_stop < docker_cancel < vm_stop < vm_cancel
     assert docker_except_stop < docker_cancel
-    assert 'phase in {"recovering_docker", "recovering_vms", "unmounting"}' in source
+    assert 'phase in {"recovering_docker", "recovering_vms", "unmounting", "post_script"}' in source
     assert 'terminal_phase = "cancelled" if result_code == 130' in source
 
 

@@ -221,7 +221,19 @@
       "configuration_export_unsupported": "Dieses Konfigurationspaket verwendet ein nicht mehr unterstütztes Format. Der Import wurde abgebrochen. Es wurden keine Änderungen vorgenommen. Erstelle nach dem Update und der Migration der Quellinstallation einen neuen Export.",
       "job_settings_invalid": "Die Job-Einstellungen sind unvollständig oder ungültig. Prüfe Kompression und Aufbewahrung und speichere den Job erneut.",
       "retention_within_only": "Ein Zeitfenster allein kann nach einer Backup-Pause alle Archive löschen. Bitte zusätzlich mindestens eine Zählregel größer als 0 setzen, z. B. 1 Tagesstand.",
-      "restore_directory_unavailable": "Dieser Ordner ist im ausgewählten Archiv nicht vorhanden. Prüfe den Pfad."
+      "restore_directory_unavailable": "Dieser Ordner ist im ausgewählten Archiv nicht vorhanden. Prüfe den Pfad.",
+      "job_script_name": "Der Skriptname muss 1–100 Zeichen in einer Zeile enthalten.",
+      "job_script_description": "Die Beschreibung darf höchstens 2000 Zeichen enthalten.",
+      "job_script_content": "Das Skript muss 1–65536 Bytes enthalten und darf keine NUL-Zeichen enthalten.",
+      "job_script_timeout": "Der Timeout muss eine ganze Zahl zwischen 1 und 86400 Sekunden sein.",
+      "job_script_missing": "Das ausgewählte Skript existiert nicht mehr. Bitte neu auswählen.",
+      "job_script_in_use": "Das Skript ist einem Job zugeordnet. Entfernen Sie zuerst die Zuordnung.",
+      "job_script_selection": "Die Pre-/Post-Auswahl ist ungültig.",
+      "job_script_syntax": "Bash-Syntaxfehler in Zeile {line}.",
+      "job_script_import_file": "Bitte eine Bash-Datei mit der Endung .sh auswählen.",
+      "job_script_import_size": "Die Skriptdatei muss 1–65536 Bytes enthalten (maximal 64 KiB).",
+      "job_script_import_text": "Die Datei muss UTF-8-Text ohne binäre Steuerzeichen enthalten.",
+      "job_script_import_bash": "Die erste Zeile muss Bash angeben: #!/bin/bash, #!/usr/bin/bash oder #!/usr/bin/env bash (ohne zusätzliche Optionen)."
     },
     "messages": {
       "smb_already_mounted": "SMB-Freigabe ist bereits eingehängt.",
@@ -724,7 +736,11 @@
     "activityLogDownload": "Vollständiges Log herunterladen",
     "activityLogComplete": "Alle Einträge bleiben erhalten. Beim Scrollen werden weitere Abschnitte geladen. Die Browsersuche durchsucht nur den geladenen Abschnitt.",
     "activityLogSaveFailed": "Das Log konnte nicht ins Logverzeichnis gespeichert werden. Es liegt weiterhin im RAM. Bitte vor einem Serverneustart das vollständige Log herunterladen.",
-    "activityLogEnded": "Lauf beendet; Exit-Code nicht verfügbar"
+    "activityLogEnded": "Lauf beendet; Exit-Code nicht verfügbar",
+    "phases": {
+      "pre_script": "Pre-Skript",
+      "post_script": "Post-Skript"
+    }
   },
   "schedule": {
     "title": "Zeitplan",
@@ -996,7 +1012,13 @@
       "vmStart": "VMs starten",
       "dockerStart": "Docker-Container starten",
       "resourceLocksRelease": "Ressourcen-Sperren freigeben",
-      "borgMaintenanceKeepAll": "Borg-Wartung (Compact -> Check; Prune ausgeschaltet)"
+      "borgMaintenanceKeepAll": "Borg-Wartung (Compact -> Check; Prune ausgeschaltet)",
+      "preScript": "Pre-Skript vor allen Backup-Vorbereitungen ausführen",
+      "mountShares": "Benötigte Netzwerkfreigaben einhängen",
+      "repositoryStats": "Abschließende Repository-Statistik lesen",
+      "unmountShares": "Netzwerkfreigaben gemäß Jobeinstellungen aufräumen",
+      "postScriptAlways": "Post-Skript nach dem Aufräumen ausführen (auch bei Fehler/Abbruch/Überspringen)",
+      "postScriptSuccess": "Post-Skript nach dem Aufräumen ausführen (bei Erfolg einschließlich Borg-Warnungen)"
     },
     "yes": "ja",
     "no": "nein",
@@ -1111,7 +1133,18 @@
       "withinRule": "Alle Archive in diesem Zeitraum behalten, auch mehrere pro Tag.",
       "lastRule": "Nur die neuesten Archive behalten.",
       "allRule": "Keine Archive durch Prune löschen."
-    }
+    },
+    "stepScripts": "Pre-/Post-Skripte",
+    "scriptsDescription": "Pre läuft vor allen Backup-Vorbereitungen. Post läuft nach Wartung und Aufräumen als letzte Aktion des Jobs.",
+    "scriptsReferences": "Zentrale Referenzen: Änderungen gelten ab dem nächsten Jobstart. Laufende Jobs behalten ihre Kopie.",
+    "preScript": "Pre-Skript",
+    "postScript": "Post-Skript",
+    "postWhen": "Post ausführen",
+    "postSuccess": "Bei Erfolg (einschließlich Borg-Warnungen)",
+    "postAlways": "Auch bei Fehler, Überspringen oder Abbruch",
+    "scriptsManage": "Skripte unter Einstellungen → Skripte anlegen und bearbeiten.",
+    "scriptsLoadError": "Skripte konnten nicht geladen werden. Wizard erneut öffnen.",
+    "scriptMissing": "Skript fehlt – neu auswählen"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -1236,7 +1269,7 @@
     "compressed": "Komprimiert",
     "repositorySize": "Repository-Größe",
     "files": "Dateien",
-    "exitCode": "Exit-Code",
+    "exitCode": "Job-Exitcode",
     "lastCheck": "Letzter Check",
     "nextCheck": "Nächster Check",
     "checkStatus": "Check-Status",
@@ -1265,7 +1298,19 @@
     "stepMetadataCheck": "Metadaten-Check",
     "stepRestoreProbe": "Stichprobe Restore",
     "stepIntegrityCheck": "Integritätsvergleich",
-    "stepCleanup": "Cleanup Testdaten"
+    "stepCleanup": "Cleanup Testdaten",
+    "hookResults": "Skriptergebnisse",
+    "backupExitCode": "Backup-Exitcode (borg create)",
+    "hookStates": {
+      "success": "Erfolgreich",
+      "failed": "Fehlgeschlagen",
+      "timeout": "Zeitüberschreitung",
+      "cancelled": "Abgebrochen",
+      "launch_failed": "Start fehlgeschlagen"
+    },
+    "preScriptFailureDetails": "Pre-Skript „{name}“: {status} (Exitcode {code}).",
+    "postScriptFailureDetails": "Post-Skript „{name}“: {status} (Exitcode {code}).",
+    "backupNotStarted": "Das Backup wurde nicht gestartet."
   },
   "reports": {
     "title": "Berichte",
@@ -3097,6 +3142,40 @@
       "error": "Prometheus-Einstellungen konnten nicht gespeichert werden: {message}",
       "copied": "In die Zwischenablage kopiert.",
       "copyFailed": "Kopieren fehlgeschlagen. Bitte den Text markieren und manuell kopieren."
+    },
+    "scripts": {
+      "title": "Skripte",
+      "description": "Allgemeine Pre-/Post-Skripte für Backupjobs",
+      "help": "Bash-Skripte laufen mit den Rechten des Backupdienstes. Änderungen gelten für alle zugeordneten Jobs ab dem nächsten Start. Keine Zugangsdaten ausgeben.",
+      "loading": "Skripte werden geladen …",
+      "select": "Skript auswählen",
+      "new": "Neues Skript",
+      "name": "Name",
+      "details": "Beschreibung",
+      "timeout": "Timeout (Sekunden)",
+      "content": "Bash-Skript",
+      "save": "Prüfen und speichern",
+      "delete": "Löschen",
+      "confirmDelete": "Dieses Skript löschen? Zugeordnete Skripte können nicht gelöscht werden.",
+      "saved": "Syntax geprüft und gespeichert.",
+      "deleted": "Skript gelöscht.",
+      "jobCount": "{count} Jobs",
+      "oneJob": "1 Job",
+      "import": "Importieren (.sh)",
+      "export": "Exportieren (.sh)",
+      "duplicate": "Duplizieren",
+      "copyName": "{name} (Kopie)",
+      "draftCreated": "Neuer Entwurf ohne Job-Zuordnungen. Zum Anlegen prüfen und speichern.",
+      "exported": "Skript für den Download vorbereitet.",
+      "importHint": "Import: UTF-8-Datei (.sh), maximal 64 KiB, mit Bash-Shebang. Die Syntax wird ohne Ausführung geprüft. Import und Duplizieren erstellen einen neuen Entwurf.",
+      "importFileError": "Bitte eine Bash-Datei mit der Endung .sh auswählen.",
+      "importSizeError": "Die Skriptdatei muss 1–65536 Bytes enthalten (maximal 64 KiB).",
+      "usedBy": "Verwendet von",
+      "unused": "Dieses Skript ist keinem Job zugeordnet.",
+      "disabledJob": "Job deaktiviert",
+      "beforeBackup": "Vor allen Backup-Vorbereitungen",
+      "assignedHint": "Änderungen gelten ab dem nächsten Lauf dieser Jobs. Zum Löschen zuerst alle Zuordnungen im Job-Wizard entfernen.",
+      "validationHint": "Beim Speichern wird die Bash-Syntax geprüft. Das Skript wird dabei nicht ausgeführt. Fehler während der Ausführung können daher trotzdem auftreten."
     }
   }
 }

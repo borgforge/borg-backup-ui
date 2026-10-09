@@ -3,6 +3,12 @@
 Borg Backup UI bundles selected third-party components so the Unraid plugin can
 run without installing Python packages at runtime.
 
+## Bash editor highlighting
+
+Prism 1.30.0 (core and Bash grammar) is bundled locally under `ui/vendor/prism`
+under the MIT license. See `runtime/licenses/prism/LICENSE` for the full notice.
+Upstream: https://github.com/PrismJS/prism/tree/v1.30.0
+
 ## BorgBackup runtime
 
 | Component | Version | License | Notice |

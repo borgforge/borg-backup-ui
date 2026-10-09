@@ -465,6 +465,7 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
         "use_vm": meta_vm_control["mode"] != "none",
         "docker_control": meta_docker_control,
         "vm_control": meta_vm_control,
+        "hooks": meta.get("hooks", {}),
         "source_paths": meta_source_paths,
         "exclude_paths": meta_exclude_paths,
         "exclude_if_present": meta.get("exclude_if_present", []),
@@ -523,8 +524,14 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
         steps.append(message)
         step_codes.append({"code": code, "params": params})
 
-    add_step("prechecks", "Prechecks (prerequisites, parity, paths)")
+    from job_scripts import normalize_hooks
+    hooks = normalize_hooks(params.get("hooks"), ui_config)
     add_step("resourceLocksAcquire", "Acquire resource locks (repo, optional docker-control/vm-control)")
+    if hooks["pre"]:
+        add_step("preScript", "Run Pre script before any backup preparation")
+    if location == "smb":
+        add_step("mountShares", "Mount required network shares")
+    add_step("prechecks", "Prechecks (prerequisites, parity, paths)")
     if use_docker:
         if docker_control["mode"] == "selected":
             add_step("dockerStop", f"Stop selected Docker containers ({len(docker_control['selected'])})")
@@ -554,6 +561,12 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
         add_step("borgMaintenanceKeepAll", "Borg maintenance (compact -> check; prune disabled)")
     else:
         add_step("borgMaintenance", "Borg maintenance (prune -> compact -> check)")
+    add_step("repositoryStats", "Read final repository statistics")
+    if location == "smb":
+        add_step("unmountShares", "Clean up network shares according to job settings")
+    if hooks["post"]:
+        add_step("postScriptAlways" if hooks["post_when"] == "always" else "postScriptSuccess",
+                 "Run Post script after cleanup (" + hooks["post_when"] + ")")
     add_step("statusNotification", "Write status and notification")
     add_step("resourceLocksRelease", "Release resource locks")
 
@@ -668,6 +681,11 @@ def _save_job_locked(params: dict, scripts_dir: Path, data_root: Optional[Path] 
         archive_prefix, *(job_archive_prefixes(existing) if existing else []),
     ]))
 
+    from job_scripts import normalize_hooks
+    hooks = normalize_hooks(params.get("hooks", existing.get("hooks")), ui_config or {
+        "BACKUP_SCRIPTS_DIR": str(data_root or (scripts_dir.parent if scripts_dir.name == "scripts" else scripts_dir)),
+    })
+
     metadata = {
         **existing,
         "schema_version": JOB_SETTINGS_SCHEMA,
@@ -698,6 +716,7 @@ def _save_job_locked(params: dict, scripts_dir: Path, data_root: Optional[Path] 
         },
         "docker_control": {**existing.get("docker_control", {}), **docker_control},
         "vm_control": {**existing.get("vm_control", {}), **vm_control},
+        "hooks": hooks,
         "compression": str(params.get("compression", "lz4")).strip() or "lz4",
         "file_activity": file_activity,
         "retention": retention,

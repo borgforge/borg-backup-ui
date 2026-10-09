@@ -2611,3 +2611,17 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 - Storage: manage and test Borg repositories
 - History: search all backup runs, open log files
 - Settings: edit backup.conf directly in the browser
+
+## Issue #550: General Pre/Post job scripts
+
+- Add an admin-only, atomic Bash script inventory and syntax validation without execution.
+- Persist central script references per job; snapshot both definitions at run start.
+- Run Pre before mounts/prechecks, and Post after runtime recovery, maintenance and share cleanup; keep resource locks until completion.
+- Bound script execution by timeout/cancellation and process-group cleanup; mask and limit log output.
+- Record hook outcomes and archive-creation exit separately in history; final notifications include Post failures.
+- Add a Settings script editor, wizard step 9, bilingual help and six manual test examples.
+- Use the shared Settings card layout for the script editor and full-width history rows for optional script results without interrupting the existing detail grid.
+- Show live script-to-job assignments including disabled jobs and Pre/Post conditions in a collapsed-by-default list with a job count. Disable deletion for referenced scripts in the editor.
+- Bundle Prism core/Bash under MIT for offline highlighting, native textarea editing, line numbers and syntax-error navigation in both themes. (#550)
+- Add unassigned duplicate/import drafts and validated .sh exports from editor values. Validate upload size, UTF-8 text, explicit Bash shebang and syntax server-side without executing or persisting imports. Preserve current drafts on import failure. (#550)
+- Identify failed Pre/Post phases and script exit codes in History and completion logs. Explain when Pre prevented the backup from starting and distinguish job exit codes and final log outcomes. (#550)

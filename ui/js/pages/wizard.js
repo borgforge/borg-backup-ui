@@ -355,7 +355,7 @@ function wizardUpdateFinalRiskAcknowledgements() {
   document.getElementById('wiz-final-domains-risk')?.classList.toggle('hidden', !domainsRisk);
   document.getElementById('wiz-final-risk-list')?.classList.toggle('hidden', !pending);
   const saveBtn = document.getElementById('wizard-save-btn');
-  if (saveBtn && Number(wizardState.step || 0) === 9) saveBtn.disabled = pending;
+  if (saveBtn && Number(wizardState.step || 0) === 10) saveBtn.disabled = pending;
 }
 
 function wizardUpdateRuntimeRiskWarnings() {
@@ -575,6 +575,10 @@ function openWizard(existingJobKey = '') {
   const title = document.getElementById('wizard-modal-title');
   if (title) title.textContent = wizardT('wizard.newTitle');
   document.getElementById('wiz-job-name').value = '';
+  wizardState.hooksLoaded = false;
+  document.getElementById('wiz-pre-script').value = '';
+  document.getElementById('wiz-post-script').value = '';
+  document.getElementById('wiz-post-when').value = 'success';
   document.getElementById('wiz-archive-prefix').value = '';
   document.getElementById('wiz-icon').value = '';
   document.getElementById('wiz-icon-color').value = '';
@@ -646,12 +650,13 @@ function openWizard(existingJobKey = '') {
     wizardLoadStorageTargets(),
     wizardLoadRepositories(),
     wizardLoadRuntimeInventory(),
+    wizardLoadScripts(request),
   ]).finally(() => {
     if (request !== wizardState.jobIdRequest) return;
     wizardAutoFill();
     if (!wizardState.closeSnapshotTouched) _wizardCaptureCloseSnapshot();
   });
-  [1,2,3,4,5,6,7,8,9].forEach(n => wizardClearError(n));
+  [1,2,3,4,5,6,7,8,9,10].forEach(n => wizardClearError(n));
   wizardRenderRuntimeControls();
   _renderWizardStep(1);
   document.getElementById('wizard-modal').classList.remove('hidden');
@@ -695,6 +700,7 @@ function _wizardFillFromJob(job) {
   wizardState.selectedRepositoryKey = String(job.repository_key || '').trim();
   const selectedRepo = (wizardState.repositories || []).find((repo) => String(repo.repository_key || '') === wizardState.selectedRepositoryKey);
   wizardState.selectedStorageKey = String(selectedRepo?.storage_key || job.storage_key || '').trim();
+  wizardApplyHooks(job.hooks || {});
   document.getElementById('wiz-compression').value = job.compression || 'lz4';
   document.getElementById('wiz-file-activity').checked = !!job.file_activity;
   wizardState.excludeFile = job.exclude_from || null;
@@ -753,7 +759,7 @@ async function openWizardForJob(jobKey, mode = 'edit') {
     wizardState.originalSchedule = job.schedule && typeof job.schedule === 'object'
       ? { cron: String(job.schedule.cron || '').trim(), enabled: !!job.schedule.enabled }
       : null;
-    wizardState.unlockedStep = 9;
+    wizardState.unlockedStep = 10;
     _renderWizardStep(wizardState.step);
     _wizardCaptureCloseSnapshot();
   } catch (err) {
@@ -795,7 +801,7 @@ function closeWizard(options = {}) {
 }
 
 function _renderWizardStep(n) {
-  [1,2,3,4,5,6,7,8,9].forEach(i => {
+  [1,2,3,4,5,6,7,8,9,10].forEach(i => {
     document.getElementById(`wizard-step-${i}`)?.classList.toggle('hidden', i !== n);
     const dot = document.getElementById(`wstep-dot-${i}`);
     if (dot) {
@@ -809,17 +815,17 @@ function _renderWizardStep(n) {
   const nextBtn = document.getElementById('wizard-next-btn');
   const saveBtn = document.getElementById('wizard-save-btn');
   backBtn.style.display = n > 1 ? '' : 'none';
-  nextBtn.classList.toggle('hidden', n === 9);
-  saveBtn.classList.toggle('hidden', n !== 9);
+  nextBtn.classList.toggle('hidden', n === 10);
+  saveBtn.classList.toggle('hidden', n !== 10);
   wizardState.step = n;
-  if (n !== 9) saveBtn.disabled = false;
+  if (n !== 10) saveBtn.disabled = false;
   wizardUpdateFinalRiskAcknowledgements();
   _wizardUpdateStepNavigation();
 }
 
 function _wizardUpdateStepNavigation() {
   document.getElementById('wizard-next-btn').disabled = !wizardState.jobId;
-  [1,2,3,4,5,6,7,8,9].forEach((step) => {
+  [1,2,3,4,5,6,7,8,9,10].forEach((step) => {
     const dot = document.getElementById(`wstep-dot-${step}`);
     if (!dot) return;
     const skipped = !_wizardStepEnabled(step);
@@ -837,10 +843,10 @@ function _wizardStepEnabled(step) {
 }
 
 function _wizardNextStepFrom(step) {
-  for (let next = step + 1; next <= 9; next += 1) {
+  for (let next = step + 1; next <= 10; next += 1) {
     if (_wizardStepEnabled(next)) return next;
   }
-  return 9;
+  return 10;
 }
 
 function _wizardPreviousStepFrom(step) {
@@ -939,6 +945,11 @@ function _wizardCollectParams() {
   const dockerMode = _wizardRuntimeMode('docker');
   const vmMode = _wizardRuntimeMode('vm');
   return {
+    hooks: {
+      pre: document.getElementById('wiz-pre-script')?.value || '',
+      post: document.getElementById('wiz-post-script')?.value || '',
+      post_when: document.getElementById('wiz-post-when')?.value || 'success',
+    },
     job_id: wizardState.jobId || '',
     archive_prefix: (document.getElementById('wiz-archive-prefix').value || '').trim(),
     icon:         (document.getElementById('wiz-icon').value || '').trim().toLowerCase(),
@@ -1313,7 +1324,11 @@ function _wizardValidate(step) {
       return false;
     }
   }
-  if (step === 9) {
+  if ((step === 9 || step === 10) && wizardState.hooksLoaded === false) {
+    _wizardShowError(step, wizardT('wizard.scriptsLoadError'));
+    return false;
+  }
+  if (step === 10) {
     if (_wizardAppdataRiskRequired() && !p.docker_control.ack_appdata_risk) {
       _wizardFocusRuntimeRisk('wiz-final-appdata-risk');
       return false;
@@ -1329,15 +1344,15 @@ function _wizardValidate(step) {
 async function wizardNext() {
   const cur = wizardState.step;
   if (!_wizardValidate(cur)) return;
-  if (cur < 8) {
+  if (cur < 9) {
     const next = _wizardNextStepFrom(cur);
     wizardState.unlockedStep = Math.max(Number(wizardState.unlockedStep || 1), next);
     _renderWizardStep(next);
     return;
   }
-  // Step 8 -> 9: load preview
-  wizardState.unlockedStep = 9;
-  _renderWizardStep(9);
+  // Step 9 -> 10: load preview
+  wizardState.unlockedStep = 10;
+  _renderWizardStep(10);
   await _wizardPreview();
 }
 
@@ -1365,13 +1380,13 @@ async function wizardGoToStep(target) {
     }
   }
   _renderWizardStep(next);
-  if (next === 9) await _wizardPreview();
+  if (next === 10) await _wizardPreview();
 }
 
 async function _wizardPreview() {
   const loading = document.getElementById('wizard-preview-loading');
   const wrap    = document.getElementById('wizard-preview-wrap');
-  const errEl   = document.getElementById('wizard-error-9');
+  const errEl   = document.getElementById('wizard-error-10');
   const repoStatusEl = document.getElementById('wizard-remote-repo-status');
   loading.classList.remove('hidden');
   wrap.classList.add('hidden');
@@ -1501,8 +1516,8 @@ function _wizardRuntimePreviewText(kind, summary) {
 
 async function saveWizardJob() {
   const btn   = document.getElementById('wizard-save-btn');
-  const errEl = document.getElementById('wizard-error-9');
-  if (!_wizardValidate(9)) return;
+  const errEl = document.getElementById('wizard-error-10');
+  if (!_wizardValidate(10)) return;
   btn.classList.add('loading');
   errEl.classList.add('hidden');
 
@@ -1851,4 +1866,37 @@ function wizardRemoveExclusionFile() {
   wizardState.excludeFileError = false;
   wizardRenderExclusions();
   wizardClearError(3);
+}
+
+/** Load admin-managed script choices before editing a job; failures block saving. */
+async function wizardLoadScripts(request = wizardState.jobIdRequest) {
+  try {
+    const response = await fetch('/api/settings/scripts');
+    if (!response.ok) throw new Error(String(response.status));
+    const data = await response.json();
+    if (request !== wizardState.jobIdRequest) return;
+    wizardState.scripts = data.scripts || [];
+    wizardState.hooksLoaded = true;
+    wizardApplyHooks({});
+  } catch (_) {
+    if (request !== wizardState.jobIdRequest) return;
+    wizardState.hooksLoaded = false;
+    _wizardShowError(9, wizardT('wizard.scriptsLoadError'));
+  }
+}
+
+/** Populate script references, retaining missing selections so saving cannot silently clear them. */
+function wizardApplyHooks(hooks) {
+  for (const phase of ['pre', 'post']) {
+    const select = document.getElementById(`wiz-${phase}-script`);
+    if (!select) continue;
+    const selected = hooks[phase] || '';
+    const rows = [...(wizardState.scripts || [])];
+    if (selected && !rows.some(row => row.id === selected)) rows.push({id: selected, name: wizardT('wizard.scriptMissing')});
+    select.innerHTML = `<option value="">${escHtml(wizardT('wizard.none'))}</option>` + rows.map(row =>
+      `<option value="${escHtml(row.id)}">${escHtml(row.name)}</option>`).join('');
+    select.value = selected;
+  }
+  const condition = document.getElementById('wiz-post-when');
+  if (condition) condition.value = hooks.post_when || 'success';
 }

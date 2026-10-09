@@ -122,6 +122,8 @@ class BackupStatus:
     job_name: str = ""
     run_id: str = ""
     file_activity: bool = False
+    hook_results: dict = field(default_factory=dict)
+    backup_exit_code: Optional[int] = None
 
     # Pfad der Quelldatei (nicht serialisiert)
     source_path: Optional[Path] = field(default=None, repr=False, compare=False)
@@ -140,6 +142,8 @@ class BackupStatus:
         obj.job_name = str(data.get("job_name") or "")
         obj.run_id = str(data.get("run_id") or "")
         obj.file_activity = data.get("file_activity") is True
+        obj.hook_results = data.get("hook_results") if isinstance(data.get("hook_results"), dict) else {}
+        obj.backup_exit_code = data.get("backup_exit_code")
         obj.backup_type = str(data.get("backup_type", "unknown"))
         obj.location = str(data.get("location", "unknown"))
         obj.timestamp = str(data.get("timestamp", ""))
