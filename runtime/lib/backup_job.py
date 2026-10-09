@@ -284,6 +284,7 @@ class BackupJob:
         mail_config: Optional["MailConfig"] = None,
         notification_config: Optional[Dict[str, str]] = None,
         phase_callback: Optional[Callable[[str], None]] = None,
+        completion_callback: Optional[Callable[["BackupJob"], None]] = None,
     ) -> None:
         self.config = config
         self.docker_manager = docker_manager
@@ -291,6 +292,10 @@ class BackupJob:
         self.mail_config = mail_config
         self.notification_config = notification_config
         self.phase_callback = phase_callback
+        self.completion_callback = completion_callback
+        self.hook_results: dict = {}
+        self.backup_exit_code: int | None = None
+        self._completion_repo_info = None
 
         self._start_time: float = 0.0
         self._borg_exit: int = 99
@@ -356,6 +361,7 @@ class BackupJob:
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Finalize status, recover stopped services and release the run lock.
 
+        The optional completion callback runs after recovery and before status/notifications.
         Returns False so an original exception propagates. Cleanup failures
         raise RuntimeError only when no original failure is being propagated.
         """
@@ -372,7 +378,7 @@ class BackupJob:
 
             # Unbehandelte Exceptions: Exit-Code auf 2 setzen
             if original_exception and not self._skip_finish:
-                if self._borg_exit == 99:
+                if self._borg_exit < 2 or self._borg_exit == 99:
                     self._borg_exit = 2
                 if isinstance(exc_val, RequiredSourcePathsMissing):
                     self._failure_code = exc_val.failure_code
@@ -393,6 +399,9 @@ class BackupJob:
             self._run_cleanup_step(
                 "runtime recovery", self.recover_runtime, cleanup_errors
             )
+
+            if self.completion_callback is not None:
+                self._run_cleanup_step("job completion hooks", lambda: self.completion_callback(self), cleanup_errors)
 
             if self._skip_finish:
                 self._run_cleanup_step(
@@ -467,6 +476,36 @@ class BackupJob:
         self._borg_exit = borg_exit
         self._borg_stats = borg_stats
         self._final_msg = final_msg
+
+    @property
+    def exit_code(self) -> int:
+        """Return the overall result after runtime cleanup and hooks."""
+        return 0 if self._skip_finish else self._borg_exit
+
+    def prepare_completion(self) -> None:
+        """Cache repository statistics before unmounting and running Post.
+
+        Failed Pre hooks and skipped jobs must not contact the repository.
+        """
+        if self._skip_finish or self.backup_exit_code is None:
+            self._completion_repo_info = (0, ("unknown", "unknown", "unknown"))
+        else:
+            self._completion_repo_info = (self._get_repository_size(), self._get_repo_check_info())
+
+    def record_hook_result(self, phase: str, outcome: dict) -> None:
+        """Record a hook outcome without discarding archive statistics or prior errors."""
+        self.hook_results[phase] = outcome
+        if outcome["status"] == "success":
+            return
+        if outcome["status"] == "cancelled":
+            self.set_cancelled()
+            return
+        self._borg_exit = 2
+        self._cancelled = False
+        self._skip_finish = False
+        self._failure_code = f"{phase.upper()}_SCRIPT_FAILED"
+        message = f"{phase.title()} script {outcome['status']} (exit {outcome['exit_code']})."
+        self._final_msg = (self._final_msg + " " + message).strip()
 
     def set_cancelled(self, message: str = "Backup cancelled by user request.") -> None:
         """Mark the run as deliberately cancelled after safe runtime recovery."""
@@ -1093,6 +1132,7 @@ class BackupJob:
             duration_seconds=duration,
             exit_code=0,
             status="skipped",
+            hook_results=self.hook_results,
             error_message=f"Skipped: {reason}",
             skip_reason_code=reason_code,
             skip_reason_text=reason,
@@ -1125,6 +1165,8 @@ class BackupJob:
         )
 
     def _persist_skip_status_once(self) -> None:
+        if self.completion_callback is not None and self._completion_repo_info is None:
+            return
         if self._skip_status_written:
             return
         self._save_skip_status()
@@ -1199,7 +1241,9 @@ class BackupJob:
             status_str = "error"
 
         stats = self._borg_stats
-        if self._failure_code in {REQUIRED_SOURCE_PATHS_MISSING, USB_MOUNT_ACCESS_FAILED}:
+        if self._completion_repo_info is not None:
+            repo_size, (repo_check_date, repo_check_status, repo_next_check) = self._completion_repo_info
+        elif self._failure_code in {REQUIRED_SOURCE_PATHS_MISSING, USB_MOUNT_ACCESS_FAILED}:
             repo_size = 0
             repo_check_date, repo_check_status, repo_next_check = (
                 "unknown",
@@ -1228,6 +1272,8 @@ class BackupJob:
             status=status_str,
             failure_code=self._failure_code,
             missing_source_paths=self._missing_source_paths,
+            hook_results=self.hook_results,
+            backup_exit_code=self.backup_exit_code,
             error_message=error_msg,
             log_file=str(self.config.retained_log_file or self.config.log_file),
             archive_name=stats.archive_name if stats else "",

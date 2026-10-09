@@ -22,7 +22,7 @@ function wizard() {
   const state = vm.runInContext('wizardState', context);
   Object.assign(state, {jobId: 'test-id', sourcePaths: ['/mnt/user/data'],
     excludePaths: ['/mnt/user/data/cache'], excludeFile: {original_name: 'rules.txt', sha256: 'hash'},
-    excludeFileError: false, unlockedStep: 9});
+    excludeFileError: false, unlockedStep: 10});
   for (const [id, value] of Object.entries({'wiz-job-name': 'Test', 'wiz-archive-prefix': 'test-backup',
     'wiz-retention-mode': 'tiered', 'wiz-keep-hourly': '0', 'wiz-keep-daily': '7',
     'wiz-keep-weekly': '4', 'wiz-keep-monthly': '6', 'wiz-keep-yearly': '3',
@@ -41,7 +41,7 @@ test('all runtime combinations include exclusions and preserve values through ne
     fields.get('wiz-use-docker').checked = docker;
     fields.get('wiz-use-vm').checked = vms;
     const before = JSON.stringify(context._wizardCollectParams());
-    const steps = [1, 2, 3, ...(docker ? [4] : []), ...(vms ? [5] : []), 6, 7, 8, 9];
+    const steps = [1, 2, 3, ...(docker ? [4] : []), ...(vms ? [5] : []), 6, 7, 8, 9, 10];
     context._renderWizardStep(1);
     for (const step of steps.slice(1)) {
       await context.wizardNext();
@@ -87,4 +87,31 @@ test('errors block navigation on the correct step after the insertion', async ()
   await context.wizardGoToStep(9);
   assert.equal(state.step, 6);
   assert.match(fields.get('wizard-error-6').textContent, /validationRetentionInvalid/);
+});
+
+test('hook references and Post policy survive wizard navigation', async () => {
+  const {context, state, fields} = wizard();
+  state.scripts = [{id: 'script-' + 'a'.repeat(32), name: 'Wake'}, {id: 'script-' + 'b'.repeat(32), name: 'Sleep'}];
+  state.hooksLoaded = true;
+  const hooks = {pre: state.scripts[0].id, post: state.scripts[1].id, post_when: 'always'};
+  context.wizardApplyHooks(hooks);
+  context._renderWizardStep(9);
+  await context.wizardNext();
+  assert.equal(state.step, 10);
+  context.wizardBack();
+  assert.equal(state.step, 9);
+  assert.equal(JSON.stringify(context._wizardCollectParams().hooks), JSON.stringify(hooks));
+  state.hooksLoaded = false;
+  assert.equal(context._wizardValidate(9), false);
+  assert.match(fields.get('wizard-error-9').textContent, /scriptsLoadError/);
+});
+
+test('stale script list responses do not overwrite a reopened wizard', async () => {
+  const {context, state, fields} = wizard();
+  state.jobIdRequest = 2;
+  state.scripts = [{id: 'script-' + 'a'.repeat(32), name: 'Current'}];
+  context.wizardApplyHooks({pre: state.scripts[0].id});
+  context.fetch = async () => ({ok: true, json: async () => ({scripts: []})});
+  await context.wizardLoadScripts(1);
+  assert.equal(fields.get('wiz-pre-script').value, state.scripts[0].id);
 });

@@ -93,6 +93,7 @@ function getSettingsTabs() {
   { key: 'users', label: settingsT('tabs.users'), group: 'system', description: settingsT('menu.usersDescription'), icon: settingsMenuIcon('users') },
   { key: 'about', label: settingsT('tabs.about'), group: 'system', description: settingsT('menu.aboutDescription'), icon: settingsMenuIcon('about') },
   { key: 'notifications', label: settingsT('tabs.notifications'), group: 'operations', description: settingsT('menu.notificationsDescription'), icon: settingsMenuIcon('notifications') },
+  { key: 'scripts', label: settingsT('scripts.title'), group: 'operations', description: settingsT('scripts.description'), icon: settingsMenuIcon('advanced') },
   { key: 'backup', label: settingsT('tabs.backup'), group: 'operations', description: settingsT('menu.backupDescription'), icon: settingsMenuIcon('backup') },
   { key: 'restore', label: settingsT('tabs.restore'), group: 'operations', description: settingsT('menu.restoreDescription'), icon: settingsMenuIcon('restore') },
   { key: 'repository', label: settingsT('tabs.repository'), group: 'operations', description: settingsT('menu.repositoryDescription'), icon: settingsMenuIcon('repository') },
@@ -257,7 +258,7 @@ function renderSettings(data, systemHealth) {
   const active = tabs.find((tab) => tab.key === settingsState.activeTab) || tabs[0];
   if (!tabs.some((tab) => tab.key === settingsState.activeTab)) settingsState.activeTab = active.key;
   const profileTab = ['local', 'usb', 'smb', 'storagebox'].includes(settingsState.activeTab);
-  const hideGlobalSave = profileTab || ['about', 'factory-reset', 'integrations'].includes(settingsState.activeTab);
+  const hideGlobalSave = profileTab || ['about', 'factory-reset', 'integrations', 'scripts'].includes(settingsState.activeTab);
   const saveBtn = document.getElementById('settings-save-btn');
   if (saveBtn) saveBtn.classList.toggle('hidden', hideGlobalSave);
   el.innerHTML = `
@@ -293,6 +294,9 @@ function renderSettings(data, systemHealth) {
     </div>
     <div class="settings-tab-panel ${settingsState.activeTab === 'smb' ? '' : 'hidden'}" data-settings-panel="smb">
       ${renderSettingsSmbProfiles(data.smb_profiles || [])}
+    </div>
+    <div class="settings-tab-panel ${settingsState.activeTab === 'scripts' ? '' : 'hidden'}" data-settings-panel="scripts">
+      <div id="settings-scripts-panel" class="job-script-editor"></div>
     </div>
     <div class="settings-tab-panel ${settingsState.activeTab === 'backup' ? '' : 'hidden'}" data-settings-panel="backup">
       ${renderSettingsDockerVMs(data.docker || {}, data.vms || {})}
@@ -342,6 +346,7 @@ function renderSettings(data, systemHealth) {
   initializeSettingsProfileManagers();
   if (settingsState.activeTab === 'notifications') maybeLoadAppriseProviders();
   if (settingsState.activeTab === 'about') maybeLoadAboutLicenses();
+  if (settingsState.activeTab === 'scripts') loadSettingsScripts();
   _updateUnsavedChangesUi();
 }
 
@@ -389,11 +394,12 @@ function activateSettingsTab(tabKey) {
   if (description) description.textContent = active.description;
 
   const profileTab = ['local', 'usb', 'smb', 'storagebox'].includes(active.key);
-  document.getElementById('settings-save-btn')?.classList.toggle('hidden', profileTab || ['about', 'factory-reset', 'integrations'].includes(active.key));
+  document.getElementById('settings-save-btn')?.classList.toggle('hidden', profileTab || ['about', 'factory-reset', 'integrations', 'scripts'].includes(active.key));
   if (SETTINGS_PROFILE_CONFIG[previousTab]) syncSettingsProfileManager(previousTab);
   if (SETTINGS_PROFILE_CONFIG[active.key]) syncSettingsProfileManager(active.key);
   if (active.key === 'notifications') maybeLoadAppriseProviders();
   if (active.key === 'about') maybeLoadAboutLicenses();
+  if (active.key === 'scripts' && !document.getElementById('settings-script-form')) loadSettingsScripts();
   _updateUnsavedChangesUi();
 }
 
@@ -7128,13 +7134,14 @@ function _updateUnsavedChangesUi() {
   btn?.classList.toggle('btn-save-dirty', !!settingsState.dirty);
   const state = document.getElementById('settings-workspace-save-state');
   if (state) {
-    state.className = `badge ${settingsState.dirty ? 'warning' : 'success'}`;
-    state.textContent = settingsT(settingsState.dirty ? 'menu.unsaved' : 'menu.saved');
+    const dirty = settingsState.dirty || settingsState.scriptDirty;
+    state.className = `badge ${dirty ? 'warning' : 'success'}`;
+    state.textContent = settingsT(dirty ? 'menu.unsaved' : 'menu.saved');
   }
 }
 
 async function canLeaveSettingsPage() {
-  if (!settingsState.dirty) return true;
+  if (!settingsState.dirty && !settingsState.scriptDirty) return true;
   const discard = await _openSettingsDialog({
     title: settingsT('forms.unsavedTitle'),
     message: settingsT('forms.leaveUnsavedMessage'),
@@ -7142,6 +7149,7 @@ async function canLeaveSettingsPage() {
     confirmClass: 'btn-danger',
   });
   if (!discard) return false;
+  settingsState.scriptDirty = false;
   await refreshSettings();
   return true;
 }
@@ -7150,7 +7158,7 @@ window.canLeaveSettingsPage = canLeaveSettingsPage;
 
 if (!window.__bbuiSettingsBeforeUnloadBound) {
   window.addEventListener('beforeunload', (event) => {
-    if (!settingsState.dirty) return;
+    if (!settingsState.dirty && !settingsState.scriptDirty) return;
     event.preventDefault();
     event.returnValue = '';
   });
@@ -7282,3 +7290,84 @@ async function reloadSettingsDataAfterSave(profileType = '') {
 window.onAppriseProviderFilterChange = onAppriseProviderFilterChange;
 window.onAppriseProviderSelect = onAppriseProviderSelect;
 window.onRepositoryRefreshEnabledToggle = onRepositoryRefreshEnabledToggle;
+
+/** Fetch administrator script definitions; display errors without replacing saved scripts. */
+async function loadSettingsScripts(selected = '') {
+  const panel = document.getElementById('settings-scripts-panel');
+  if (!panel) return;
+  panel.textContent = settingsT('scripts.loading');
+  try {
+    const response = await fetch('/api/settings/scripts');
+    const data = await response.json();
+    if (!response.ok) throw new Error(apiErrorMessage(data, response.status));
+    settingsState.jobScripts = data.scripts || [];
+    renderSettingsScriptEditor(selected);
+  } catch (error) { panel.textContent = String(error.message); }
+}
+
+/** Render a centrally shared Bash script, escaping all user-controlled content. */
+function renderSettingsScriptEditor(selected = '') {
+  const panel = document.getElementById('settings-scripts-panel');
+  const rows = settingsState.jobScripts || [];
+  const script = rows.find(row => row.id === selected) || {};
+  settingsState.scriptDirty = false;
+  panel.innerHTML = `
+    <p>${escHtml(settingsT('scripts.help'))}</p>
+    <div class="form-group"><label class="form-label" for="settings-script-select">${settingsT('scripts.select')}</label>
+      <select class="form-select" id="settings-script-select"><option value="">${settingsT('scripts.new')}</option>${rows.map(row => `<option value="${escHtml(row.id)}" ${row.id === selected ? 'selected' : ''}>${escHtml(row.name)}</option>`).join('')}</select></div>
+    <form id="settings-script-form" class="job-script-editor">
+      <div class="form-group"><label class="form-label" for="settings-script-name">${settingsT('scripts.name')}</label><input class="form-input" id="settings-script-name" required maxlength="100" value="${escHtml(script.name || '')}"></div>
+      <div class="form-group"><label class="form-label" for="settings-script-description">${settingsT('scripts.details')}</label><textarea class="form-input" id="settings-script-description" maxlength="2000" rows="2">${escHtml(script.description || '')}</textarea></div>
+      <div class="form-group"><label class="form-label" for="settings-script-timeout">${settingsT('scripts.timeout')}</label><input class="form-input" id="settings-script-timeout" type="number" min="1" max="86400" required value="${script.timeout_seconds || 300}"></div>
+      <div class="form-group"><label class="form-label" for="settings-script-content">${settingsT('scripts.content')}</label><textarea class="form-input" id="settings-script-content" rows="14" required spellcheck="false" autocapitalize="off" style="font-family:monospace;tab-size:2">${escHtml(script.content || '#!/bin/bash\n')}</textarea></div>
+      <p>${escHtml(settingsT('scripts.validationHint'))}</p>
+      <button type="submit" class="btn btn-primary">${settingsT('scripts.save')}</button>
+      ${script.id ? `<button type="button" class="btn btn-danger" id="settings-script-delete">${settingsT('scripts.delete')}</button>` : ''}
+      <p id="settings-script-result" class="status-message hidden" role="status"></p>
+    </form>`;
+  document.getElementById('settings-script-select').addEventListener('change', async event => {
+    const next = event.target.value;
+    if (settingsState.scriptDirty && !await _openSettingsDialog({
+      title: settingsT('forms.unsavedTitle'), message: settingsT('forms.leaveUnsavedMessage'),
+      confirmText: settingsT('forms.leave'), confirmClass: 'btn-danger',
+    })) { event.target.value = selected; return; }
+    renderSettingsScriptEditor(next);
+  });
+  const form = document.getElementById('settings-script-form');
+  form.addEventListener('input', () => { settingsState.scriptDirty = true; _updateUnsavedChangesUi(); });
+  _updateUnsavedChangesUi();
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    await persistSettingsScript(script.id || '', false);
+  });
+  document.getElementById('settings-script-delete')?.addEventListener('click', async () => {
+    if (await _openSettingsDialog({title: settingsT('scripts.delete'), message: settingsT('scripts.confirmDelete'), confirmText: settingsT('scripts.delete'), confirmClass: 'btn-danger'})) await persistSettingsScript(script.id, true);
+  });
+}
+
+/** Save or delete the selected definition; keep the editor intact on validation errors. */
+async function persistSettingsScript(id, remove) {
+  const feedback = document.getElementById('settings-script-result');
+  const form = document.getElementById('settings-script-form');
+  const buttons = [...form.querySelectorAll('button')];
+  buttons.forEach(button => { button.disabled = true; });
+  feedback.textContent = '';
+  try {
+    const body = remove ? undefined : JSON.stringify({id,
+      name: document.getElementById('settings-script-name').value,
+      description: document.getElementById('settings-script-description').value,
+      timeout_seconds: Number(document.getElementById('settings-script-timeout').value),
+      content: document.getElementById('settings-script-content').value,
+    });
+    const response = await fetch('/api/settings/scripts' + (remove ? `?id=${encodeURIComponent(id)}` : ''), {
+      method: remove ? 'DELETE' : 'POST', headers: {'Content-Type': 'application/json'}, body,
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(apiErrorMessage(data, response.status));
+    await loadSettingsScripts(data.script?.id || '');
+    const result = document.getElementById('settings-script-result');
+    result.className = 'status-message success';
+    result.textContent = settingsT(remove ? 'scripts.deleted' : 'scripts.saved');
+  } catch (error) { feedback.className = 'status-message error'; feedback.textContent = String(error.message); }
+  finally { buttons.forEach(button => { button.disabled = false; }); }
+}

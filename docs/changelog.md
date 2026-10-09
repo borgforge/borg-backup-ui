@@ -2611,3 +2611,12 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 - Storage: manage and test Borg repositories
 - History: search all backup runs, open log files
 - Settings: edit backup.conf directly in the browser
+
+## Issue #550: General Pre/Post job scripts
+
+- Add an admin-only, atomic Bash script inventory and syntax validation without execution.
+- Persist central script references per job; snapshot both definitions at run start.
+- Run Pre before mounts/prechecks, and Post after runtime recovery, maintenance and share cleanup; keep resource locks until completion.
+- Bound script execution by timeout/cancellation and process-group cleanup; mask and limit log output.
+- Record hook outcomes and archive-creation exit separately in history; final notifications include Post failures.
+- Add a Settings script editor, wizard step 9, bilingual help and six manual test examples.

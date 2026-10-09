@@ -325,13 +325,18 @@ class SmbMountSession:
         self.unmount_after_run = True
 
     def cleanup(self) -> None:
+        """Unmount runner-owned shares; raise on failure so the job cannot report success."""
         if not self.enabled or not self.mounted_by_runner or not self.mount_path or not self.unmount_after_run:
             return
         try:
-            subprocess.run(["umount", self.mount_path], capture_output=True, text=True, timeout=15, check=False)
+            result = subprocess.run(["umount", self.mount_path], capture_output=True, text=True, timeout=15, check=False)
+            if result.returncode:
+                raise RuntimeError("Unmount returned a nonzero exit code")
+            self.mounted_by_runner = False
             logging.info("SMB unmount completed: %s", self.mount_path)
         except Exception as exc:
-            logging.warning("SMB unmount failed (%s): %s", self.mount_path, exc)
+            logging.warning("SMB unmount failed (%s): %s", self.mount_path, type(exc).__name__)
+            raise RuntimeError("Network share cleanup failed") from None
 
 
 def _load_env_from_job(job_key: str, borg_scripts_dir: Path, backup_scripts_dir: Path) -> tuple[dict, dict]:
@@ -628,7 +633,7 @@ def main() -> int:
     control = JobControl(job_key, run_id)
 
     def set_phase(phase: str) -> None:
-        recovery_phase = phase in {"recovering_docker", "recovering_vms", "unmounting"}
+        recovery_phase = phase in {"recovering_docker", "recovering_vms", "unmounting", "post_script"}
         stopping_phase = phase in {"stopping_docker", "stopping_vms"}
         message_key = ""
         if phase == "stopping_docker":
@@ -717,12 +722,136 @@ def main() -> int:
         status_dir=str(job_config.status_dir),
     )
 
+    from job_scripts import snapshot_hooks, run_hook
     smb_session = SmbMountSession()
     result_code = 2
     exclusion_temp = None
+    cleanup_done = False
+    job = None
+    hooks = {"post_when": "success"}
+    scripts = {}
+
+    def complete_job(job):
+        """Finish resource cleanup and Post before persisting the overall result."""
+        nonlocal cleanup_done, exclusion_temp
+        job.prepare_completion()
+        if exclusion_temp is not None:
+            try:
+                exclusion_temp.cleanup()
+            except OSError:
+                logging.warning("Could not remove the temporary exclusion file")
+            exclusion_temp = None
+        set_phase("unmounting")
+        try:
+            smb_session.cleanup()
+        except Exception:
+            job.set_result(2, job._borg_stats, "Network share cleanup failed.")
+            raise
+        finally:
+            cleanup_done = True
+            if "post" in scripts and (hooks["post_when"] == "always" or
+                    (job.exit_code < 2 and not job._skip_finish)):
+                set_phase("post_script")
+                outcome = "skipped" if job._skip_finish else (
+                    "cancelled" if job._cancelled else
+                    "success" if job.exit_code == 0 else "warning" if job.exit_code == 1 else "failed")
+                job.record_hook_result("post", run_hook(scripts["post"], "post", job_key, result=outcome))
+
+    def execute_backup(job):
+        """Execute the backup body; the context manager always completes cleanup."""
+        nonlocal exclusion_temp
+        set_phase("preparing")
+        borg_config.exclude_if_present = meta.get("exclude_if_present", [])
+        if meta.get("exclude_from"):
+            import tempfile
+            exclusion_temp = tempfile.TemporaryDirectory(prefix="bbui-exclusions-")
+            pattern_file = Path(exclusion_temp.name) / "exclude.txt"
+            pattern_file.write_bytes(meta["_exclude_file_bytes"])
+            pattern_file.chmod(0o600)
+            borg_config.exclude_from = str(pattern_file)
+            logging.info("Exclusion file: %s; SHA-256 %s", meta["exclude_from"]["original_name"], meta["exclude_from"]["sha256"])
+        if control.is_cancel_requested():
+            job.set_cancelled()
+            result_code = 130
+            return result_code
+        if abort_on_parity:
+            logging.info("Parity check enabled (ABORT_ON_PARITY_CHECK=true)")
+            job.check_parity()
+        else:
+            logging.info("Parity check disabled (ABORT_ON_PARITY_CHECK=false)")
+        usb_mount_path = _resolve_usb_mount_path(meta, backup_scripts_dir)
+        if usb_mount_path:
+            logging.info("USB mount check enabled: %s", usb_mount_path)
+            job.check_usb_mount(Path(usb_mount_path))
+        job.check_prerequisites()
+        job.cleanup_old_logs()
+        if control.is_cancel_requested():
+            job.set_cancelled()
+            result_code = 130
+            return result_code
+        if docker_mgr is not None:
+            set_phase("stopping_docker")
+            selected = docker_control["selected"]
+            if docker_control["mode"] == "selected":
+                job.stop_docker(selected)
+            elif docker_control["mode"] == "except_selected":
+                job.stop_docker(exclude_names=selected)
+            else:
+                job.stop_docker()
+            if control.is_cancel_requested():
+                logging.info("Cancellation requested; Docker stop completed and recovery starts now")
+                job.set_cancelled()
+                result_code = 130
+                return result_code
+        if vm_mgr is not None:
+            set_phase("stopping_vms")
+            selected = vm_control["selected"] if vm_control["mode"] == "selected" else None
+            job.shutdown_vms(selected)
+            if control.is_cancel_requested():
+                logging.info("Cancellation requested; VM shutdown completed and recovery starts now")
+                job.set_cancelled()
+                result_code = 130
+                return result_code
+
+        runner = BorgRunner(
+            borg_config,
+            process_controller=control,
+            phase_callback=set_phase,
+        )
+        create_exit = runner.create(
+            job_config.backup_paths,
+            archive_prefix,
+            exclude_paths=job_config.exclude_paths,
+        )
+        job.backup_exit_code = create_exit
+        if create_exit < 2:
+            job.set_result(create_exit, parse_borg_stats(job_config.log_file))
+        if control.is_cancel_requested():
+            job.set_cancelled()
+            result_code = 130
+            return result_code
+        if create_exit >= 2:
+            job.set_result(create_exit, final_msg=f"borg create failed (exit {create_exit})")
+            result_code = create_exit
+            return result_code
+
+        job.recover_runtime()
+        if control.is_cancel_requested():
+            job.set_cancelled()
+            result_code = 130
+            return result_code
+
+        maint_exit = runner.maintenance(archive_prefix=archive_prefix)
+        if control.is_cancel_requested():
+            job.set_cancelled()
+            result_code = 130
+            return result_code
+        exit_code = max(create_exit, maint_exit)
+        job.set_result(exit_code, parse_borg_stats(job_config.log_file))
+        result_code = exit_code
+        return result_code
+
     try:
-        set_phase("mounting")
-        smb_session = _ensure_smb_mount(env, meta)
         docker_mgr = None
         vm_mgr = None
         docker_control = _runtime_control(meta, "docker")
@@ -731,133 +860,55 @@ def main() -> int:
             docker_mgr = DockerManager(DockerConfig.from_config(env))
         if vm_control["mode"] != "none":
             vm_mgr = VmManager(VmConfig.from_config(env))
-
         from archive_prefix import archive_prefix_from_metadata
         archive_prefix = archive_prefix_from_metadata(meta)
         abort_on_parity = _env_flag(env.get("ABORT_ON_PARITY_CHECK"), default=True)
         with BackupJob(
-            job_config,
-            docker_manager=docker_mgr,
-            vm_manager=vm_mgr,
-            mail_config=mail_config,
-            notification_config=env,
-            phase_callback=set_phase,
+            job_config, docker_manager=docker_mgr, vm_manager=vm_mgr,
+            mail_config=mail_config, notification_config=env,
+            phase_callback=set_phase, completion_callback=complete_job,
         ) as job:
-            set_phase("preparing")
-            borg_config.exclude_if_present = meta.get("exclude_if_present", [])
-            if meta.get("exclude_from"):
-                import tempfile
-                exclusion_temp = tempfile.TemporaryDirectory(prefix="bbui-exclusions-")
-                pattern_file = Path(exclusion_temp.name) / "exclude.txt"
-                pattern_file.write_bytes(meta["_exclude_file_bytes"])
-                pattern_file.chmod(0o600)
-                borg_config.exclude_from = str(pattern_file)
-                logging.info("Exclusion file: %s; SHA-256 %s", meta["exclude_from"]["original_name"], meta["exclude_from"]["sha256"])
+            hooks, scripts = snapshot_hooks({"BACKUP_SCRIPTS_DIR": str(data_root)}, meta.get("hooks"))
             if control.is_cancel_requested():
                 job.set_cancelled()
-                result_code = 130
-                return result_code
-            if abort_on_parity:
-                logging.info("Parity check enabled (ABORT_ON_PARITY_CHECK=true)")
-                job.check_parity()
             else:
-                logging.info("Parity check disabled (ABORT_ON_PARITY_CHECK=false)")
-            usb_mount_path = _resolve_usb_mount_path(meta, backup_scripts_dir)
-            if usb_mount_path:
-                logging.info("USB mount check enabled: %s", usb_mount_path)
-                job.check_usb_mount(Path(usb_mount_path))
-            job.check_prerequisites()
-            job.cleanup_old_logs()
-            if control.is_cancel_requested():
-                job.set_cancelled()
-                result_code = 130
-                return result_code
-            if docker_mgr is not None:
-                set_phase("stopping_docker")
-                selected = docker_control["selected"]
-                if docker_control["mode"] == "selected":
-                    job.stop_docker(selected)
-                elif docker_control["mode"] == "except_selected":
-                    job.stop_docker(exclude_names=selected)
-                else:
-                    job.stop_docker()
-                if control.is_cancel_requested():
-                    logging.info("Cancellation requested; Docker stop completed and recovery starts now")
+                if "pre" in scripts:
+                    set_phase("pre_script")
+                    job.record_hook_result("pre", run_hook(scripts["pre"], "pre", job_key,
+                                                           cancelled=control.is_cancel_requested))
+                pre_ok = "pre" not in scripts or job.hook_results["pre"]["status"] == "success"
+                if pre_ok and not control.is_cancel_requested():
+                    set_phase("mounting")
+                    smb_session = _ensure_smb_mount(env, meta)
+                    execute_backup(job)
+                elif control.is_cancel_requested():
                     job.set_cancelled()
-                    result_code = 130
-                    return result_code
-            if vm_mgr is not None:
-                set_phase("stopping_vms")
-                selected = vm_control["selected"] if vm_control["mode"] == "selected" else None
-                job.shutdown_vms(selected)
-                if control.is_cancel_requested():
-                    logging.info("Cancellation requested; VM shutdown completed and recovery starts now")
-                    job.set_cancelled()
-                    result_code = 130
-                    return result_code
-
-            runner = BorgRunner(
-                borg_config,
-                process_controller=control,
-                phase_callback=set_phase,
-            )
-            create_exit = runner.create(
-                job_config.backup_paths,
-                archive_prefix,
-                exclude_paths=job_config.exclude_paths,
-            )
-            if control.is_cancel_requested():
-                job.set_cancelled()
-                result_code = 130
-                return result_code
-            if create_exit >= 2:
-                job.set_result(create_exit, final_msg=f"borg create failed (exit {create_exit})")
-                result_code = create_exit
-                return result_code
-
-            job.recover_runtime()
-            if control.is_cancel_requested():
-                job.set_cancelled()
-                result_code = 130
-                return result_code
-
-            maint_exit = runner.maintenance(archive_prefix=archive_prefix)
-            if control.is_cancel_requested():
-                job.set_cancelled()
-                result_code = 130
-                return result_code
-            exit_code = max(create_exit, maint_exit)
-            job.set_result(exit_code, parse_borg_stats(job_config.log_file))
-            result_code = exit_code
-            return result_code
+        result_code = job.exit_code
+        return result_code
+    except SystemExit as exc:
+        result_code = job.exit_code if exc.code == 0 else 2
+        return result_code
     except (RequiredSourcePathsMissing, UsbMountAccessError):
         result_code = 2
         return 2
     except Exception:
-        # Runtime recovery can fail while unwinding an accepted cancellation.
-        # That failure must win over the earlier exit code 130.
         result_code = 2
         raise
     finally:
-        if exclusion_temp is not None:
-            try:
-                exclusion_temp.cleanup()
-            except OSError:
-                logging.getLogger(__name__).warning("Could not remove the temporary exclusion file")
-        set_phase("unmounting")
         try:
-            smb_session.cleanup()
+            if not cleanup_done:
+                if exclusion_temp is not None:
+                    exclusion_temp.cleanup()
+                set_phase("unmounting")
+                smb_session.cleanup()
         finally:
             try:
                 lock_set.release()
             finally:
-                terminal_phase = "cancelled" if result_code == 130 else ("completed" if result_code < 2 else "failed")
-                control.update_phase(
-                    terminal_phase,
-                    cancel_allowed=False,
-                    finished=True,
-                    exit_code=result_code,
-                )
+                terminal_phase = "cancelled" if result_code == 130 else (
+                    "skipped" if job is not None and job._skip_finish else
+                    "completed" if result_code < 2 else "failed")
+                control.update_phase(terminal_phase, cancel_allowed=False, finished=True, exit_code=result_code)
 
 
 if __name__ == "__main__":

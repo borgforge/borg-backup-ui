@@ -264,7 +264,7 @@ def test_only_job_wizard_steps_offer_validated_direct_navigation() -> None:
     assert "next > Number(wizardState.unlockedStep || 1)" in script
     assert "while (cursor < next)" in script
     assert "if (!_wizardValidate(cursor))" in script
-    assert "wizardState.unlockedStep = 9" in script
+    assert "wizardState.unlockedStep = 10" in script
     assert "repositoryManagerRenderStep" in (ROOT / "ui" / "js" / "pages" / "storage.js").read_text(encoding="utf-8")
     assert "repositoryManagerGoToStep" not in (ROOT / "ui" / "js" / "pages" / "storage.js").read_text(encoding="utf-8")
 

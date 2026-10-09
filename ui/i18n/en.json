@@ -221,7 +221,15 @@
       "configuration_export_unsupported": "This configuration package uses a format that is no longer supported. The import was aborted and no changes were made. Update and migrate the source installation, then create a new configuration export.",
       "job_settings_invalid": "The job settings are incomplete or invalid. Check compression and retention, then save the job again.",
       "retention_within_only": "A time window alone could delete every archive after a backup gap. Also enable at least one count rule greater than 0, for example 1 daily recovery point.",
-      "restore_directory_unavailable": "This folder does not exist in the selected archive. Check the path."
+      "restore_directory_unavailable": "This folder does not exist in the selected archive. Check the path.",
+      "job_script_name": "The script name must contain 1–100 characters on one line.",
+      "job_script_description": "The description must not exceed 2000 characters.",
+      "job_script_content": "Script content must contain 1–65536 bytes without NUL characters.",
+      "job_script_timeout": "Timeout must be an integer between 1 and 86400 seconds.",
+      "job_script_missing": "The selected script no longer exists. Please select again.",
+      "job_script_in_use": "This script is assigned to a job. Remove the assignment first.",
+      "job_script_selection": "The Pre/Post selection is invalid.",
+      "job_script_syntax": "Bash syntax error at line {line}."
     },
     "messages": {
       "smb_already_mounted": "The SMB share is already mounted.",
@@ -724,7 +732,11 @@
     "activityLogDownload": "Download complete log",
     "activityLogComplete": "All entries are retained. Scrolling loads additional sections. Browser search only searches the loaded section.",
     "activityLogSaveFailed": "The log could not be saved to the log directory and remains in RAM. Download the complete log before restarting the server.",
-    "activityLogEnded": "Run ended; exit code unavailable"
+    "activityLogEnded": "Run ended; exit code unavailable",
+    "phases": {
+      "pre_script": "Pre script",
+      "post_script": "Post script"
+    }
   },
   "schedule": {
     "title": "Schedule",
@@ -996,7 +1008,13 @@
       "vmStart": "Start VMs",
       "dockerStart": "Start Docker containers",
       "resourceLocksRelease": "Release resource locks",
-      "borgMaintenanceKeepAll": "Borg maintenance (compact -> check; prune disabled)"
+      "borgMaintenanceKeepAll": "Borg maintenance (compact -> check; prune disabled)",
+      "preScript": "Run Pre script before all backup preparation",
+      "mountShares": "Mount required network shares",
+      "repositoryStats": "Read final repository statistics",
+      "unmountShares": "Clean up network shares according to job settings",
+      "postScriptAlways": "Run Post after cleanup (also on failure/cancellation/skip)",
+      "postScriptSuccess": "Run Post after cleanup (on success including Borg warnings)"
     },
     "yes": "yes",
     "no": "no",
@@ -1111,7 +1129,18 @@
       "withinRule": "Keep every archive in this interval, including several per day.",
       "lastRule": "Keep only the newest archives.",
       "allRule": "Do not delete archives through prune."
-    }
+    },
+    "stepScripts": "Pre/Post scripts",
+    "scriptsDescription": "Pre runs before all backup preparation. Post runs after maintenance and cleanup as the final job action.",
+    "scriptsReferences": "Central references: changes apply from the next job start. Running jobs retain their snapshot.",
+    "preScript": "Pre script",
+    "postScript": "Post script",
+    "postWhen": "Run Post",
+    "postSuccess": "On success (including Borg warnings)",
+    "postAlways": "Also on failure, skip or cancellation",
+    "scriptsManage": "Create and edit scripts under Settings → Scripts.",
+    "scriptsLoadError": "Scripts could not be loaded. Reopen the wizard.",
+    "scriptMissing": "Missing script – select again"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -1265,7 +1294,16 @@
     "stepMetadataCheck": "Metadata check",
     "stepRestoreProbe": "Restore sample",
     "stepIntegrityCheck": "Integrity comparison",
-    "stepCleanup": "Test data cleanup"
+    "stepCleanup": "Test data cleanup",
+    "hookResults": "Script results",
+    "backupExitCode": "Backup exit code (borg create)",
+    "hookStates": {
+      "success": "Successful",
+      "failed": "Failed",
+      "timeout": "Timed out",
+      "cancelled": "Cancelled",
+      "launch_failed": "Launch failed"
+    }
   },
   "reports": {
     "title": "Reports",
@@ -3097,6 +3135,24 @@
       "error": "Prometheus settings could not be saved: {message}",
       "copied": "Copied to clipboard.",
       "copyFailed": "Could not copy. Select and copy the text manually."
+    },
+    "scripts": {
+      "title": "Scripts",
+      "description": "General Pre/Post scripts for backup jobs",
+      "help": "Bash scripts run with the backup service privileges. Changes apply to all assigned jobs at their next start. Do not print credentials.",
+      "loading": "Loading scripts …",
+      "select": "Select script",
+      "new": "New script",
+      "name": "Name",
+      "details": "Description",
+      "timeout": "Timeout (seconds)",
+      "content": "Bash script",
+      "save": "Validate and save",
+      "delete": "Delete",
+      "confirmDelete": "Delete this script? Assigned scripts cannot be deleted.",
+      "saved": "Syntax checked and saved.",
+      "deleted": "Script deleted.",
+      "validationHint": "Saving checks syntax only; it does not execute the script. Runtime errors are still possible."
     }
   }
 }

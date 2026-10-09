@@ -6749,3 +6749,10 @@ body.wizard-modal-open {
 .wizard-retention-grid .wizard-policy-field-label { margin:0; min-height:26px; }
 .wizard-retention-grid .form-input, .wizard-retention-grid .form-select { height:36px; box-sizing:border-box; }
 .wizard-retention-grid .form-hint { margin:0; }
+
+/* General job hooks: keep script fields and execution choices clearly separated. */
+.job-script-editor { display: grid; gap: 16px; min-width: 0; }
+.job-script-editor textarea { resize: vertical; min-width: 0; }
+.job-script-editor button { justify-self: start; }
+#wizard-step-9 .form-group { margin-top: 16px; }
+#wizard-step-9 > p:last-child { margin-top: 12px; }

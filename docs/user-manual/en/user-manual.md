@@ -345,6 +345,22 @@ Example:
 
 This expression starts the job daily at 03:00.
 
+#### Step 9: Pre/Post scripts
+
+Administrators manage reusable Bash scripts under **Settings > Scripts**, with a name, description and timeout (1–86400 seconds). **Validate and save** checks syntax without executing the script. Syntax errors include a line number; valid syntax does not guarantee runtime success.
+
+Optionally select a Pre and Post script in the wizard. These are general hooks around the entire job, independent of Docker/VM controls. After local initialization and successful lock acquisition, Pre runs before backup preparation, network mounts and repository access. Post runs after backup, early Docker/VM recovery, maintenance, final repository statistics and share cleanup according to job settings. Only final status, notifications and lock release follow Post.
+
+- Any nonzero Pre exit or timeout prevents the backup from starting.
+- Post **On success** includes Borg warnings (exit 1). **Also on failure, skip or cancellation** enables cleanup after an unsuccessful run, including failed Pre. A conflict during initial lock acquisition does not start a job and runs neither hook.
+- Post failure marks the overall job failed. History separately shows script outcomes and the `borg create` exit code; an already created archive is retained.
+- Pre is cancellable. Post is final cleanup and cannot be interrupted through **Cancel**; its timeout still applies. Child processes are terminated on completion, timeout or cancellation.
+- Jobs store central references. Edits apply to all assigned jobs at their next start; active runs retain both definitions read at startup. Assigned scripts cannot be deleted.
+
+Scripts run with the backup service privileges (normally root on Unraid), non-interactive stdin and a clean environment without inherited Borg credentials. Available variables are `BBUI_JOB_ID`, `BBUI_HOOK_PHASE` (`pre`/`post`) and, for Post, `BBUI_JOB_RESULT` (`success`, `warning`, `failed`, `cancelled`, `skipped`). Executed scripts get their own phase separators in the job log, with name, output and result (up to 64 KiB per script); do not print credentials. Wake scripts must wait until the server is ready. If multiple jobs share a server, wake/sleep scripts must account for that shared use.
+
+Definitions are stored in `<data directory>/config/job-scripts.json`; back up that file with the data directory. Job exports contain references, not script contents. When transferring to another system, create scripts there and update assignments in the wizard. The [six test scripts and test matrix](../../examples/job-hooks/README.md) cover success, runtime errors and syntax errors.
+
 #### Flow Preview
 
 The final step shows a technical preview of the planned flow. It summarizes repository, folders or files to back up, Docker/VM selection, and planned actions.
