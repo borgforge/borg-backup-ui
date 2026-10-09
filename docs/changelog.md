@@ -2624,3 +2624,4 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 - Show live script-to-job assignments including disabled jobs and Pre/Post conditions in a collapsed-by-default list with a job count. Disable deletion for referenced scripts in the editor.
 - Bundle Prism core/Bash under MIT for offline highlighting, native textarea editing, line numbers and syntax-error navigation in both themes. (#550)
 - Add unassigned duplicate/import drafts and validated .sh exports from editor values. Validate upload size, UTF-8 text, explicit Bash shebang and syntax server-side without executing or persisting imports. Preserve current drafts on import failure. (#550)
+- Identify failed Pre/Post phases and script exit codes in History and completion logs. Explain when Pre prevented the backup from starting and distinguish job exit codes and final log outcomes. (#550)

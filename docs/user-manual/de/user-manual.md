@@ -363,6 +363,8 @@ Im Wizard wählen Sie optional ein Pre- und ein Post-Skript. Beide sind allgemei
 
 Skripte laufen mit den Rechten des Backupdienstes (auf Unraid normalerweise root), mit nicht-interaktiver Standardeingabe und einer bereinigten Umgebung ohne geerbte Borg-Zugangsdaten. Verfügbar sind `BBUI_JOB_ID`, `BBUI_HOOK_PHASE` (`pre`/`post`) und für Post `BBUI_JOB_RESULT` (`success`, `warning`, `failed`, `cancelled`, `skipped`). Ausgeführte Skripte erhalten eigene Phasen-Trenner im Joblog mit Name, Ausgabe und Ergebnis (maximal 64 KiB pro Skript); geben Sie keine Zugangsdaten aus. Ein Wake-Skript muss selbst warten, bis der Server bereit ist. Bei mehreren Jobs auf demselben Server müssen Wake-/Sleep-Skripte die gemeinsame Nutzung berücksichtigen.
 
+Bei Skriptfehlern nennen Log und History die betroffene Phase und den Skript-Exitcode. Ein fehlgeschlagenes Pre wird ausdrücklich als „Backup wurde nicht gestartet“ gekennzeichnet. Der Job-Exitcode 2 beschreibt den fehlgeschlagenen Gesamtlauf und ist vom Skript-Exitcode getrennt. Der Log-Abschluss unterscheidet Erfolg, Warnung, Fehler und Abbruch.
+
 Die Definitionen liegen in `<Datenverzeichnis>/config/job-scripts.json`; sichern Sie diese Datei mit dem Datenverzeichnis. Jobexporte enthalten die Referenzen, nicht den Skriptinhalt. Bei Übertragung auf ein anderes System müssen Skripte dort angelegt und die Zuordnungen im Wizard angepasst werden. Die [sechs Testskripte und Testmatrix](../../examples/job-hooks/README.md) decken Erfolg, Laufzeit- und Syntaxfehler ab.
 
 #### Flow-Vorschau

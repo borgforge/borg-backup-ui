@@ -493,7 +493,11 @@ class BackupJob:
             self._completion_repo_info = (self._get_repository_size(), self._get_repo_check_info())
 
     def record_hook_result(self, phase: str, outcome: dict) -> None:
-        """Record a hook outcome without discarding archive statistics or prior errors."""
+        """Record a hook outcome without discarding archive statistics or prior errors.
+
+        A failed Pre explicitly reports that backup preparation never started;
+        non-cancellation failures retain the script exit separately from job exit 2.
+        """
         self.hook_results[phase] = outcome
         if outcome["status"] == "success":
             return
@@ -505,6 +509,8 @@ class BackupJob:
         self._skip_finish = False
         self._failure_code = f"{phase.upper()}_SCRIPT_FAILED"
         message = f"{phase.title()} script {outcome['status']} (exit {outcome['exit_code']})."
+        if phase == "pre":
+            message += " Backup was not started."
         self._final_msg = (self._final_msg + " " + message).strip()
 
     def set_cancelled(self, message: str = "Backup cancelled by user request.") -> None:
@@ -950,7 +956,7 @@ class BackupJob:
         )
 
     def _do_finish(self) -> None:
-        """Sendet Notifications, speichert Status, versendet Fehler-Mail."""
+        """Persist status and notify once, logging script causes and the final outcome."""
         if self._final_sent:
             return
         self._final_sent = True
@@ -1003,7 +1009,17 @@ class BackupJob:
                 exit_code,
             )
         else:
-            if self._failure_code == USB_MOUNT_ACCESS_FAILED:
+            failed_hooks = {
+                phase: outcome for phase, outcome in self.hook_results.items()
+                if outcome.get("status") in {"failed", "timeout", "launch_failed"}
+            }
+            if failed_hooks:
+                logger.info("Backup job failed (job exit %d)", exit_code)
+                for phase, outcome in failed_hooks.items():
+                    logger.info("%s script %s (exit %s)", phase.title(), outcome["status"], outcome["exit_code"])
+                if "pre" in failed_hooks:
+                    logger.info("Backup was not started")
+            elif self._failure_code == USB_MOUNT_ACCESS_FAILED:
                 logger.info("Backup aborted during USB preflight (exit %d); Borg backup was not started", exit_code)
             else:
                 logger.info("Borg backup failed (exit %d)", exit_code)
@@ -1036,7 +1052,12 @@ class BackupJob:
         )
 
         logger.info("End: %s", self.config.job_name)
-        _log_section("BACKUP COMPLETED")
+        _log_section({
+            "success": "BACKUP COMPLETED",
+            "warning": "BACKUP COMPLETED WITH WARNINGS",
+            "cancelled": "BACKUP CANCELLED",
+            "failed": "BACKUP FAILED",
+        }[self._result_status(exit_code)])
 
     def _refresh_unraid_dashboard_widget_cache(self, status_file: Path | None, reason: str) -> None:
         """Refresh the Unraid dashboard cache after an event changed status files."""

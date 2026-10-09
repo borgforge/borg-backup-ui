@@ -1269,7 +1269,7 @@
     "compressed": "Compressed",
     "repositorySize": "Repository size",
     "files": "Files",
-    "exitCode": "Exit code",
+    "exitCode": "Job exit code",
     "lastCheck": "Last check",
     "nextCheck": "Next check",
     "checkStatus": "Check status",
@@ -1307,7 +1307,10 @@
       "timeout": "Timed out",
       "cancelled": "Cancelled",
       "launch_failed": "Launch failed"
-    }
+    },
+    "preScriptFailureDetails": "Pre script “{name}”: {status} (exit code {code}).",
+    "postScriptFailureDetails": "Post script “{name}”: {status} (exit code {code}).",
+    "backupNotStarted": "The backup was not started."
   },
   "reports": {
     "title": "Reports",

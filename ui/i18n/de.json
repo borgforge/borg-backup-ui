@@ -1269,7 +1269,7 @@
     "compressed": "Komprimiert",
     "repositorySize": "Repository-Größe",
     "files": "Dateien",
-    "exitCode": "Exit-Code",
+    "exitCode": "Job-Exitcode",
     "lastCheck": "Letzter Check",
     "nextCheck": "Nächster Check",
     "checkStatus": "Check-Status",
@@ -1307,7 +1307,10 @@
       "timeout": "Zeitüberschreitung",
       "cancelled": "Abgebrochen",
       "launch_failed": "Start fehlgeschlagen"
-    }
+    },
+    "preScriptFailureDetails": "Pre-Skript „{name}“: {status} (Exitcode {code}).",
+    "postScriptFailureDetails": "Post-Skript „{name}“: {status} (Exitcode {code}).",
+    "backupNotStarted": "Das Backup wurde nicht gestartet."
   },
   "reports": {
     "title": "Berichte",
