@@ -3152,6 +3152,13 @@
       "confirmDelete": "Delete this script? Assigned scripts cannot be deleted.",
       "saved": "Syntax checked and saved.",
       "deleted": "Script deleted.",
+      "jobCount": "{count} jobs",
+      "oneJob": "1 job",
+      "usedBy": "Used by",
+      "unused": "This script is not assigned to any job.",
+      "disabledJob": "Job disabled",
+      "beforeBackup": "Before all backup preparation",
+      "assignedHint": "Changes apply from these jobs' next run. To delete this script, first remove all assignments in the job wizard.",
       "validationHint": "Saving checks the Bash syntax. The script is not executed during this check. Errors may therefore still occur when the script runs."
     }
   }

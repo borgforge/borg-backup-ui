@@ -349,6 +349,8 @@ Dieser Ausdruck startet täglich um 03:00 Uhr.
 
 Unter **Einstellungen > Skripte** verwalten Administratoren wiederverwendbare Bash-Skripte mit Name, Beschreibung und Timeout (1–86400 Sekunden). **Prüfen und speichern** prüft die Syntax, ohne das Skript auszuführen. Syntaxfehler nennen die Zeile; erfolgreiche Syntaxprüfung garantiert keinen erfolgreichen Lauf.
 
+Die Skriptauswahl zeigt die Anzahl zugeordneter Jobs. **Verwendet von** listet die Jobs mit Speicherort, Pre-/Post-Zuordnung und Post-Ausführungsbedingung auf, einschließlich deaktivierter Jobs. Solange Zuordnungen bestehen, bleibt **Löschen** gesperrt. Der Bash-Editor bietet lokale Syntaxhervorhebung und Zeilennummern. Bei einem Syntaxfehler springt er zur gemeldeten Zeile und markiert sie; bei einer Meldung hinter dem Dateiende wird die letzte Zeile markiert. Die farbige Darstellung ersetzt keine Syntaxprüfung.
+
 Im Wizard wählen Sie optional ein Pre- und ein Post-Skript. Beide sind allgemeine Hooks für den gesamten Job, unabhängig von Docker/VM-Steuerung. Nach lokaler Initialisierung und erfolgreicher Sperrübernahme läuft Pre vor allen Backup-Vorbereitungen, insbesondere vor Netzwerk-Mounts und Repositoryzugriffen. Post läuft nach Backup, früher Docker-/VM-Wiederherstellung, Wartung, abschließender Repository-Statistik und Freigaben-Cleanup gemäß Jobeinstellungen. Danach werden nur noch Abschlussstatus und Benachrichtigungen erzeugt und Sperren freigegeben.
 
 - Pre: Jeder Exitcode ungleich 0 oder Timeout verhindert den Backupstart.

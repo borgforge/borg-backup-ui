@@ -36,6 +36,36 @@ def list_scripts(config: dict) -> dict:
     return read_inventory(store_path(config), collection_key='scripts', schema_version=1)
 
 
+def list_scripts_with_assignments(config: dict) -> dict:
+    """Return script definitions with current job usage for the admin editor.
+
+    Usage is derived from job metadata, including disabled jobs, and is never
+    persisted in the script inventory. Unreadable metadata raises an error
+    rather than incorrectly presenting referenced scripts as unused.
+    """
+    with inventory_lock(store_path(config).parent):
+        data = list_scripts(config)
+        assignments = {}
+        for path in sorted((store_path(config).parent / 'jobs').glob('*.json')):
+            job = json.loads(path.read_text(encoding='utf-8'))
+            hooks = job.get('hooks') or {}
+            for phase in ('pre', 'post'):
+                identifier = hooks.get(phase)
+                if identifier:
+                    assignments.setdefault(identifier, []).append({
+                        'job_id': str(job.get('job_id') or path.stem),
+                        'name': str(job.get('name') or path.stem),
+                        'location': str(job.get('location') or ''),
+                        'enabled': job.get('enabled', True) is not False,
+                        'phase': phase,
+                        'post_when': hooks.get('post_when', 'success') if phase == 'post' else None,
+                    })
+        return {**data, 'scripts': [
+            {**row, 'assignments': assignments.get(row['id'], [])}
+            for row in data['scripts']
+        ]}
+
+
 def validate_script(payload: dict) -> dict:
     """Validate fields and Bash syntax without execution; raise ValueError on failure.
 

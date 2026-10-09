@@ -2621,3 +2621,5 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 - Record hook outcomes and archive-creation exit separately in history; final notifications include Post failures.
 - Add a Settings script editor, wizard step 9, bilingual help and six manual test examples.
 - Use the shared Settings card layout for the script editor and full-width history rows for optional script results without interrupting the existing detail grid.
+- Show live script-to-job assignments including disabled jobs and Pre/Post conditions. Disable deletion for referenced scripts in the editor.
+- Bundle Prism core/Bash under MIT for offline highlighting, native textarea editing, line numbers and syntax-error navigation in both themes. (#550)

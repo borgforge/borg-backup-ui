@@ -3152,6 +3152,13 @@
       "confirmDelete": "Dieses Skript löschen? Zugeordnete Skripte können nicht gelöscht werden.",
       "saved": "Syntax geprüft und gespeichert.",
       "deleted": "Skript gelöscht.",
+      "jobCount": "{count} Jobs",
+      "oneJob": "1 Job",
+      "usedBy": "Verwendet von",
+      "unused": "Dieses Skript ist keinem Job zugeordnet.",
+      "disabledJob": "Job deaktiviert",
+      "beforeBackup": "Vor allen Backup-Vorbereitungen",
+      "assignedHint": "Änderungen gelten ab dem nächsten Lauf dieser Jobs. Zum Löschen zuerst alle Zuordnungen im Job-Wizard entfernen.",
       "validationHint": "Beim Speichern wird die Bash-Syntax geprüft. Das Skript wird dabei nicht ausgeführt. Fehler während der Ausführung können daher trotzdem auftreten."
     }
   }

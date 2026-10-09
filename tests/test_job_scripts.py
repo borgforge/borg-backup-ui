@@ -66,6 +66,49 @@ def test_central_edits_apply_next_run_but_not_current_snapshot(tmp_path):
         job_scripts.snapshot_hooks(cfg, hooks)
 
 
+def test_script_usage_includes_both_phases_disabled_jobs_and_live_edits(tmp_path):
+    cfg = {'BACKUP_SCRIPTS_DIR': str(tmp_path)}
+    payload = script(); payload.pop('id')
+    used = job_scripts.save_script(cfg, payload)['script']
+    unused = job_scripts.save_script(cfg, {**payload, 'name': 'Unused'})['script']
+    before = job_scripts.store_path(cfg).read_bytes()
+    jobs = tmp_path / 'config/jobs'; jobs.mkdir()
+    first = {'job_id': 'first', 'name': 'Appdata', 'location': 'local', 'enabled': False,
+             'hooks': {'pre': used['id'], 'post': used['id'], 'post_when': 'always'}}
+    (jobs / 'first.json').write_text(json.dumps(first))
+    (jobs / 'second.json').write_text(json.dumps({'name': 'Flash', 'hooks': {'post': used['id']}}))
+    rows = job_scripts.list_scripts_with_assignments(cfg)['scripts']
+    assert rows[0]['assignments'] == [
+        {'job_id': 'first', 'name': 'Appdata', 'location': 'local', 'enabled': False, 'phase': 'pre', 'post_when': None},
+        {'job_id': 'first', 'name': 'Appdata', 'location': 'local', 'enabled': False, 'phase': 'post', 'post_when': 'always'},
+        {'job_id': 'second', 'name': 'Flash', 'location': '', 'enabled': True, 'phase': 'post', 'post_when': 'success'},
+    ]
+    assert rows[1]['id'] == unused['id'] and rows[1]['assignments'] == []
+    assert job_scripts.store_path(cfg).read_bytes() == before
+    first.update(name='Renamed', hooks={})
+    (jobs / 'first.json').write_text(json.dumps(first))
+    assert len(job_scripts.list_scripts_with_assignments(cfg)['scripts'][0]['assignments']) == 1
+    with pytest.raises(ValueError, match='assigned'):
+        job_scripts.delete_script(cfg, used['id'])
+
+
+def test_script_usage_does_not_claim_unused_when_job_metadata_is_unreadable(tmp_path):
+    cfg = {'BACKUP_SCRIPTS_DIR': str(tmp_path)}
+    jobs = tmp_path / 'config/jobs'; jobs.mkdir(parents=True)
+    (jobs / 'broken.json').write_text('{')
+    with pytest.raises(json.JSONDecodeError):
+        job_scripts.list_scripts_with_assignments(cfg)
+
+
+def test_bash_highlighting_preserves_source_and_escapes_markup():
+    import shutil
+    import subprocess
+    node = shutil.which('node')
+    if not node:
+        pytest.skip('Node.js is required for Bash highlighting tests')
+    subprocess.run([node, 'tests/bash_highlighting.cjs'], cwd=ROOT, check=True)
+
+
 @pytest.mark.parametrize('phase,code', [('pre', 0), ('pre', 41), ('post', 0), ('post', 42)])
 def test_real_bash_outcomes_and_masked_output(phase, code, caplog):
     caplog.set_level(logging.INFO)
@@ -243,6 +286,7 @@ def test_http_script_routes_validate_before_save(tmp_path, monkeypatch):
         assert status == 200
         status, data, headers = request('GET')
         assert status == 200 and len(data['scripts']) == 1
+        assert data['scripts'][0]['assignments'] == []
         assert headers['Cache-Control'] == 'no-store'
         status, error, _ = request('POST', {**row['script'], 'content': 'if true\nsecret=never-expose\nfi'})
         assert status == 400 and error['code'] == 'job_script_syntax'

@@ -1152,9 +1152,9 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         }
 
     def _get_job_scripts(self) -> dict:
-        """Return scripts to administrators only (including their source)."""
-        from job_scripts import list_scripts
-        return list_scripts(self.config)
+        """Return script source and current job assignments to administrators only."""
+        from job_scripts import list_scripts_with_assignments
+        return list_scripts_with_assignments(self.config)
 
     def _save_job_script(self) -> dict:
         """Validate Bash syntax and persist an explicitly submitted script."""

@@ -253,6 +253,7 @@ function _applyVersionInfo(version, author, borgVersion, contactEmail, repositor
 function renderSettings(data, systemHealth) {
   const el = document.getElementById('settings-content');
   if (!el) return;
+  settingsState.scriptEditor?.destroy();
 
   const tabs = getSettingsTabs();
   const active = tabs.find((tab) => tab.key === settingsState.activeTab) || tabs[0];
@@ -399,7 +400,9 @@ function activateSettingsTab(tabKey) {
   if (SETTINGS_PROFILE_CONFIG[active.key]) syncSettingsProfileManager(active.key);
   if (active.key === 'notifications') maybeLoadAppriseProviders();
   if (active.key === 'about') maybeLoadAboutLicenses();
-  if (active.key === 'scripts' && !document.getElementById('settings-script-form')) loadSettingsScripts();
+  if (active.key === 'scripts' && !settingsState.scriptDirty) {
+    loadSettingsScripts(document.getElementById('settings-script-select')?.value || '');
+  }
   _updateUnsavedChangesUi();
 }
 
@@ -7295,6 +7298,7 @@ window.onRepositoryRefreshEnabledToggle = onRepositoryRefreshEnabledToggle;
 async function loadSettingsScripts(selected = '') {
   const panel = document.getElementById('settings-scripts-panel');
   if (!panel) return;
+  settingsState.scriptEditor?.destroy();
   panel.textContent = settingsT('scripts.loading');
   try {
     const response = await fetch('/api/settings/scripts');
@@ -7310,24 +7314,38 @@ function renderSettingsScriptEditor(selected = '') {
   const panel = document.getElementById('settings-scripts-panel');
   const rows = settingsState.jobScripts || [];
   const script = rows.find(row => row.id === selected) || {};
+  const assignments = script.assignments || [];
+  settingsState.scriptEditor?.destroy();
   settingsState.scriptDirty = false;
   panel.innerHTML = settingsCard(settingsT('scripts.title'), settingsMenuIcon('advanced'), `
     <div class="settings-body job-script-editor">
     <p>${escHtml(settingsT('scripts.help'))}</p>
     <div class="form-group"><label class="form-label" for="settings-script-select">${settingsT('scripts.select')}</label>
-      <select class="form-select" id="settings-script-select"><option value="">${settingsT('scripts.new')}</option>${rows.map(row => `<option value="${escHtml(row.id)}" ${row.id === selected ? 'selected' : ''}>${escHtml(row.name)}</option>`).join('')}</select></div>
+      <select class="form-select" id="settings-script-select"><option value="">${settingsT('scripts.new')}</option>${rows.map(row => {
+        const count = new Set((row.assignments || []).map(item => item.job_id)).size;
+        return `<option value="${escHtml(row.id)}" ${row.id === selected ? 'selected' : ''}>${escHtml(row.name)} — ${escHtml(settingsT(count === 1 ? 'scripts.oneJob' : 'scripts.jobCount', {count}))}</option>`;
+      }).join('')}</select></div>
+    ${script.id ? `<section class="job-script-usage" aria-labelledby="settings-script-usage-title">
+      <h3 id="settings-script-usage-title">${settingsT('scripts.usedBy')}</h3>
+      ${assignments.length ? `<ul>${assignments.map(item => `<li>
+        <div><strong title="${escHtml(item.job_id)}">${escHtml(item.name)}</strong><small>${escHtml(item.location ? historyLocationLabel(item.location) : item.job_id)}${item.enabled ? '' : ' · ' + escHtml(settingsT('scripts.disabledJob'))}</small></div>
+        <span class="badge">${item.phase === 'pre' ? 'Pre' : 'Post'}</span>
+        <span>${item.phase === 'post' ? escHtml(window.BBUI.components.i18n.t(item.post_when === 'always' ? 'wizard.postAlways' : 'wizard.postSuccess')) : escHtml(settingsT('scripts.beforeBackup'))}</span>
+      </li>`).join('')}</ul><p class="form-help">${settingsT('scripts.assignedHint')}</p>` : `<p class="form-help">${settingsT('scripts.unused')}</p>`}
+    </section>` : ''}
     <form id="settings-script-form" class="job-script-editor">
       <div class="form-group"><label class="form-label" for="settings-script-name">${settingsT('scripts.name')}</label><input class="form-input" id="settings-script-name" required maxlength="100" value="${escHtml(script.name || '')}"></div>
       <div class="form-group"><label class="form-label" for="settings-script-description">${settingsT('scripts.details')}</label><textarea class="form-input" id="settings-script-description" maxlength="2000" rows="2">${escHtml(script.description || '')}</textarea></div>
       <div class="form-group"><label class="form-label" for="settings-script-timeout">${settingsT('scripts.timeout')}</label><input class="form-input" id="settings-script-timeout" type="number" min="1" max="86400" required value="${script.timeout_seconds || 300}"></div>
-      <div class="form-group"><label class="form-label" for="settings-script-content">${settingsT('scripts.content')}</label><textarea class="form-input" id="settings-script-content" rows="14" required spellcheck="false" autocapitalize="off" style="font-family:monospace;tab-size:2">${escHtml(script.content || '#!/bin/bash\n')}</textarea></div>
-      <p>${escHtml(settingsT('scripts.validationHint'))}</p>
+      <div class="form-group"><label class="form-label" for="settings-script-content">${settingsT('scripts.content')}</label><textarea class="form-input" id="settings-script-content" rows="14" required spellcheck="false" autocapitalize="off" aria-describedby="settings-script-validation settings-script-result">${escHtml(script.content || '#!/bin/bash\n')}</textarea></div>
+      <p id="settings-script-validation">${escHtml(settingsT('scripts.validationHint'))}</p>
       <div class="job-script-actions">
         <button type="submit" class="btn btn-primary">${settingsT('scripts.save')}</button>
-        ${script.id ? `<button type="button" class="btn btn-danger" id="settings-script-delete">${settingsT('scripts.delete')}</button>` : ''}
+        ${script.id ? `<button type="button" class="btn btn-danger" id="settings-script-delete" ${assignments.length ? 'disabled aria-describedby="settings-script-usage-title"' : ''}>${settingsT('scripts.delete')}</button>` : ''}
       </div>
       <p id="settings-script-result" class="status-message hidden" role="status"></p>
     </form></div>`);
+  settingsState.scriptEditor = window.BBUI.components.bashEditor?.create(document.getElementById('settings-script-content'));
   document.getElementById('settings-script-select').addEventListener('change', async event => {
     const next = event.target.value;
     if (settingsState.scriptDirty && !await _openSettingsDialog({
@@ -7352,7 +7370,7 @@ function renderSettingsScriptEditor(selected = '') {
 async function persistSettingsScript(id, remove) {
   const feedback = document.getElementById('settings-script-result');
   const form = document.getElementById('settings-script-form');
-  const buttons = [...form.querySelectorAll('button')];
+  const buttons = [...form.querySelectorAll('button:not(:disabled)')];
   buttons.forEach(button => { button.disabled = true; });
   feedback.textContent = '';
   try {
@@ -7366,7 +7384,10 @@ async function persistSettingsScript(id, remove) {
       method: remove ? 'DELETE' : 'POST', headers: {'Content-Type': 'application/json'}, body,
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(apiErrorMessage(data, response.status));
+    if (!response.ok) {
+      if (data.code === 'job_script_syntax') settingsState.scriptEditor?.setError(data.message_params?.line);
+      throw new Error(apiErrorMessage(data, response.status));
+    }
     await loadSettingsScripts(data.script?.id || '');
     const result = document.getElementById('settings-script-result');
     result.className = 'status-message success';
