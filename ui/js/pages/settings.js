@@ -7315,6 +7315,7 @@ function renderSettingsScriptEditor(selected = '') {
   const rows = settingsState.jobScripts || [];
   const script = rows.find(row => row.id === selected) || {};
   const assignments = script.assignments || [];
+  const jobCount = new Set(assignments.map(item => item.job_id)).size;
   settingsState.scriptEditor?.destroy();
   settingsState.scriptDirty = false;
   panel.innerHTML = settingsCard(settingsT('scripts.title'), settingsMenuIcon('advanced'), `
@@ -7325,14 +7326,14 @@ function renderSettingsScriptEditor(selected = '') {
         const count = new Set((row.assignments || []).map(item => item.job_id)).size;
         return `<option value="${escHtml(row.id)}" ${row.id === selected ? 'selected' : ''}>${escHtml(row.name)} — ${escHtml(settingsT(count === 1 ? 'scripts.oneJob' : 'scripts.jobCount', {count}))}</option>`;
       }).join('')}</select></div>
-    ${script.id ? `<section class="job-script-usage" aria-labelledby="settings-script-usage-title">
-      <h3 id="settings-script-usage-title">${settingsT('scripts.usedBy')}</h3>
+    ${script.id ? `<details class="job-script-usage">
+      <summary id="settings-script-usage-title">${settingsT('scripts.usedBy')} · ${escHtml(settingsT(jobCount === 1 ? 'scripts.oneJob' : 'scripts.jobCount', {count: jobCount}))}</summary>
       ${assignments.length ? `<ul>${assignments.map(item => `<li>
         <div><strong title="${escHtml(item.job_id)}">${escHtml(item.name)}</strong><small>${escHtml(item.location ? historyLocationLabel(item.location) : item.job_id)}${item.enabled ? '' : ' · ' + escHtml(settingsT('scripts.disabledJob'))}</small></div>
         <span class="badge">${item.phase === 'pre' ? 'Pre' : 'Post'}</span>
         <span>${item.phase === 'post' ? escHtml(window.BBUI.components.i18n.t(item.post_when === 'always' ? 'wizard.postAlways' : 'wizard.postSuccess')) : escHtml(settingsT('scripts.beforeBackup'))}</span>
       </li>`).join('')}</ul><p class="form-help">${settingsT('scripts.assignedHint')}</p>` : `<p class="form-help">${settingsT('scripts.unused')}</p>`}
-    </section>` : ''}
+    </details>` : ''}
     <form id="settings-script-form" class="job-script-editor">
       <div class="form-group"><label class="form-label" for="settings-script-name">${settingsT('scripts.name')}</label><input class="form-input" id="settings-script-name" required maxlength="100" value="${escHtml(script.name || '')}"></div>
       <div class="form-group"><label class="form-label" for="settings-script-description">${settingsT('scripts.details')}</label><textarea class="form-input" id="settings-script-description" maxlength="2000" rows="2">${escHtml(script.description || '')}</textarea></div>
