@@ -2623,3 +2623,4 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 - Use the shared Settings card layout for the script editor and full-width history rows for optional script results without interrupting the existing detail grid.
 - Show live script-to-job assignments including disabled jobs and Pre/Post conditions in a collapsed-by-default list with a job count. Disable deletion for referenced scripts in the editor.
 - Bundle Prism core/Bash under MIT for offline highlighting, native textarea editing, line numbers and syntax-error navigation in both themes. (#550)
+- Add unassigned duplicate/import drafts and validated .sh exports from editor values. Validate upload size, UTF-8 text, explicit Bash shebang and syntax server-side without executing or persisting imports. Preserve current drafts on import failure. (#550)

@@ -229,7 +229,11 @@
       "job_script_missing": "Das ausgewählte Skript existiert nicht mehr. Bitte neu auswählen.",
       "job_script_in_use": "Das Skript ist einem Job zugeordnet. Entfernen Sie zuerst die Zuordnung.",
       "job_script_selection": "Die Pre-/Post-Auswahl ist ungültig.",
-      "job_script_syntax": "Bash-Syntaxfehler in Zeile {line}."
+      "job_script_syntax": "Bash-Syntaxfehler in Zeile {line}.",
+      "job_script_import_file": "Bitte eine Bash-Datei mit der Endung .sh auswählen.",
+      "job_script_import_size": "Die Skriptdatei muss 1–65536 Bytes enthalten (maximal 64 KiB).",
+      "job_script_import_text": "Die Datei muss UTF-8-Text ohne binäre Steuerzeichen enthalten.",
+      "job_script_import_bash": "Die erste Zeile muss Bash angeben: #!/bin/bash, #!/usr/bin/bash oder #!/usr/bin/env bash (ohne zusätzliche Optionen)."
     },
     "messages": {
       "smb_already_mounted": "SMB-Freigabe ist bereits eingehängt.",
@@ -3154,6 +3158,15 @@
       "deleted": "Skript gelöscht.",
       "jobCount": "{count} Jobs",
       "oneJob": "1 Job",
+      "import": "Importieren (.sh)",
+      "export": "Exportieren (.sh)",
+      "duplicate": "Duplizieren",
+      "copyName": "{name} (Kopie)",
+      "draftCreated": "Neuer Entwurf ohne Job-Zuordnungen. Zum Anlegen prüfen und speichern.",
+      "exported": "Skript für den Download vorbereitet.",
+      "importHint": "Import: UTF-8-Datei (.sh), maximal 64 KiB, mit Bash-Shebang. Die Syntax wird ohne Ausführung geprüft. Import und Duplizieren erstellen einen neuen Entwurf.",
+      "importFileError": "Bitte eine Bash-Datei mit der Endung .sh auswählen.",
+      "importSizeError": "Die Skriptdatei muss 1–65536 Bytes enthalten (maximal 64 KiB).",
       "usedBy": "Verwendet von",
       "unused": "Dieses Skript ist keinem Job zugeordnet.",
       "disabledJob": "Job deaktiviert",

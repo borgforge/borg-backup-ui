@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import base64
+import binascii
 import logging
 import os
 from pathlib import Path
@@ -15,6 +17,8 @@ import uuid
 
 from inventory_store import atomic_write_inventory, inventory_lock, read_inventory
 from security_utils import mask_secrets
+
+_BASH_HEADER = re.compile(r'#![ \t]*(?:/(?:usr/)?bin/bash|/usr/bin/env[ \t]+bash)[ \t]*')
 
 
 class ScriptValidationError(ValueError):
@@ -116,6 +120,58 @@ def save_script(config: dict, payload: dict) -> dict:
         data['scripts'].append(row)
         atomic_write_inventory(store_path(config), data)
     return {'script': row}
+
+
+def import_script(payload: dict) -> dict:
+    """Validate a base64 .sh upload and return an unsaved, unassigned draft.
+
+    Require at most 64 KiB of UTF-8 text and an explicit supported Bash shebang.
+    Strip a UTF-8 BOM and normalize CRLF, then check syntax without execution.
+    Invalid input raises ScriptValidationError; no inventory is read or written.
+    """
+    if not isinstance(payload, dict):
+        raise ScriptValidationError('import_file', 'Expected a Bash .sh file')
+    filename = payload.get('filename')
+    encoded = payload.get('content_base64')
+    if (not isinstance(filename, str) or not filename.lower().endswith('.sh')
+            or len(filename) > 255 or re.search(r'[/\\\x00-\x1f\x7f]', filename)):
+        raise ScriptValidationError('import_file', 'Expected a Bash .sh filename')
+    if not isinstance(encoded, str) or not encoded or len(encoded) > 87384:
+        raise ScriptValidationError('import_size', 'Script file must contain 1-65536 bytes')
+    try:
+        raw = base64.b64decode(encoded, validate=True)
+    except (ValueError, binascii.Error):
+        raise ScriptValidationError('import_text', 'Expected UTF-8 script text') from None
+    if not raw or len(raw) > 65536:
+        raise ScriptValidationError('import_size', 'Script file must contain 1-65536 bytes')
+    try:
+        content = raw.decode('utf-8-sig').replace('\r\n', '\n')
+    except UnicodeDecodeError:
+        raise ScriptValidationError('import_text', 'Expected UTF-8 script text') from None
+    if re.search(r'[\x00-\x08\x0b-\x1f\x7f]', content):
+        raise ScriptValidationError('import_text', 'Expected UTF-8 script text without binary controls')
+    if not _BASH_HEADER.fullmatch(content.split('\n', 1)[0]):
+        raise ScriptValidationError('import_bash', 'Expected an explicit supported Bash shebang')
+    return {'script': validate_script({
+        'name': filename[:-3].strip()[:100] or 'script',
+        'description': '', 'timeout_seconds': 300, 'content': content,
+    })}
+
+
+def export_script(payload: dict) -> dict:
+    """Return a validated Bash .sh download from editor values, without saving.
+
+    Add a Bash shebang if missing or different, preserving the existing body.
+    The generated filename is ASCII-safe. Metadata and job references are omitted.
+    """
+    script = validate_script(payload)
+    content = script['content']
+    if not _BASH_HEADER.fullmatch(content.split('\n', 1)[0]):
+        content = '#!/bin/bash\n' + content
+    if len(content.encode('utf-8')) > 65536:
+        raise ScriptValidationError('import_size', 'Script file must contain 1-65536 bytes')
+    name = re.sub(r'[^A-Za-z0-9_-]+', '-', script['name']).strip('-') or 'script'
+    return {'filename': name + '.sh', 'content': content}
 
 
 def delete_script(config: dict, identifier: str) -> dict:

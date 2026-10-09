@@ -2,6 +2,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 import json
+import base64
 import logging
 import os
 import sys
@@ -249,9 +250,10 @@ def test_status_roundtrip_retains_hook_outcomes(tmp_path):
 
 
 @pytest.mark.parametrize('method', ['GET', 'POST', 'DELETE'])
-def test_scripts_require_admin(method):
+@pytest.mark.parametrize('path', ['/api/settings/scripts', '/api/settings/scripts/import', '/api/settings/scripts/export'])
+def test_scripts_require_admin(method, path):
     handler = BackupUIHandler.__new__(BackupUIHandler)
-    assert handler._required_role_for_request('/api/settings/scripts', method) == 'admin'
+    assert handler._required_role_for_request(path, method) == 'admin'
 
 
 def test_http_script_routes_validate_before_save(tmp_path, monkeypatch):
@@ -288,6 +290,17 @@ def test_http_script_routes_validate_before_save(tmp_path, monkeypatch):
         assert status == 200 and len(data['scripts']) == 1
         assert data['scripts'][0]['assignments'] == []
         assert headers['Cache-Control'] == 'no-store'
+        original = job_scripts.store_path(Handler.config).read_bytes()
+        status, exported, headers = request('POST', payload, '/export')
+        assert status == 200 and headers['Cache-Control'] == 'no-store'
+        status, imported, headers = request('POST', {'filename': exported['filename'],
+            'content_base64': base64.b64encode(exported['content'].encode()).decode()}, '/import')
+        assert status == 200 and headers['Cache-Control'] == 'no-store'
+        assert 'id' not in imported['script']
+        assert job_scripts.store_path(Handler.config).read_bytes() == original
+        status, error, _ = request('POST', {'filename': 'python.sh',
+            'content_base64': base64.b64encode(b'#!/usr/bin/python3\nprint(1)').decode()}, '/import')
+        assert status == 400 and error['code'] == 'job_script_import_bash'
         status, error, _ = request('POST', {**row['script'], 'content': 'if true\nsecret=never-expose\nfi'})
         assert status == 400 and error['code'] == 'job_script_syntax'
         assert error['message_params']['line'] == '3'
@@ -390,3 +403,67 @@ def test_log_output_is_bounded(caplog):
     assert result['exit_code'] == 0
     assert 'Output truncated at 64 KiB' in caplog.text
     assert len(caplog.text) < 70000
+
+
+@pytest.mark.parametrize('header', ['#!/bin/bash', '#!/usr/bin/bash', '#!/usr/bin/env bash'])
+def test_import_bash_creates_only_a_validated_draft(tmp_path, header):
+    marker = tmp_path / 'must-not-run'
+    raw = ('\ufeff' + header + '\r\n' + f'touch "{marker}"\r\n# Grüße\r\n').encode()
+    result = job_scripts.import_script({'filename': 'Test.sh', 'content_base64': base64.b64encode(raw).decode(),
+                                       'id': 'ignored', 'hooks': {'pre': 'ignored'}})['script']
+    assert result['name'] == 'Test' and result['timeout_seconds'] == 300
+    assert result['content'].startswith(header + '\n') and '\r' not in result['content']
+    assert set(result) == {'name', 'description', 'timeout_seconds', 'content'}
+    assert not marker.exists() and not (tmp_path / 'config').exists()
+
+
+@pytest.mark.parametrize('filename,raw,code', [
+    ('test.py', b'#!/bin/bash\nexit 0', 'import_file'),
+    ('../test.sh', b'#!/bin/bash\nexit 0', 'import_file'),
+    ('test.sh', b'#!/usr/bin/python3\nprint("hi")', 'import_bash'),
+    ('test.sh', b'#!/bin/sh\nexit 0', 'import_bash'),
+    ('test.sh', b'exit 0', 'import_bash'),
+    ('test.sh', b'#!/bin/bash -e\nexit 0', 'import_bash'),
+    ('test.sh', b'#!/bin/bash\n\x00binary', 'import_text'),
+    ('test.sh', b'#!/bin/bash\n\xff', 'import_text'),
+    ('test.sh', b'', 'import_size'),
+    ('test.sh', b'#' * 65537, 'import_size'),
+    ('test.sh', b'#!/bin/bash\nif true\nsecret=do-not-expose\nfi', 'syntax'),
+])
+def test_import_rejects_non_bash_binary_oversized_and_invalid_scripts(filename, raw, code):
+    with pytest.raises(job_scripts.ScriptValidationError) as exc:
+        job_scripts.import_script({'filename': filename, 'content_base64': base64.b64encode(raw).decode()})
+    assert exc.value.api_code == 'job_script_' + code
+    assert 'do-not-expose' not in str(exc.value)
+
+
+@pytest.mark.parametrize('encoded', ['%%%bad%%%', 'ümlaut', 'AAAA=bad'])
+def test_import_rejects_invalid_transport(encoded):
+    with pytest.raises(job_scripts.ScriptValidationError):
+        job_scripts.import_script({'filename': 'test.sh', 'content_base64': encoded})
+
+
+@pytest.mark.parametrize('content', ['exit 0\n', '#!/usr/bin/env bash\necho "Grüße"\n', '#!/bin/sh\nexit 0\n'])
+def test_export_import_round_trip_preserves_body_and_never_executes(tmp_path, content):
+    marker = tmp_path / 'not-executed'
+    content += f'touch "{marker}"\n'
+    output = job_scripts.export_script(script(content, name='../../Test / 名'))
+    assert output['filename'] == 'Test.sh'
+    assert output['content'].endswith(content)
+    restored = job_scripts.import_script({'filename': output['filename'],
+        'content_base64': base64.b64encode(output['content'].encode()).decode()})['script']
+    assert restored['content'] == output['content']
+    assert not marker.exists()
+
+
+def test_import_export_size_boundary_counts_utf8_bytes():
+    content = '#!/bin/bash\n#' + 'a' * (65536 - len('#!/bin/bash\n#'))
+    payload = {'filename': 'limit.sh', 'content_base64': base64.b64encode(content.encode()).decode()}
+    assert job_scripts.import_script(payload)['script']['content'] == content
+    assert job_scripts.export_script(script(content))['content'] == content
+    payload['content_base64'] = base64.b64encode((content[:-1] + 'ü').encode()).decode()
+    with pytest.raises(job_scripts.ScriptValidationError) as exc:
+        job_scripts.import_script(payload)
+    assert exc.value.api_code == 'job_script_import_size'
+    with pytest.raises(job_scripts.ScriptValidationError):
+        job_scripts.export_script(script('#' * 65536))

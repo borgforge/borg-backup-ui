@@ -1021,6 +1021,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             "/api/repositories": self._post_repository,
             "/api/notification-profiles": self._post_apprise_profile,
             "/api/settings/scripts": self._save_job_script,
+            "/api/settings/scripts/import": self._import_job_script,
+            "/api/settings/scripts/export": self._export_job_script,
             "/api/notification-profiles/validate": self._post_apprise_profile_validate,
             "/api/notification-profiles/test": self._post_apprise_profile_test,
             "/api/repositories/validate": self._post_repository_validate,
@@ -1166,6 +1168,16 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         from job_scripts import delete_script
         identifier = (parse_qs(urlparse(self.path).query).get("id") or [""])[0]
         return delete_script(self.config, identifier)
+
+    def _import_job_script(self) -> dict:
+        """Validate an uploaded Bash file and return an unsaved admin editor draft."""
+        from job_scripts import import_script
+        return import_script(self._read_json_body())
+
+    def _export_job_script(self) -> dict:
+        """Return syntax-checked Bash source for an administrator's download."""
+        from job_scripts import export_script
+        return export_script(self._read_json_body())
 
     def _get_apprise_profiles(self, query: str = "") -> dict:
         from apprise_profiles_api import get_profile, list_profiles
@@ -3950,7 +3962,7 @@ btn.addEventListener('click',doRecovery);
             self.send_header("Content-Length", str(len(content)))
             cache_control = (
                 "no-store"
-                if path in {"/api/widget/summary", "/api/settings/scripts", "/api/settings/homepage-widget-token", "/api/settings/prometheus", "/api/repositories/key-export", "/api/wizard/new-job-id"}
+                if path in {"/api/widget/summary", "/api/settings/scripts", "/api/settings/scripts/import", "/api/settings/scripts/export", "/api/settings/homepage-widget-token", "/api/settings/prometheus", "/api/repositories/key-export", "/api/wizard/new-job-id"}
                 else "no-cache"
             )
             self.send_header("Cache-Control", cache_control)

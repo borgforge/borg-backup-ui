@@ -229,7 +229,11 @@
       "job_script_missing": "The selected script no longer exists. Please select again.",
       "job_script_in_use": "This script is assigned to a job. Remove the assignment first.",
       "job_script_selection": "The Pre/Post selection is invalid.",
-      "job_script_syntax": "Bash syntax error at line {line}."
+      "job_script_syntax": "Bash syntax error at line {line}.",
+      "job_script_import_file": "Select a Bash file with the .sh extension.",
+      "job_script_import_size": "The script file must contain 1–65536 bytes (64 KiB maximum).",
+      "job_script_import_text": "The file must contain UTF-8 text without binary control characters.",
+      "job_script_import_bash": "The first line must specify Bash: #!/bin/bash, #!/usr/bin/bash or #!/usr/bin/env bash (without additional options)."
     },
     "messages": {
       "smb_already_mounted": "The SMB share is already mounted.",
@@ -3154,6 +3158,15 @@
       "deleted": "Script deleted.",
       "jobCount": "{count} jobs",
       "oneJob": "1 job",
+      "import": "Import (.sh)",
+      "export": "Export (.sh)",
+      "duplicate": "Duplicate",
+      "copyName": "{name} (copy)",
+      "draftCreated": "New draft without job assignments. Validate and save to create it.",
+      "exported": "Script prepared for download.",
+      "importHint": "Import: UTF-8 file (.sh), up to 64 KiB, with a Bash shebang. Syntax is checked without execution. Import and Duplicate create a new draft.",
+      "importFileError": "Select a Bash file with the .sh extension.",
+      "importSizeError": "The script file must contain 1–65536 bytes (64 KiB maximum).",
       "usedBy": "Used by",
       "unused": "This script is not assigned to any job.",
       "disabledJob": "Job disabled",

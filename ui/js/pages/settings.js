@@ -7309,15 +7309,15 @@ async function loadSettingsScripts(selected = '') {
   } catch (error) { panel.textContent = String(error.message); }
 }
 
-/** Render a centrally shared Bash script, escaping all user-controlled content. */
-function renderSettingsScriptEditor(selected = '') {
+/** Render a saved script or an unassigned draft, escaping all user-controlled content. */
+function renderSettingsScriptEditor(selected = '', draft = null) {
   const panel = document.getElementById('settings-scripts-panel');
   const rows = settingsState.jobScripts || [];
-  const script = rows.find(row => row.id === selected) || {};
+  const script = draft || rows.find(row => row.id === selected) || {};
   const assignments = script.assignments || [];
   const jobCount = new Set(assignments.map(item => item.job_id)).size;
   settingsState.scriptEditor?.destroy();
-  settingsState.scriptDirty = false;
+  settingsState.scriptDirty = !!draft;
   panel.innerHTML = settingsCard(settingsT('scripts.title'), settingsMenuIcon('advanced'), `
     <div class="settings-body job-script-editor">
     <p>${escHtml(settingsT('scripts.help'))}</p>
@@ -7326,6 +7326,13 @@ function renderSettingsScriptEditor(selected = '') {
         const count = new Set((row.assignments || []).map(item => item.job_id)).size;
         return `<option value="${escHtml(row.id)}" ${row.id === selected ? 'selected' : ''}>${escHtml(row.name)} — ${escHtml(settingsT(count === 1 ? 'scripts.oneJob' : 'scripts.jobCount', {count}))}</option>`;
       }).join('')}</select></div>
+    <div class="job-script-actions">
+      <button type="button" class="btn btn-secondary" id="settings-script-import">${settingsT('scripts.import')}</button>
+      <input type="file" id="settings-script-file" accept=".sh" hidden>
+      <button type="button" class="btn btn-secondary" id="settings-script-duplicate" ${script.id || draft ? '' : 'disabled'}>${settingsT('scripts.duplicate')}</button>
+      <button type="button" class="btn btn-secondary" id="settings-script-export" ${script.id || draft ? '' : 'disabled'}>${settingsT('scripts.export')}</button>
+    </div>
+    <p class="form-help">${settingsT('scripts.importHint')}</p>
     ${script.id ? `<details class="job-script-usage">
       <summary id="settings-script-usage-title">${settingsT('scripts.usedBy')} · ${escHtml(settingsT(jobCount === 1 ? 'scripts.oneJob' : 'scripts.jobCount', {count: jobCount}))}</summary>
       ${assignments.length ? `<ul>${assignments.map(item => `<li>
@@ -7337,8 +7344,8 @@ function renderSettingsScriptEditor(selected = '') {
     <form id="settings-script-form" class="job-script-editor">
       <div class="form-group"><label class="form-label" for="settings-script-name">${settingsT('scripts.name')}</label><input class="form-input" id="settings-script-name" required maxlength="100" value="${escHtml(script.name || '')}"></div>
       <div class="form-group"><label class="form-label" for="settings-script-description">${settingsT('scripts.details')}</label><textarea class="form-input" id="settings-script-description" maxlength="2000" rows="2">${escHtml(script.description || '')}</textarea></div>
-      <div class="form-group"><label class="form-label" for="settings-script-timeout">${settingsT('scripts.timeout')}</label><input class="form-input" id="settings-script-timeout" type="number" min="1" max="86400" required value="${script.timeout_seconds || 300}"></div>
-      <div class="form-group"><label class="form-label" for="settings-script-content">${settingsT('scripts.content')}</label><textarea class="form-input" id="settings-script-content" rows="14" required spellcheck="false" autocapitalize="off" aria-describedby="settings-script-validation settings-script-result">${escHtml(script.content || '#!/bin/bash\n')}</textarea></div>
+      <div class="form-group"><label class="form-label" for="settings-script-timeout">${settingsT('scripts.timeout')}</label><input class="form-input" id="settings-script-timeout" type="number" min="1" max="86400" required value="${script.timeout_seconds ?? 300}"></div>
+      <div class="form-group"><label class="form-label" for="settings-script-content">${settingsT('scripts.content')}</label><textarea class="form-input" id="settings-script-content" rows="14" required spellcheck="false" autocapitalize="off" aria-describedby="settings-script-validation settings-script-result">${escHtml(script.content ?? '#!/bin/bash\n')}</textarea></div>
       <p id="settings-script-validation">${escHtml(settingsT('scripts.validationHint'))}</p>
       <div class="job-script-actions">
         <button type="submit" class="btn btn-primary">${settingsT('scripts.save')}</button>
@@ -7347,6 +7354,20 @@ function renderSettingsScriptEditor(selected = '') {
       <p id="settings-script-result" class="status-message hidden" role="status"></p>
     </form></div>`);
   settingsState.scriptEditor = window.BBUI.components.bashEditor?.create(document.getElementById('settings-script-content'));
+  document.getElementById('settings-script-import').addEventListener('click', () => document.getElementById('settings-script-file').click());
+  document.getElementById('settings-script-file').addEventListener('change', event => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (file) transferSettingsScript('import', file);
+  });
+  document.getElementById('settings-script-export').addEventListener('click', () => transferSettingsScript('export'));
+  document.getElementById('settings-script-duplicate').addEventListener('click', () => {
+    const values = settingsScriptValues();
+    values.name = uniqueSettingsScriptName(settingsT('scripts.copyName', {name: values.name.slice(0, 75)}));
+    renderSettingsScriptEditor('', values);
+    showMsg('settings-script-result', 'success', settingsT('scripts.draftCreated'));
+    document.getElementById('settings-script-name').focus();
+  });
   document.getElementById('settings-script-select').addEventListener('change', async event => {
     const next = event.target.value;
     if (settingsState.scriptDirty && !await _openSettingsDialog({
@@ -7367,26 +7388,93 @@ function renderSettingsScriptEditor(selected = '') {
   });
 }
 
+/** Collect current editor fields without IDs or job assignments. */
+function settingsScriptValues() {
+  return {
+    name: document.getElementById('settings-script-name').value,
+    description: document.getElementById('settings-script-description').value,
+    timeout_seconds: Number(document.getElementById('settings-script-timeout').value),
+    content: document.getElementById('settings-script-content').value,
+  };
+}
+
+/** Suggest a unique display name within the existing 100-character limit. */
+function uniqueSettingsScriptName(name) {
+  const names = new Set((settingsState.jobScripts || []).map(row => row.name));
+  let candidate = name.slice(0, 100);
+  for (let index = 2; names.has(candidate); index++) {
+    const suffix = ` (${index})`;
+    candidate = name.slice(0, 100 - suffix.length) + suffix;
+  }
+  return candidate;
+}
+
+/** Validate a file into a new draft, or download validated editor content as Bash.
+ * Never saves or assigns a script. Keep the current draft intact on failure.
+ */
+async function transferSettingsScript(action, file = null) {
+  const panel = document.getElementById('settings-scripts-panel');
+  const form = document.getElementById('settings-script-form');
+  const controls = [...panel.querySelectorAll('input, textarea, select, button')].map(el => [el, el.disabled]);
+  controls.forEach(([el]) => { el.disabled = true; });
+  try {
+    let body;
+    if (action === 'import') {
+      if (!file.name.toLowerCase().endsWith('.sh')) throw new Error(settingsT('scripts.importFileError'));
+      if (!file.size || file.size > 65536) throw new Error(settingsT('scripts.importSizeError'));
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      body = {filename: file.name, content_base64: btoa(Array.from(bytes, byte => String.fromCharCode(byte)).join(''))};
+    } else body = settingsScriptValues();
+    const response = await fetch(`/api/settings/scripts/${action}`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body),
+    });
+    const data = await response.json();
+    if (!form.isConnected || document.getElementById('settings-script-form') !== form || settingsState.activeTab !== 'scripts') return;
+    if (!response.ok) {
+      if (action === 'export' && data.code === 'job_script_syntax') {
+        controls.forEach(([el, disabled]) => { el.disabled = disabled; });
+        settingsState.scriptEditor?.setError(data.message_params?.line);
+      }
+      throw new Error(apiErrorMessage(data, response.status));
+    }
+    if (action === 'import') {
+      if (settingsState.scriptDirty && !await _openSettingsDialog({
+        title: settingsT('forms.unsavedTitle'), message: settingsT('forms.leaveUnsavedMessage'),
+        confirmText: settingsT('forms.leave'), confirmClass: 'btn-danger',
+      })) return;
+      if (!form.isConnected || document.getElementById('settings-script-form') !== form || settingsState.activeTab !== 'scripts') return;
+      renderSettingsScriptEditor('', {...data.script, name: uniqueSettingsScriptName(data.script.name)});
+      showMsg('settings-script-result', 'success', settingsT('scripts.draftCreated'));
+    } else {
+      _downloadTextFile(data.filename, data.content, 'text/x-shellscript;charset=utf-8');
+      showMsg('settings-script-result', 'success', settingsT('scripts.exported'));
+    }
+  } catch (error) {
+    if (form.isConnected && document.getElementById('settings-script-form') === form) showMsg('settings-script-result', 'error', String(error.message));
+  } finally {
+    controls.forEach(([el, disabled]) => { el.disabled = disabled; });
+  }
+}
+
 /** Save or delete the selected definition; keep the editor intact on validation errors. */
 async function persistSettingsScript(id, remove) {
   const feedback = document.getElementById('settings-script-result');
   const form = document.getElementById('settings-script-form');
-  const buttons = [...form.querySelectorAll('button:not(:disabled)')];
-  buttons.forEach(button => { button.disabled = true; });
+  const controls = [...document.getElementById('settings-scripts-panel').querySelectorAll('input, textarea, select, button')].map(el => [el, el.disabled]);
+  controls.forEach(([el]) => { el.disabled = true; });
   feedback.textContent = '';
   try {
-    const body = remove ? undefined : JSON.stringify({id,
-      name: document.getElementById('settings-script-name').value,
-      description: document.getElementById('settings-script-description').value,
-      timeout_seconds: Number(document.getElementById('settings-script-timeout').value),
-      content: document.getElementById('settings-script-content').value,
-    });
+    const body = remove ? undefined : JSON.stringify({id, ...settingsScriptValues()});
     const response = await fetch('/api/settings/scripts' + (remove ? `?id=${encodeURIComponent(id)}` : ''), {
       method: remove ? 'DELETE' : 'POST', headers: {'Content-Type': 'application/json'}, body,
     });
     const data = await response.json();
+    if (!form.isConnected || document.getElementById('settings-script-form') !== form) return;
     if (!response.ok) {
-      if (data.code === 'job_script_syntax') settingsState.scriptEditor?.setError(data.message_params?.line);
+      if (data.code === 'job_script_syntax') {
+        controls.forEach(([el, disabled]) => { el.disabled = disabled; });
+        settingsState.scriptEditor?.setError(data.message_params?.line);
+      }
       throw new Error(apiErrorMessage(data, response.status));
     }
     await loadSettingsScripts(data.script?.id || '');
@@ -7394,5 +7482,5 @@ async function persistSettingsScript(id, remove) {
     result.className = 'status-message success';
     result.textContent = settingsT(remove ? 'scripts.deleted' : 'scripts.saved');
   } catch (error) { feedback.className = 'status-message error'; feedback.textContent = String(error.message); }
-  finally { buttons.forEach(button => { button.disabled = false; }); }
+  finally { controls.forEach(([el, disabled]) => { el.disabled = disabled; }); }
 }
