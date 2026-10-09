@@ -198,3 +198,15 @@ def test_preview_restarts_before_maintenance(tmp_path, retention, step):
     }, {"BACKUP_SCRIPTS_DIR": str(tmp_path)}, tmp_path)
     codes = [item["code"] for item in flow["step_codes"]]
     assert codes.index("borgCreate") < codes.index("dockerStart") < codes.index("vmStart") < codes.index(step)
+
+
+@pytest.mark.parametrize("cancel_at", ["prune", "check"])
+def test_maintenance_cancellation_does_not_restart_workloads_again(run_backup, cancel_at):
+    state = run_backup
+    state.cancel_at = cancel_at
+    assert state.run() == 130
+    assert state.actions.count("start_docker") == state.actions.count("start_vms") == 1
+    assert state.actions.index("start_vms") < state.actions.index(cancel_at)
+    assert state.phases[-1][0] == "cancelled"
+    assert not state.config.lock_file.exists()
+    assert runtime_recovery.summarize_runtime_recovery(state.config.runtime_recovery_file)["pending_count"] == 0
