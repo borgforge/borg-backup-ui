@@ -546,15 +546,15 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
         count=len(source_paths),
         exclusions=len(exclude_paths),
     )
+    if use_docker:
+        add_step("dockerStart", "Start Docker containers stopped by this job")
+    if use_vm:
+        add_step("vmStart", "Start VMs stopped by this job")
     if retention.get("mode") == "all":
         add_step("borgMaintenanceKeepAll", "Borg maintenance (compact -> check; prune disabled)")
     else:
         add_step("borgMaintenance", "Borg maintenance (prune -> compact -> check)")
     add_step("statusNotification", "Write status and notification")
-    if use_vm:
-        add_step("vmStart", "Start VMs stopped by this job")
-    if use_docker:
-        add_step("dockerStart", "Start Docker containers stopped by this job")
     add_step("resourceLocksRelease", "Release resource locks")
 
     remote_repo = {

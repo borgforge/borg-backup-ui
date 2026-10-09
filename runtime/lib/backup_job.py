@@ -268,9 +268,10 @@ class BackupJob:
     """
     Context manager for backup lifecycle, cleanup and status persistence.
 
-    Entering logs the run and acquires its lock. Exiting attempts Docker/VM
-    recovery, persists the run or skip status, releases the lock and refreshes
-    the dashboard cache. A SystemExit(0) from USB/parity preflight marks a
+    Entering logs the run and acquires its lock. Call ``recover_runtime`` after
+    archive creation to restore Docker/VM services before maintenance. Exiting
+    attempts any remaining recovery, persists the run or skip status, releases
+    the lock and refreshes the dashboard cache. A SystemExit(0) from USB/parity preflight marks a
     skipped run. Original failures are not suppressed; cleanup failure raises
     RuntimeError when there was no original failure.
     """
@@ -389,32 +390,9 @@ class BackupJob:
             if not self._skip_finish:
                 _log_section("PHASE 5: CLEANUP & COMPLETION")
 
-            recovery_failures: List[str] = []
-            if not self._docker_restarted and self._docker_stop_result is not None:
-                self._emit_phase("recovering_docker")
-                if self._run_cleanup_step(
-                    "Docker recovery", self.start_docker, cleanup_errors
-                ):
-                    recovery_failures.append("Docker")
-            if not self._vms_restarted and self._vm_shutdown_result is not None:
-                self._emit_phase("recovering_vms")
-                if self._run_cleanup_step(
-                    "VM recovery", self.start_vms, cleanup_errors
-                ):
-                    recovery_failures.append("VM")
-
-            if recovery_failures and not self._skip_finish:
-                self._borg_exit = 2
-                self._cancelled = False
-                self._failure_code = RUNTIME_RECOVERY_FAILED
-                recovery_message = (
-                    "Runtime recovery failed for "
-                    + " and ".join(recovery_failures)
-                    + ". Check the runtime recovery status and backup log."
-                )
-                self._final_msg = " ".join(
-                    part for part in (self._final_msg.strip(), recovery_message) if part
-                )
+            self._run_cleanup_step(
+                "runtime recovery", self.recover_runtime, cleanup_errors
+            )
 
             if self._skip_finish:
                 self._run_cleanup_step(
@@ -528,8 +506,49 @@ class BackupJob:
                 )
             self._record_docker_recovery_state()
 
+    def recover_runtime(self) -> None:
+        """Restart this job's stopped workloads before repository maintenance.
+
+        Also used by ``__exit__`` after errors or cancellation. Each workload
+        type is attempted independently and at most once. Emits recovery phases
+        and uses the start methods to update persistent recovery records.
+        Any restart failure marks the run as failed and raises RuntimeError
+        after attempting both Docker and VM recovery.
+        """
+        cleanup_errors: List[Tuple[str, Exception]] = []
+        recovery_failures: List[str] = []
+        if not self._docker_restarted and self._docker_stop_result is not None:
+            self._emit_phase("recovering_docker")
+            if self._run_cleanup_step(
+                "Docker recovery", self.start_docker, cleanup_errors
+            ):
+                recovery_failures.append("Docker")
+        if not self._vms_restarted and self._vm_shutdown_result is not None:
+            self._emit_phase("recovering_vms")
+            if self._run_cleanup_step(
+                "VM recovery", self.start_vms, cleanup_errors
+            ):
+                recovery_failures.append("VM")
+
+        if recovery_failures and not self._skip_finish:
+            self._borg_exit = 2
+            self._cancelled = False
+            self._failure_code = RUNTIME_RECOVERY_FAILED
+            recovery_message = (
+                "Runtime recovery failed for "
+                + " and ".join(recovery_failures)
+                + ". Check the runtime recovery status and backup log."
+            )
+            self._final_msg = " ".join(
+                part for part in (self._final_msg.strip(), recovery_message) if part
+            )
+        if cleanup_errors:
+            raise RuntimeError(
+                "Runtime recovery failed. Check the backup log and runtime recovery status."
+            ) from None
+
     def start_docker(self) -> None:
-        """Startet Docker-Container neu. Wird automatisch in __exit__ aufgerufen."""
+        """Attempt Docker restart once; record the result and raise on failure."""
         if (
             self.docker_manager is not None
             and self._docker_stop_result is not None
@@ -566,7 +585,7 @@ class BackupJob:
             self._record_vm_recovery_state()
 
     def start_vms(self) -> None:
-        """Startet VMs neu. Wird automatisch in __exit__ aufgerufen."""
+        """Attempt VM restart once; record the result and raise on failure."""
         if (
             self.vm_manager is not None
             and self._vm_shutdown_result is not None

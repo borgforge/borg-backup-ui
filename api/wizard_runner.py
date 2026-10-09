@@ -815,6 +815,12 @@ def main() -> int:
                 result_code = create_exit
                 return result_code
 
+            job.recover_runtime()
+            if control.is_cancel_requested():
+                job.set_cancelled()
+                result_code = 130
+                return result_code
+
             maint_exit = runner.maintenance(archive_prefix=archive_prefix)
             if control.is_cancel_requested():
                 job.set_cancelled()
