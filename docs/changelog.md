@@ -2620,3 +2620,4 @@ Das Plugin-Manifest `borg-backup-ui.plg` enthaelt nur noch eine kurze nutzerrele
 - Bound script execution by timeout/cancellation and process-group cleanup; mask and limit log output.
 - Record hook outcomes and archive-creation exit separately in history; final notifications include Post failures.
 - Add a Settings script editor, wizard step 9, bilingual help and six manual test examples.
+- Use the shared Settings card layout for the script editor and full-width history rows for optional script results without interrupting the existing detail grid.

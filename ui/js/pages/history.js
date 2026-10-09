@@ -166,12 +166,12 @@ function renderHistoryRow(e, idx) {
           ${detailGroup(historyT('compressed'), e.compressed_size_fmt)}
           ${detailGroup(historyT('repositorySize'), e.repository_size_fmt)}
           ${detailGroup(historyT('files'), e.files_count != null ? e.files_count.toLocaleString(historyLocale()) : null)}
-          ${detailGroup(historyT('backupExitCode'), e.backup_exit_code != null ? String(e.backup_exit_code) : null)}
-          ${detailGroup(historyT('hookResults'), Object.entries(e.hook_results || {}).map(([phase, result]) => `${phase}: ${result.name} — ${historyT('hookStates.' + result.status)} (exit ${result.exit_code})`).join('; '), 'wide')}
           ${detailGroup(historyT('exitCode'), e.exit_code != null ? String(e.exit_code) : null)}
           ${detailGroup(historyT('lastCheck'), e.repository_check_date, 'datetime')}
           ${detailGroup(historyT('nextCheck'), e.repository_next_check, 'datetime')}
           ${detailGroup(historyT('checkStatus'), e.repository_check_status, 'wide')}
+          ${detailGroup(historyT('backupExitCode'), e.backup_exit_code != null ? String(e.backup_exit_code) : null, 'wide')}
+          ${detailGroup(historyT('hookResults'), Object.entries(e.hook_results || {}).map(([phase, result]) => `${phase}: ${result.name} — ${historyT('hookStates.' + result.status)} (exit ${result.exit_code})`).join('; '), 'wide')}
           ${e.log_file ? `
           <div class="history-detail-group history-detail-group--log">
             <div class="history-detail-label">${escHtml(historyT('logFile'))}</div>

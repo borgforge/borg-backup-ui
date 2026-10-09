@@ -296,7 +296,7 @@ function renderSettings(data, systemHealth) {
       ${renderSettingsSmbProfiles(data.smb_profiles || [])}
     </div>
     <div class="settings-tab-panel ${settingsState.activeTab === 'scripts' ? '' : 'hidden'}" data-settings-panel="scripts">
-      <div id="settings-scripts-panel" class="job-script-editor"></div>
+      <div id="settings-scripts-panel"></div>
     </div>
     <div class="settings-tab-panel ${settingsState.activeTab === 'backup' ? '' : 'hidden'}" data-settings-panel="backup">
       ${renderSettingsDockerVMs(data.docker || {}, data.vms || {})}
@@ -7311,7 +7311,8 @@ function renderSettingsScriptEditor(selected = '') {
   const rows = settingsState.jobScripts || [];
   const script = rows.find(row => row.id === selected) || {};
   settingsState.scriptDirty = false;
-  panel.innerHTML = `
+  panel.innerHTML = settingsCard(settingsT('scripts.title'), settingsMenuIcon('advanced'), `
+    <div class="settings-body job-script-editor">
     <p>${escHtml(settingsT('scripts.help'))}</p>
     <div class="form-group"><label class="form-label" for="settings-script-select">${settingsT('scripts.select')}</label>
       <select class="form-select" id="settings-script-select"><option value="">${settingsT('scripts.new')}</option>${rows.map(row => `<option value="${escHtml(row.id)}" ${row.id === selected ? 'selected' : ''}>${escHtml(row.name)}</option>`).join('')}</select></div>
@@ -7321,10 +7322,12 @@ function renderSettingsScriptEditor(selected = '') {
       <div class="form-group"><label class="form-label" for="settings-script-timeout">${settingsT('scripts.timeout')}</label><input class="form-input" id="settings-script-timeout" type="number" min="1" max="86400" required value="${script.timeout_seconds || 300}"></div>
       <div class="form-group"><label class="form-label" for="settings-script-content">${settingsT('scripts.content')}</label><textarea class="form-input" id="settings-script-content" rows="14" required spellcheck="false" autocapitalize="off" style="font-family:monospace;tab-size:2">${escHtml(script.content || '#!/bin/bash\n')}</textarea></div>
       <p>${escHtml(settingsT('scripts.validationHint'))}</p>
-      <button type="submit" class="btn btn-primary">${settingsT('scripts.save')}</button>
-      ${script.id ? `<button type="button" class="btn btn-danger" id="settings-script-delete">${settingsT('scripts.delete')}</button>` : ''}
+      <div class="job-script-actions">
+        <button type="submit" class="btn btn-primary">${settingsT('scripts.save')}</button>
+        ${script.id ? `<button type="button" class="btn btn-danger" id="settings-script-delete">${settingsT('scripts.delete')}</button>` : ''}
+      </div>
       <p id="settings-script-result" class="status-message hidden" role="status"></p>
-    </form>`;
+    </form></div>`);
   document.getElementById('settings-script-select').addEventListener('change', async event => {
     const next = event.target.value;
     if (settingsState.scriptDirty && !await _openSettingsDialog({

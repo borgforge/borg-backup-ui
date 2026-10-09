@@ -6754,5 +6754,6 @@ body.wizard-modal-open {
 .job-script-editor { display: grid; gap: 16px; min-width: 0; }
 .job-script-editor textarea { resize: vertical; min-width: 0; }
 .job-script-editor button { justify-self: start; }
+.job-script-actions { display: flex; flex-wrap: wrap; gap: var(--ui-space-2); }
 #wizard-step-9 .form-group { margin-top: 16px; }
 #wizard-step-9 > p:last-child { margin-top: 12px; }
