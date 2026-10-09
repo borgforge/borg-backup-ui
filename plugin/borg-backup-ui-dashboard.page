@@ -58,7 +58,9 @@ function bbui_dash_time($value) {
   return date('m/d H:i', $ts);
 }
 
+/** Return the display label for a cached status, including neutral skipped runs. */
 function bbui_dash_status_label($state) {
+  if (strtolower((string)$state) === 'skipped') return 'Skipped';
   $state = bbui_dash_state_class($state);
   if ($state === 'ok') return 'OK';
   if ($state === 'warn') return 'Warning';
@@ -95,6 +97,7 @@ $job_total = bbui_dash_int($data, 'jobs.enabled');
 $job_label = $job_total === 1 ? 'backup job' : 'backup jobs';
 $success = bbui_dash_int($data, 'jobs.successful');
 $warnings = bbui_dash_int($data, 'jobs.warnings');
+$skipped = bbui_dash_int($data, 'jobs.skipped');
 $failed = bbui_dash_int($data, 'jobs.failed');
 $running = bbui_dash_int($data, 'jobs.running');
 $repo_online = bbui_dash_int($data, 'repositories.online');
@@ -145,7 +148,7 @@ if (!$initial_json) $initial_json = '{}';
 
 $mytiles[$pluginname]['column1'] =
 <<<EOT
-<tbody title="Borg Backup UI overview">
+<tbody class="bbui-dashboard-tile" title="Borg Backup UI overview">
 <tr><td>
 <div class="bbui-tile-title">
   <span class="bbui-title-main">
@@ -156,69 +159,76 @@ $mytiles[$pluginname]['column1'] =
     </span>
   </span>
   <span class="bbui-title-actions">
-    <a class="bbui-title-button" href="#" data-bbui-refresh title="Refresh"><i class="fa fa-refresh"></i></a>
-    <a class="bbui-title-button" href="{$ui_url}" target="_blank" title="Open Borg Backup UI"><i class="fa fa-external-link"></i></a>
-    <a class="bbui-title-button" href="/Settings/borg-backup-ui" title="Settings"><i class="fa fa-cog"></i></a>
-    <a class="bbui-title-button" href="#" data-bbui-collapse title="Collapse"><i class="fa fa-chevron-up"></i></a>
+    <a class="bbui-title-button" href="#" data-bbui-refresh title="Fetch latest cached status" aria-label="Fetch latest cached status"><i class="fa fa-refresh"></i></a>
+    <a class="bbui-title-button" href="{$ui_url}" target="_blank" title="Open Borg Backup UI" aria-label="Open Borg Backup UI"><i class="fa fa-external-link"></i></a>
+    <a class="bbui-title-button" href="/Settings/borg-backup-ui" title="Settings" aria-label="Settings"><i class="fa fa-cog"></i></a>
+    <a class="bbui-title-button" href="#" data-bbui-collapse title="Collapse" aria-label="Collapse" aria-expanded="true"><i class="fa fa-chevron-up"></i></a>
   </span>
 </div>
 </td></tr>
 <tr data-bbui-body><td>
 <style>
+.bbui-dashboard-tile{--bbui-text:#18212f;--bbui-muted:#4b5563;--bbui-ok:#166534;--bbui-warn:#854d0e;--bbui-error:#b91c1c;--bbui-info:#1d4ed8;--bbui-button:#e8edf3;--bbui-hover:#d8e1ec;--bbui-border:#8492a6}
+.bbui-dashboard-tile[data-bbui-theme="dark"]{--bbui-text:#f3f4f6;--bbui-muted:#c0c8d4;--bbui-ok:#86cf72;--bbui-warn:#f4c95d;--bbui-error:#ff8f8b;--bbui-info:#8cbeff;--bbui-button:#374151;--bbui-hover:#4b5563;--bbui-border:#8794a8}
+.bbui-tile-title,.bbui-widget{color:var(--bbui-text)}
+.bbui-title-button:focus-visible{outline:2px solid var(--bbui-info);outline-offset:3px}
+.bbui-title-button[aria-busy="true"]{opacity:.65;cursor:progress}
+
 .bbui-tile-title{display:flex;align-items:center;justify-content:space-between;gap:8px;font-weight:800;padding:2px 1px 0}
 .bbui-title-main{display:flex;align-items:center;gap:8px;min-width:0}
-.bbui-title-main b{display:block;font-size:14px;line-height:1.05;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#f3f4f6}
-.bbui-title-main small{display:block;color:#9ca3af;font-size:11px;line-height:1.1;margin-top:2px;font-weight:700}
+.bbui-title-main b{display:block;font-size:14px;line-height:1.05;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--bbui-text)}
+.bbui-title-main small{display:block;color:var(--bbui-muted);font-size:11px;line-height:1.1;margin-top:2px;font-weight:700}
 .bbui-title-icon{width:28px;height:28px;border-radius:7px;object-fit:contain;flex:0 0 auto;box-shadow:0 0 0 1px rgba(255,255,255,.18)}
 .bbui-title-actions{display:flex;gap:5px;margin-left:auto}
-.bbui-title-button{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;background:#6f747c;border:0;box-shadow:inset 0 1px 0 rgba(255,255,255,.20),0 1px 2px rgba(0,0,0,.30);color:#1f242b!important;text-decoration:none;font-size:12px}
-.bbui-title-button:hover{background:#858b94;color:#111827!important}
+.bbui-title-button{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;background:var(--bbui-button);border:1px solid var(--bbui-border);box-shadow:inset 0 1px 0 rgba(255,255,255,.20),0 1px 2px rgba(0,0,0,.30);color:var(--bbui-text)!important;text-decoration:none;font-size:12px}
+.bbui-title-button:hover{background:var(--bbui-hover);color:var(--bbui-text)!important}
 .bbui-widget{font-size:12px;line-height:1.22}
 .bbui-widget a{text-decoration:none}
-.bbui-widget-note{color:#eab308;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:5px;border:1px solid rgba(234,179,8,.35);background:rgba(234,179,8,.08);border-radius:7px;padding:4px 7px}
+.bbui-widget-note{color:var(--bbui-warn);font-size:11px;white-space:normal;margin-bottom:5px;border:1px solid rgba(234,179,8,.35);background:rgba(234,179,8,.08);border-radius:7px;padding:4px 7px}
 .bbui-widget-note:empty{display:none}
-.bbui-widget-strip{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px;margin-bottom:6px}
+.bbui-widget-strip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin-bottom:6px}
 .bbui-widget-metric{display:flex;align-items:center;gap:6px;border:1px solid rgba(148,163,184,.30);border-radius:7px;padding:5px 6px;min-width:0;background:linear-gradient(180deg,rgba(255,255,255,.055),rgba(0,0,0,.07));box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}
 .bbui-widget-metric i{font-size:17px;line-height:1;width:18px;text-align:center;flex:0 0 18px;opacity:.95}
 .bbui-widget-metric span{display:block;min-width:0}
-.bbui-widget-metric em{display:block;color:#aeb6c2;font-size:11px;font-style:normal;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.bbui-widget-metric b{display:block;font-size:16px;line-height:1.05;color:#d8dee9}
-.bbui-widget-metric.ok i,.bbui-widget-metric.ok b,.bbui-widget-state.ok h4,.bbui-widget-state.ok .bbui-widget-status,.bbui-widget-pill.ok{color:#7bbf59}
-.bbui-widget-metric.warn i,.bbui-widget-metric.warn b,.bbui-widget-state.warn h4,.bbui-widget-state.warn .bbui-widget-status,.bbui-widget-pill.warn{color:#e0ad2f}
-.bbui-widget-metric.err i,.bbui-widget-metric.err b,.bbui-widget-state.err h4,.bbui-widget-state.err .bbui-widget-status,.bbui-widget-pill.err{color:#e05f5a}
-.bbui-widget-metric.run i,.bbui-widget-metric.run b,.bbui-widget-state.run h4,.bbui-widget-state.run .bbui-widget-status,.bbui-widget-pill.run{color:#5d9cec}
-.bbui-widget-metric.neutral i,.bbui-widget-metric.neutral b{color:#d7dee8}
+.bbui-widget-metric em{display:block;color:var(--bbui-muted);font-size:11px;font-style:normal;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bbui-widget-metric b{display:block;font-size:16px;line-height:1.05;color:var(--bbui-text)}
+.bbui-widget-metric.ok i,.bbui-widget-metric.ok b,.bbui-widget-state.ok h4,.bbui-widget-state.ok .bbui-widget-status,.bbui-widget-pill.ok{color:var(--bbui-ok)}
+.bbui-widget-metric.warn i,.bbui-widget-metric.warn b,.bbui-widget-state.warn h4,.bbui-widget-state.warn .bbui-widget-status,.bbui-widget-pill.warn{color:var(--bbui-warn)}
+.bbui-widget-metric.err i,.bbui-widget-metric.err b,.bbui-widget-state.err h4,.bbui-widget-state.err .bbui-widget-status,.bbui-widget-pill.err{color:var(--bbui-error)}
+.bbui-widget-metric.run i,.bbui-widget-metric.run b,.bbui-widget-state.run h4,.bbui-widget-state.run .bbui-widget-status,.bbui-widget-pill.run{color:var(--bbui-info)}
+.bbui-widget-metric.neutral i,.bbui-widget-metric.neutral b{color:var(--bbui-muted)}
 .bbui-widget-main{position:relative;border:1px solid rgba(148,163,184,.30);border-radius:8px;padding:7px 7px 7px 10px;margin-bottom:6px;background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(0,0,0,.08));box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
 .bbui-widget-main:before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;border-radius:8px 0 0 8px;background:#6b7280}
-.bbui-widget-main.ok:before{background:#7bbf59}.bbui-widget-main.warn:before{background:#e0ad2f}.bbui-widget-main.err:before{background:#e05f5a}.bbui-widget-main.run:before{background:#5d9cec}
+.bbui-widget-main.ok:before{background:var(--bbui-ok)}.bbui-widget-main.warn:before{background:var(--bbui-warn)}.bbui-widget-main.err:before{background:var(--bbui-error)}.bbui-widget-main.run:before{background:var(--bbui-info)}
 .bbui-widget-main-row{display:flex;align-items:center;gap:8px}
-.bbui-widget-status{width:32px;height:32px;display:flex;align-items:center;justify-content:center;color:#9ca3af;font-weight:900;flex:0 0 auto;font-size:22px}
+.bbui-widget-status{width:32px;height:32px;display:flex;align-items:center;justify-content:center;color:var(--bbui-muted);font-weight:900;flex:0 0 auto;font-size:22px}
 .bbui-widget-state h4{margin:0 0 1px;font-size:12px;font-weight:900}
-.bbui-widget-state strong{display:block;font-size:14px;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;color:#d8dee9}
-.bbui-widget-state p{margin:1px 0 0;color:var(--gray-500,#8b98a7);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bbui-widget-state strong{display:block;font-size:14px;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;color:var(--bbui-text)}
+.bbui-widget-state p{margin:1px 0 0;color:var(--bbui-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bbui-widget-pill{margin-left:auto;border:1px solid currentColor;border-radius:6px;padding:3px 7px;font-weight:900;white-space:nowrap;background:rgba(0,0,0,.14)}
 .bbui-widget-split{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:5px}
 .bbui-widget-box{display:grid;grid-template-columns:28px minmax(0,1fr);gap:7px;align-items:center;border:1px solid rgba(148,163,184,.28);border-radius:7px;padding:6px 7px;background:rgba(148,163,184,.045);min-width:0}
 .bbui-widget-section-icon{width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;border:1px solid currentColor;background:rgba(0,0,0,.18);font-size:14px;line-height:1}
-.bbui-widget-next .bbui-widget-section-icon{color:#5d9cec}.bbui-widget-restore .bbui-widget-section-icon{color:#7bbf59}
+.bbui-widget-next .bbui-widget-section-icon{color:var(--bbui-info)}.bbui-widget-restore .bbui-widget-section-icon{color:var(--bbui-ok)}
 .bbui-widget-section-body{min-width:0}
-.bbui-widget-box h4{margin:0 0 3px;font-size:12px;font-weight:800;color:#5d9cec}
-.bbui-widget-next [data-bbui="next_rows"] > div{display:flex;justify-content:space-between;gap:8px;color:var(--gray-500,#8b98a7);padding:1px 0;min-width:0}
+.bbui-widget-box h4{margin:0 0 3px;font-size:12px;font-weight:800;color:var(--bbui-info)}
+.bbui-widget-next [data-bbui="next_rows"] > div{display:flex;justify-content:space-between;gap:8px;color:var(--bbui-muted);padding:1px 0;min-width:0}
 .bbui-widget-next [data-bbui="next_rows"] span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.bbui-widget-next [data-bbui="next_rows"] b{color:var(--gray-300,#cbd5e1);white-space:nowrap;flex:0 0 auto}
-.bbui-widget-restore p{margin:0;color:var(--gray-500,#8b98a7);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.bbui-widget-footer{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;align-items:center;gap:8px;color:#9ca3af;font-size:11px;border-top:1px solid rgba(148,163,184,.16);padding-top:5px;margin-top:3px}
-.bbui-widget-footer span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.bbui-widget-footer i{color:#9ca3af;margin-right:4px}
-.bbui-widget-footer strong{color:#cbd5e1}
+.bbui-widget-next [data-bbui="next_rows"] b{color:var(--bbui-text);white-space:normal;text-align:right;max-width:70%;flex:0 1 auto}
+.bbui-widget-restore p{margin:0;color:var(--bbui-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bbui-widget-footer{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px;color:var(--bbui-muted);font-size:11px;border-top:1px solid rgba(148,163,184,.16);padding-top:5px;margin-top:3px}
+.bbui-widget-footer span{min-width:0;overflow-wrap:anywhere}.bbui-widget-footer [data-bbui-fetch-time],.bbui-widget-footer>span:nth-child(2){grid-column:1/-1}.bbui-widget-footer>.bbui-widget-health-dot{grid-column:2;grid-row:1}
+.bbui-widget-footer i{color:var(--bbui-muted);margin-right:4px}
+.bbui-widget-footer strong{color:var(--bbui-text)}
 .bbui-widget-health-dot{width:9px;height:9px;border-radius:999px;background:#6b7280;box-shadow:0 0 6px rgba(107,114,128,.55)}
-.bbui-widget-health-dot.ok{background:#7bbf59;box-shadow:0 0 7px rgba(123,191,89,.55)}.bbui-widget-health-dot.warn{background:#e0ad2f;box-shadow:0 0 7px rgba(224,173,47,.55)}.bbui-widget-health-dot.err{background:#e05f5a;box-shadow:0 0 7px rgba(224,95,90,.55)}.bbui-widget-health-dot.run{background:#5d9cec;box-shadow:0 0 7px rgba(93,156,236,.55)}
+.bbui-widget-health-dot.ok{background:var(--bbui-ok);box-shadow:0 0 7px rgba(123,191,89,.55)}.bbui-widget-health-dot.warn{background:var(--bbui-warn);box-shadow:0 0 7px rgba(224,173,47,.55)}.bbui-widget-health-dot.err{background:var(--bbui-error);box-shadow:0 0 7px rgba(224,95,90,.55)}.bbui-widget-health-dot.run{background:var(--bbui-info);box-shadow:0 0 7px rgba(93,156,236,.55)}
 @media (max-width:520px){.bbui-widget-strip{grid-template-columns:repeat(3,minmax(0,1fr))}.bbui-widget-split{grid-template-columns:1fr}}
 </style>
 <div id="bbui-widget" class="bbui-widget" data-endpoint="/plugins/borg-backup-ui/widget-status.php">
-  <div class="bbui-widget-note" data-bbui="cache_note">{$cache_note}</div>
+  <div class="bbui-widget-note" role="status" data-bbui="cache_note">{$cache_note}</div>
   <div class="bbui-widget-strip">
     <div class="bbui-widget-metric ok"><i class="fa fa-check-circle-o"></i><span><em>Successful</em><b data-bbui="success">{$success}</b></span></div>
+    <div class="bbui-widget-metric neutral"><i class="fa fa-forward"></i><span><em>Skipped</em><b data-bbui="skipped">{$skipped}</b></span></div>
     <div class="bbui-widget-metric warn"><i class="fa fa-exclamation-triangle"></i><span><em>Warnings</em><b data-bbui="warnings">{$warnings}</b></span></div>
     <div class="bbui-widget-metric err"><i class="fa fa-times-circle-o"></i><span><em>Failed</em><b data-bbui="failed">{$failed}</b></span></div>
     <div class="bbui-widget-metric run"><i class="fa fa-play-circle-o"></i><span><em>Running</em><b data-bbui="running">{$running}</b></span></div>
@@ -250,7 +260,8 @@ $mytiles[$pluginname]['column1'] =
   </div>
   <div class="bbui-widget-footer">
     <span><i class="fa fa-exclamation-triangle"></i>Status: <strong data-bbui="overall_label">{$overall_label_h}</strong></span>
-    <span><i class="fa fa-clock-o"></i>Based on: <strong data-bbui="generated">{$generated_h}</strong></span>
+    <span><i class="fa fa-clock-o"></i>Data updated: <strong data-bbui="generated">{$generated_h}</strong></span>
+    <span data-bbui-fetch-time>Last fetched: <strong data-bbui="fetched">Not fetched yet</strong></span>
     <i class="bbui-widget-health-dot {$overall_state}" data-bbui-overall-dot></i>
   </div>
 </div>
@@ -291,6 +302,7 @@ $mytiles[$pluginname]['column1'] =
     if (state === 'warn') return 'Warning';
     if (state === 'err') return 'Failed';
     if (state === 'run') return 'Running';
+    if (value === 'skipped') return 'Skipped';
     return '-';
   }
   function latestIcon(value) {
@@ -299,13 +311,15 @@ $mytiles[$pluginname]['column1'] =
     if (state === 'warn') return 'fa-exclamation-triangle';
     if (state === 'err') return 'fa-times-circle-o';
     if (state === 'run') return 'fa-play-circle-o';
+    if (value === 'skipped') return 'fa-forward';
     return 'fa-minus';
   }
-  function formatTime(value) {
+  /** Format a timestamp for display, optionally including seconds for fetch feedback. */
+  function formatTime(value, seconds = false) {
     if (!value) return 'never updated';
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return String(value);
-    return date.toLocaleString('en-US', {month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'});
+    return date.toLocaleString('en-US', {month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', ...(seconds ? {second:'2-digit'} : {})});
   }
   function parseDateValue(value) {
     const raw = String(value || '').trim();
@@ -325,11 +339,12 @@ $mytiles[$pluginname]['column1'] =
         total: intValue(data, 'jobs.enabled'),
         successful: intValue(data, 'jobs.successful'),
         warnings: intValue(data, 'jobs.warnings'),
+        skipped: intValue(data, 'jobs.skipped'),
         failed: intValue(data, 'jobs.failed'),
         running: intValue(data, 'jobs.running')
       };
     }
-    const counts = {total: 0, successful: 0, warnings: 0, failed: 0, running: 0};
+    const counts = {total: 0, successful: 0, warnings: 0, skipped: 0, failed: 0, running: 0};
     items.forEach((item) => {
       if (!item || item.enabled === false) return;
       counts.total += 1;
@@ -339,9 +354,10 @@ $mytiles[$pluginname]['column1'] =
       }
       const status = String(item.last_status || '').toLowerCase();
       const overdue = !!item.backup_overdue || isPast(item.backup_overdue_after, now);
+      if (status === 'skipped') counts.skipped += 1;
       if (status === 'error' || status === 'failed' || status === 'failure') {
         counts.failed += 1;
-      } else if (overdue || ['warning','cancelled','skipped'].includes(status)) {
+      } else if (overdue || ['warning','cancelled'].includes(status)) {
         counts.warnings += 1;
       } else if (status === 'success') {
         counts.successful += 1;
@@ -405,6 +421,70 @@ $mytiles[$pluginname]['column1'] =
     ['ok','warn','err','run','neutral'].forEach((name) => overallDot && overallDot.classList.remove(name));
     overallDot && overallDot.classList.add(cls);
   }
+  let lastData = null;
+  let fetchError = '';
+  let inFlight = false;
+
+  /** Format age from an absolute timestamp; never reuse a cached relative label.
+   * @param {Object} latest Cached latest-backup metadata; may lack a timestamp.
+   * @param {Date} now Browser clock used for the age calculation.
+   * @returns {string} Age and duration, or a hint when time evidence is missing.
+   */
+  function latestDetailAt(latest, now) {
+    if (!latest || !latest.name) return 'No backup status yet';
+    const date = parseDateValue(latest.timestamp);
+    const duration = latest && latest.duration ? 'Duration ' + latest.duration : '';
+    if (!date) return duration || 'Time details pending next backup update';
+    const minutes = Math.max(0, Math.floor((now - date) / 60000));
+    const age = date > now ? formatTime(date) : minutes < 1 ? 'just now' :
+      minutes < 60 ? minutes + 'm ago' : minutes < 1440 ? Math.floor(minutes / 60) + 'h ago' : Math.floor(minutes / 1440) + 'd ago';
+    return [age, duration].filter(Boolean).join(' - ');
+  }
+
+  /** Render cached schedule instants in browser local time, including date changes.
+   * @param {string} value Offset-aware scheduled timestamp from the cache.
+   * @param {Date} now Browser clock used for calendar comparisons.
+   * @returns {string} Upcoming date label, elapsed-time label, or missing-data hint.
+   */
+  function scheduleLabel(value, now) {
+    const date = parseDateValue(value);
+    if (!date) return 'Schedule pending next update';
+    if (date <= now) return 'Scheduled ' + formatTime(date) + ' (past)';
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const day = date.toDateString() === now.toDateString() ? 'Today ' :
+      date.toDateString() === tomorrow.toDateString() ? 'Tomorrow ' : date.toLocaleDateString('en-GB') + ' ';
+    return day + date.toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'});
+  }
+
+  /** Reject malformed snapshots before replacing the last successfully rendered data.
+   * @param {*} data Parsed endpoint response or embedded initial cache.
+   * @returns {boolean} Whether the core cache fields support rendering.
+   */
+  function validSnapshot(data) {
+    return !!data && data.schema_version === 1 && ['fresh', 'initial'].includes(data.cache_state) &&
+      !!parseDateValue(data.generated_at) && !!data.jobs && !!data.latest_backup &&
+      typeof data.latest_backup === 'object' && !Array.isArray(data.latest_backup) &&
+      ['enabled', 'successful', 'warnings', 'failed', 'running'].every((key) =>
+        Number.isFinite(data.jobs[key]) && data.jobs[key] >= 0);
+  }
+
+  /** Select a palette from the actual Unraid background, independent of OS theme. */
+  function syncTheme() {
+    const ancestors = [];
+    for (let node = root.parentElement; node; node = node.parentElement) ancestors.unshift(node);
+    let background = [255, 255, 255];
+    ancestors.forEach((node) => {
+      const match = window.getComputedStyle(node).backgroundColor.match(/rgba?\(([^)]+)\)/);
+      if (!match) return;
+      const values = match[1].split(/[, /]+/).map(Number);
+      const alpha = values.length > 3 ? values[3] : 1;
+      background = background.map((old, index) => old * (1 - alpha) + values[index] * alpha);
+    });
+    const light = background[0] * .2126 + background[1] * .7152 + background[2] * .0722 > 140;
+    tile.setAttribute('data-bbui-theme', light ? 'light' : 'dark');
+  }
+
   function render(data) {
     const now = new Date();
     const counts = adjustedJobCounts(data, now);
@@ -419,9 +499,9 @@ $mytiles[$pluginname]['column1'] =
     const hasEvidence = jobStatusEvidence(data);
     const overallState = overallStateFromCounts(counts, restore, cacheState, hasEvidence);
     const overallCls = stateClass(overallState);
-    const cacheNote = cacheState === 'initial' ? 'Initial status' : '';
+    const cacheNote = fetchError || (cacheState === 'initial' ? 'Initial status' : '');
     let latestName = String(get(data, 'latest_backup.name', '') || '').trim();
-    let latestDetail = String(get(data, 'latest_backup.detail', '') || '').trim();
+    let latestDetail = latestDetailAt(data.latest_backup, now);
     if (!latestName) latestName = 'No status yet';
     if (!latestDetail) latestDetail = 'Cached status updates after backup or restore-test activity.';
 
@@ -430,6 +510,7 @@ $mytiles[$pluginname]['column1'] =
     setText('cache_note', cacheNote);
     setText('success', counts.successful);
     setText('warnings', counts.warnings);
+    setText('skipped', counts.skipped);
     setText('failed', counts.failed);
     setText('running', counts.running);
     setText('repos', repoOnline + '/' + repoTotal);
@@ -457,7 +538,7 @@ $mytiles[$pluginname]['column1'] =
           const name = document.createElement('span');
           const time = document.createElement('b');
           name.textContent = item && item.name ? item.name : 'Backup';
-          time.textContent = item && item.time ? item.time : '';
+          time.textContent = scheduleLabel(item && item.scheduled_at, now);
           row.appendChild(name);
           row.appendChild(time);
           fields.next_rows.appendChild(row);
@@ -465,19 +546,40 @@ $mytiles[$pluginname]['column1'] =
       }
     }
   }
+  /** Fetch only the flash cache; preserve evidence on HTTP, JSON or schema errors. */
   async function update() {
+    if (inFlight) return;
+    inFlight = true;
+    refreshButton && refreshButton.setAttribute('aria-busy', 'true');
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 10000);
     try {
-      const response = await fetch(endpoint + '?_=' + Date.now(), {cache: 'no-store'});
-      if (!response.ok) throw new Error('status ' + response.status);
+      const response = await fetch(endpoint + '?_=' + Date.now(), {cache: 'no-store', signal: controller.signal});
+      if (!response.ok) throw new Error('unavailable');
       const data = await response.json();
+      if (!validSnapshot(data)) throw new Error('invalid');
+      lastData = data;
+      fetchError = '';
+      setText('fetched', formatTime(new Date(), true));
       render(data);
-    } catch (_error) {
-      setText('cache_note', 'Status cache is not reachable');
+    } catch (error) {
+      const detail = lastData ? 'Showing last available data.' : 'No cached status available.';
+      fetchError = (error.message === 'invalid' || error instanceof SyntaxError ?
+        'Invalid status cache. ' : 'Status cache is not reachable. ') + detail;
+      setText('cache_note', fetchError);
+    } finally {
+      window.clearTimeout(timeout);
+      inFlight = false;
+      refreshButton && refreshButton.setAttribute('aria-busy', 'false');
     }
   }
+  syncTheme();
   try {
     const initial = JSON.parse(document.getElementById('bbui-widget-initial').textContent || '{}');
-    render(initial);
+    if (validSnapshot(initial)) {
+      lastData = initial;
+      render(initial);
+    }
   } catch (_error) {}
   refreshButton && refreshButton.addEventListener('click', function(event) {
     event.preventDefault();
@@ -488,12 +590,19 @@ $mytiles[$pluginname]['column1'] =
     if (!body) return;
     const hidden = body.style.display === 'none';
     body.style.display = hidden ? '' : 'none';
+    collapseButton.setAttribute('aria-expanded', String(hidden));
+    collapseButton.setAttribute('aria-label', hidden ? 'Collapse' : 'Expand');
+    collapseButton.title = hidden ? 'Collapse' : 'Expand';
     const icon = collapseButton.querySelector('i');
     if (icon) {
       icon.className = hidden ? 'fa fa-chevron-up' : 'fa fa-chevron-down';
     }
   });
-  window.setInterval(update, 15000);
+  window.setInterval(function() {
+    syncTheme();
+    if (lastData) render(lastData);
+    update();
+  }, 15000);
   update();
 })();
 </script>

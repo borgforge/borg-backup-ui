@@ -130,7 +130,9 @@ The page consists of:
 
 The plugin adds a read-only widget to the normal Unraid Dashboard. It shows backup counters, running jobs, the latest and next backups, restore proof, and the number of reachable repositories.
 
-The widget reads a precomputed status file on the flash drive. Refreshing it does not start Borg or a repository check and should not wake array disks only to render the display. The cache is updated after backup and restore-test events and during suitable status refreshes. A state such as **Initial**, **Unknown**, or a visibly old update time is not current backup evidence; open Borg Backup UI and check the Dashboard, History, and System Health.
+The widget reads a precomputed status file on the flash drive. Refreshing it does not start Borg or a repository check and should not wake array disks only to render the display. The cache is updated after backup and restore-test events. **Data updated** is the snapshot time; **Last fetched** is the last successful widget fetch. The refresh button only reads the existing cache again. An older snapshot between events is normal and does not itself indicate a connection failure. Relative ages and Today/Tomorrow labels update in the browser; clock times use the browser timezone. An elapsed cached schedule is marked **Scheduled … (past)** until an event refreshes the schedule. Older caches without absolute timestamps show a hint instead of stale relative times until the next event.
+
+Skipped runs have their own **Skipped** counter. A separate overdue condition still produces a warning. Failed fetches or invalid caches show visible feedback while retaining the last available display. **Initial** or **Unknown** is not current backup evidence; check the Dashboard, History, and System Health in Borg Backup UI.
 
 > **Note:** This native Unraid widget is different from the optional **Homepage** integration under **Settings > General**. Homepage uses its own restricted token.
 

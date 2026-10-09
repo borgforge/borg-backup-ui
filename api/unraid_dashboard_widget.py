@@ -144,6 +144,11 @@ def build_unraid_dashboard_widget_cache(
     app_version: str = "",
     now: datetime | None = None,
 ) -> dict[str, Any]:
+    """Build display metadata from supplied status and existing local stores.
+
+    Absolute backup/schedule times let the browser age labels without scans.
+    Skipped runs retain their own counter; separate overdue warnings remain.
+    """
     generated = now or datetime.now(timezone.utc)
     backups = [row for row in status_data.get("backups", []) if isinstance(row, dict)]
     summary = status_data.get("summary") if isinstance(status_data.get("summary"), dict) else {}
@@ -157,7 +162,7 @@ def build_unraid_dashboard_widget_cache(
     job_items = _job_cache_items(enabled_jobs, backup_rows_by_key)
 
     failed = _as_int(summary.get("error"))
-    warnings = _as_int(summary.get("warning")) + _as_int(summary.get("skipped"))
+    warnings = _as_int(summary.get("warning"))
     if failed:
         state = "error"
     elif warnings or restore["failed"] or restore["overdue"]:
@@ -180,6 +185,7 @@ def build_unraid_dashboard_widget_cache(
             "enabled": len(enabled_jobs),
             "successful": _as_int(summary.get("success")),
             "warnings": warnings,
+            "skipped": _as_int(summary.get("skipped")),
             "failed": failed,
             "running": len(running_jobs),
             "items": job_items,
@@ -212,6 +218,7 @@ def build_unraid_dashboard_widget_startup_cache(
             "enabled": len(enabled_jobs),
             "successful": 0,
             "warnings": 0,
+            "skipped": 0,
             "failed": 0,
             "running": 0,
             "items": _job_cache_items(enabled_jobs, {}),
@@ -406,6 +413,7 @@ def _has_enabled_jobs_without_backup_status_evidence(cache: dict[str, Any] | Non
     counters = (
         _as_int(jobs.get("successful"))
         + _as_int(jobs.get("warnings"))
+        + _as_int(jobs.get("skipped"))
         + _as_int(jobs.get("failed"))
     )
     if counters > 0:
@@ -629,6 +637,7 @@ def _restore_proof_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _latest_backup(backups: list[dict[str, Any]], jobs: list[dict[str, Any]]) -> dict[str, Any]:
+    """Return the latest run with an absolute time and separate duration label."""
     latest = None
     latest_dt = None
     for row in backups:
@@ -648,8 +657,20 @@ def _latest_backup(backups: list[dict[str, Any]], jobs: list[dict[str, Any]]) ->
     return {
         "name": name or "Backup",
         "detail": _latest_backup_detail(latest),
+        "timestamp": _local_timestamp_iso(latest.get("timestamp")),
+        "duration": str(latest.get("duration_formatted") or "").strip(),
         "status": _normalize_status(status),
     }
+
+
+def _local_timestamp_iso(value: Any) -> str:
+    """Return an offset-aware status time for browser rendering, or empty.
+
+    Naive status times use the server's local timezone. Existing offsets are
+    converted by the shared status parser before attaching the local offset.
+    """
+    parsed = _parse_datetime(str(value or ""))
+    return parsed.astimezone().isoformat() if parsed is not None else ""
 
 
 def _latest_backup_detail(row: dict[str, Any]) -> str:
@@ -664,6 +685,10 @@ def _latest_backup_detail(row: dict[str, Any]) -> str:
 
 
 def _next_backups(config: dict, jobs: list[dict[str, Any]], now: datetime) -> list[dict[str, str]]:
+    """Read up to two upcoming schedules, including offset-aware instants.
+
+    Return an empty list if schedules cannot be read; never execute a job.
+    """
     try:
         from notification_reminder_api import _next_expected_run
         from schedule_api import get_schedules
@@ -684,6 +709,7 @@ def _next_backups(config: dict, jobs: list[dict[str, Any]], now: datetime) -> li
         rows.append((next_run, {
             "name": str(job.get("display_name") or job.get("name") or key).strip(),
             "time": _format_short_datetime(next_run, local_now),
+            "scheduled_at": next_run.astimezone().isoformat(),
         }))
     rows.sort(key=lambda item: item[0])
     return [row for _dt, row in rows[:2]]
@@ -696,13 +722,14 @@ def _display_job_name(row: dict[str, Any]) -> str:
 
 
 def _parse_datetime(value: str) -> datetime | None:
+    """Parse stored ISO or historical display times into server-local naive time."""
     text = str(value or "").strip()
     if not text:
         return None
     for candidate in (text, text.replace("Z", "+00:00")):
         try:
             parsed = datetime.fromisoformat(candidate)
-            return parsed.replace(tzinfo=None) if parsed.tzinfo else parsed
+            return parsed.astimezone().replace(tzinfo=None) if parsed.tzinfo else parsed
         except ValueError:
             pass
     for fmt in ("%Y-%m-%d %H:%M:%S", "%d.%m.%Y, %H:%M:%S", "%d.%m.%Y %H:%M:%S"):
@@ -734,7 +761,9 @@ def _normalize_status(status: str) -> str:
     value = str(status or "").lower()
     if value == "success":
         return "ok"
-    if value in {"warning", "cancelled", "skipped"}:
+    if value == "skipped":
+        return "skipped"
+    if value in {"warning", "cancelled"}:
         return "warning"
     if value in {"error", "failed", "failure"}:
         return "error"

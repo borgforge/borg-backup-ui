@@ -1,5 +1,11 @@
 # Changelog
 
+## Pending - Native Unraid widget freshness and contrast (#546)
+
+- Export absolute backup and schedule times, render relative labels in the browser, and distinguish data update time from successful fetch time without periodic Borg calls or status scans. Mark elapsed cached schedules explicitly and retain evidence on failed or invalid fetches.
+- Separate skipped runs from warnings, retain overdue warnings, and use accessible light/dark palettes selected from the actual Unraid background. Add refresh busy state and keyboard focus styling.
+- Cover time changes, cache refresh failures, skipped/overdue classification and theme switching with script tests; document the event-driven cache in both manuals.
+
 ## Pending - Restart services before repository maintenance (#552)
 
 - Recover Docker containers and VMs immediately after successful or warning-only archive creation, before prune, compact, and check. Preserve cleanup recovery for failed or cancelled creation.

@@ -850,7 +850,8 @@ def test_unraid_dashboard_widget_does_not_start_periodic_status_scans():
     assert "UNRAID_DASHBOARD_WIDGET_REFRESH_SECONDS" not in source
     assert "backup job finished" not in runner_source
     assert "from lib.status import StatusStore" in widget_source
-    assert "Based on:" in page
+    assert "Data updated:" in page
+    assert "Last fetched:" in page
     assert "adjustedJobCounts" in page
     assert "function jobStatusEvidence(data)" in page
     assert "cacheState !== 'fresh' || (counts.total && !hasEvidence)" in page
@@ -934,3 +935,50 @@ def test_settings_javascript_has_clipboard_fallback_for_plain_http():
     assert "window.isSecureContext" in source
     assert "copyHomepageWidgetFieldFallback" in source
     assert "document.execCommand('copy')" in source
+
+
+def test_widget_keeps_skipped_separate_and_exports_absolute_latest_time(monkeypatch):
+    """Skipped runs do not create warnings and carry browser-usable time metadata."""
+    monkeypatch.setattr(unraid_dashboard_widget, '_read_jobs', lambda *_: [
+        {'key': 'appdata', 'name': 'Appdata', 'enabled': True}])
+    monkeypatch.setattr(unraid_dashboard_widget, '_repository_summary', lambda *_: {'online': 1, 'total': 1})
+    monkeypatch.setattr(unraid_dashboard_widget, '_next_backups', lambda *_: [])
+    result = unraid_dashboard_widget.build_unraid_dashboard_widget_cache({}, {
+        'summary': {'success': 0, 'warning': 0, 'skipped': 1, 'error': 0},
+        'backups': [{'key': 'appdata', 'status': 'skipped', 'timestamp': '2026-10-09T10:00:00+02:00',
+                     'duration_formatted': '6m', 'restore_verification_status': 'not_required'}],
+    })
+    assert result['jobs']['skipped'] == 1
+    assert result['jobs']['warnings'] == 0
+    assert result['status']['state'] == 'ok'
+    assert result['latest_backup']['status'] == 'skipped'
+    assert datetime.fromisoformat(result['latest_backup']['timestamp']) == datetime(2026, 10, 9, 8, tzinfo=timezone.utc)
+    assert result['latest_backup']['duration'] == '6m'
+
+
+def test_widget_schedule_exports_timestamp_without_freezing_relative_day(monkeypatch):
+    """Schedule instants retain an offset even when the cached label says Tomorrow."""
+    import schedule_api
+    import notification_reminder_api
+    monkeypatch.setattr(schedule_api, 'get_schedules', lambda _: {'job': {'enabled': True, 'cron': '0 6 * * *'}})
+    monkeypatch.setattr(notification_reminder_api, '_next_expected_run',
+                        lambda *_: datetime(2026, 10, 10, 6))
+    result = unraid_dashboard_widget._next_backups({}, [{'key': 'job', 'name': 'Appdata'}], datetime(2026, 10, 9, 23))
+    assert result[0]['time'] == 'Tomorrow 06:00'
+    parsed = datetime.fromisoformat(result[0]['scheduled_at'])
+    assert parsed.tzinfo is not None
+    assert parsed.astimezone().replace(tzinfo=None) == datetime(2026, 10, 10, 6)
+
+
+def test_widget_invalid_latest_timestamp_is_not_exported():
+    assert unraid_dashboard_widget._local_timestamp_iso('invalid') == ''
+
+
+def test_widget_latest_run_selection_compares_instants_across_offsets():
+    """Offset-aware timestamps are ordered by actual time, not clock text."""
+    latest = unraid_dashboard_widget._latest_backup([
+        {'key': 'older', 'name': 'Older', 'status': 'success', 'timestamp': '2026-10-09T10:00:00+02:00'},
+        {'key': 'newer', 'name': 'Newer', 'status': 'success', 'timestamp': '2026-10-09T09:00:00Z'},
+    ], [])
+    assert latest['name'] == 'Newer'
+    assert datetime.fromisoformat(latest['timestamp']) == datetime(2026, 10, 9, 9, tzinfo=timezone.utc)
