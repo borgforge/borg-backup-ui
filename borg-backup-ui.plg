@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.09.24.1028">
+<!ENTITY version   "2026.10.09.1435">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -20,6 +20,20 @@
 
 <CHANGES>
 <![CDATA[
+###2026.10.09.1435###
+### Bug Fixes
+
+- Keep Unraid dashboard widget time labels current, distinguish skipped backups from warnings, clarify cached data and refresh times, and improve text and action-button contrast in light and dark themes. (#546)
+- Clearly identify Pre/Post failures and script exit codes in History and logs. A failed Pre reports that the backup was not started; log completion headings reflect failure, cancellation or warnings. (#550)
+- Restart Docker containers and VMs after archive creation, before retention, compaction, and repository checks, so maintenance no longer prolongs service downtime. (#552)
+
+### Improvements
+
+- Manage reusable Bash scripts in Settings and select general Pre/Post hooks in the job wizard. Pre runs before backup preparation; Post runs after maintenance and cleanup, optionally also on failure, skip or cancellation. Includes syntax validation, timeouts and separate script outcomes in history. Central edits apply to the next run; active runs retain their script snapshot. (#550)
+- Match the script editor to the shared Settings card layout and keep History detail backgrounds uniform, including optional script results. (#550)
+- Show which jobs use each script in a compact expandable list, including Pre/Post conditions, and add Bash syntax highlighting, line numbers and navigation to syntax errors in the editor. (#550)
+- Duplicate scripts and import/export Bash .sh files. Imports require a Bash shebang and valid syntax; duplicates and imports open unassigned drafts for review before saving. (#550)
+
 ###2026.09.24.1028###
 ### Bug Fixes
 
@@ -37,25 +51,6 @@
     - Cached collection reads existing plugin data without running Borg or refreshing repositories. Missing evidence and collector failures remain visible.
     - Redesigned Grafana dashboard with the plugin icon, active jobs, equal-sized job cards, storage efficiency and consolidated backup, recovery and repository details.
 - Browse & Restore can show all archives in the selected repository or use a custom archive name pattern, including archives from other applications. The job's current and historical archive prefixes remain the default. Backup names and retention rules are unchanged (#537).
-
-###2026.09.17.2204###
-### Migration and compatibility
-
-- Existing interval schedules and reports are preserved. Jobs that previously only had a scheduled policy without a cron trigger now show "No schedule"; choose an execution time under Restore Tests. Missed or busy runs are not automatically retried. (#493)
-
-### Bug Fixes
-
-- Prevent backups and restore tests from using the same repository concurrently. The later operation is skipped with a recorded reason; skipped tests preserve the previous verification result. Scheduled tests use the job's test level without being blocked by the former global interval. (#493)
-
-- Keep overdue reminders aligned with the configured evidence validity for calendar schedules, independently of the former interval. (#493)
-
-- Show planning-dialog validation messages in the selected plugin language, independently of the browser language. Clarify the role of global settings for existing batch and interval tests. (#493)
-
-- Distinguish the next scheduled restore test from the evidence deadline in notification-reminder diagnostics. (#493)
-
-### Improvements
-
-- Schedule restore tests per job at a daily, weekly or monthly time. Saving a plan installs its cron trigger; the planning page shows whether cron is active and the next scheduled start. Test evidence validity is configured separately. (#493)
 
 ]]>
 </CHANGES>
@@ -82,7 +77,7 @@ PLUGIN_DIR="/boot/config/plugins/${NAME}"
 PACKAGE_FILE="${PLUGIN_DIR}/${NAME}-${VERSION}.txz"
 PACKAGE_TMP="${PACKAGE_FILE}.tmp"
 PACKAGE_URL="&pkgurl;"
-EXPECTED_MD5="22b5f8c9b7cbad095d6290fb8a2916aa"
+EXPECTED_MD5="8bdb3f31d721299648de3256711067dd"
 INSTALLED_MD5_FILE="${PLUGIN_DIR}/.installed-package-md5"
 VENDOR_DIR="${PLUGIN_DIR}/runtime/vendor"
 VENDOR_BUNDLE_DIR="${PLUGIN_DIR}/runtime/vendor-bundles"
