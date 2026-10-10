@@ -35,3 +35,10 @@ Test combinations:
 
 Skipped runs caused by a resource-lock conflict have not started and execute
 neither hook. A parity/USB skip after Pre follows the selected Post condition.
+
+## Practical templates (#557)
+
+For configurable source checks, Wake-on-LAN, database dumps and a Post webhook,
+see the separate [practical collection](practical/README.md)
+([Deutsch](practical/README.de.md)). Unlike the smoke-test scripts above, those
+templates can write exports or contact services after explicit configuration.
