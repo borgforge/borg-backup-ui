@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.10.11.1525">
+<!ENTITY version   "2026.10.17.1802">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -20,6 +20,21 @@
 
 <CHANGES>
 <![CDATA[
+###2026.10.17.1802###
+### Bug Fixes
+
+- The job wizard now shows schedule fields and the next-run preview only when scheduling is enabled. Disabled schedules clearly indicate that the job runs manually, and toggling preserves entered values. (#568)
+
+### Improvements
+
+- Run existing backup jobs sequentially in job groups with their own schedules, ordered steps, error policies and integrated logs. Individual jobs retain their settings, scripts and schedules. (#570)
+- Show group membership on individual jobs and retain group context in history and reports. Export and import complete job groups with their jobs. (#570)
+- Keep group execution statuses aligned, identify related dashboard jobs with linked group names and step numbers, and preserve the log viewport size when switching between live and saved logs. (#570)
+- Keep automatic log following enabled when opening the current live log, and show the final available job log even when short jobs finish between refreshes. (#570)
+- Select several group jobs together using search, location filters and clear job identities instead of a compact dropdown. (#570)
+- Keep dashboard group badges and start times on one line, and use application dialogs for group deletion and discarding unsaved edits. Unchanged group settings close without a confirmation. (#570)
+- Arrange equally sized group actions consistently as edit, delete and start, with matching labels. (#570)
+
 ###2026.10.11.1525###
 ### Bug Fixes
 
@@ -47,15 +62,6 @@
 - Show which jobs use each script in a compact expandable list, including Pre/Post conditions, and add Bash syntax highlighting, line numbers and navigation to syntax errors in the editor. (#550)
 - Duplicate scripts and import/export Bash .sh files. Imports require a Bash shebang and valid syntax; duplicates and imports open unassigned drafts for review before saving. (#550)
 
-###2026.09.24.1028###
-### Bug Fixes
-
-- Selected source folders in the job wizard now use the available card height, making larger selections easier to review. Longer lists scroll within the card with a clearer scrollbar, while narrow layouts keep the backup destination accessible. (#539)
-
-### Security
-
-- Restrict history log access to configured and supported legacy log directories, preventing reads outside these directories through file paths or symbolic links. (GHSA-h4gr-4cm5-92gr)
-
 ]]>
 </CHANGES>
 
@@ -81,7 +87,7 @@ PLUGIN_DIR="/boot/config/plugins/${NAME}"
 PACKAGE_FILE="${PLUGIN_DIR}/${NAME}-${VERSION}.txz"
 PACKAGE_TMP="${PACKAGE_FILE}.tmp"
 PACKAGE_URL="&pkgurl;"
-EXPECTED_MD5="912da5a874b86884527e677574c02728"
+EXPECTED_MD5="f367bc30a9609007863889392dc75772"
 INSTALLED_MD5_FILE="${PLUGIN_DIR}/.installed-package-md5"
 VENDOR_DIR="${PLUGIN_DIR}/runtime/vendor"
 VENDOR_BUNDLE_DIR="${PLUGIN_DIR}/runtime/vendor-bundles"
