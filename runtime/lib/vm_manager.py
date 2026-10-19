@@ -33,7 +33,7 @@ import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +53,7 @@ class VmConfig:
     warning_minutes: int = 5
     shutdown_timeout: int = 300
     startup_wait: int = 60
+    force_stop: bool = False
 
     @classmethod
     def from_config(cls, env: Dict[str, str]) -> "VmConfig":
@@ -79,13 +80,45 @@ class VmConfig:
 
 @dataclass
 class VmShutdownResult:
-    """Ergebnis eines shutdown_all()-Aufrufs."""
+    """Mutable shutdown progress, also retained when preparation fails.
+
+    ``target_vms`` contains initially active guests; ``stopped_vms`` contains
+    confirmed inactive guests. Pending requests may finish during recovery.
+    """
 
     stopped_vms: List[str] = field(default_factory=list)
+    target_vms: List[str] = field(default_factory=list)
+    pending_vms: List[str] = field(default_factory=list)
+    forced_vms: List[str] = field(default_factory=list)
 
     @property
     def count(self) -> int:
         return len(self.stopped_vms)
+
+
+class VmShutdownError(RuntimeError):
+    """Preparation failure with a stable code, reason, VM names and timeout."""
+
+    failure_code = "vm_shutdown_failed"
+
+    def __init__(self, reason: str, vms: List[str], timeout: int, detail: str = "") -> None:
+        self.reason, self.vms, self.timeout = reason, list(vms), timeout
+        self.detail = detail
+        names = ", ".join(json.dumps(name, ensure_ascii=False) for name in vms) or "VM state"
+        super().__init__(
+            f"Backup not started: VM shutdown failed ({reason}); {names}; "
+            f"shutdown timeout {timeout}s." + (f" {detail}" if detail else "")
+        )
+
+
+def _command_detail(value: str) -> str:
+    """Mask command diagnostics and remove control characters for logs/status."""
+    try:
+        from security_utils import mask_secrets
+    except ImportError:
+        # Runtime-only installations must never expose unfiltered diagnostics.
+        return "Command diagnostics unavailable."
+    return re.sub(r"[\x00-\x1f\x7f]", " ", mask_secrets(str(value or "")))[:400]
 
 
 @dataclass
@@ -165,198 +198,148 @@ class VmManager:
     # Öffentliche Methoden
     # ------------------------------------------------------------------
 
-    def shutdown_all(self) -> VmShutdownResult:
+    def shutdown_all(self, *, before_shutdown: Optional[Callable[[VmShutdownResult], None]] = None) -> VmShutdownResult:
+        """Shut down initially active guests; call persistence before any request.
+
+        Raises VmShutdownError on unconfirmed shutdown. Force-off is used only
+        after the configured timeout and only with explicit job permission.
+        The callback may raise to prevent all shutdown requests on write failure.
         """
-        Fährt alle laufenden VMs herunter (mit Vorwarnung).
+        return self._shutdown(None, before_shutdown)
 
-        Phase 1: Alle VMs parallel warnen (threading)
-        Phase 2: Zentraler Countdown (warning_minutes)
-        Phase 3: virsh shutdown, warten bis alle gestoppt (shutdown_timeout)
+    def shutdown_selected(self, vm_names: List[str], *, before_shutdown: Optional[Callable[[VmShutdownResult], None]] = None) -> VmShutdownResult:
+        """Shut down selected initially active guests with the same safety rules."""
+        return self._shutdown(_normalize_vm_names(vm_names), before_shutdown)
 
-        Returns:
-            VmShutdownResult mit Liste der gestoppten VMs.
-
-        Raises:
-            SystemExit(1): Wenn VMs nach Timeout noch laufen.
-        """
-        if not virsh_available():
-            logger.info("virsh is unavailable; skipping VM shutdown")
-            return VmShutdownResult()
-
-        running = self._get_running_vms()
-        if not running:
-            logger.info("No running VMs")
-            return VmShutdownResult()
-
-        logger.info("Found %d running VM(s)", len(running))
-        for vm in running:
-            vm_id = self._get_vm_id(vm)
-            logger.info("  - %-30s (ID: %s)", vm, vm_id)
-
-        # Phase 1: Alle VMs parallel warnen
-        warning_msg = (
-            "WARNING: The VM is about to be backed up. "
-            f"It will shut down in {self.config.warning_minutes} minutes."
-        )
-        logger.info(
-            "Sending warning to all %d VM(s) (wait time: %d minutes)",
-            len(running), self.config.warning_minutes,
-        )
-        self._warn_vms_parallel(running, warning_msg)
-
-        # Phase 2: Zentraler Countdown
-        for remaining in range(self.config.warning_minutes, 0, -1):
-            if remaining == 1:
-                logger.info("Final minute before shutdown; sending final warning to all VMs...")
-                self._warn_vms_parallel(running, "WARNING: The system is shutting down NOW!")
-            else:
-                logger.info("Waiting %d more minute(s) before VM shutdown...", remaining)
-            time.sleep(60)
-
-        # Phase 3: Graceful Shutdown
-        logger.info("Shutting down %d VM(s) gracefully...", len(running))
-        for vm in running:
-            logger.info("  Shutdown: %s", vm)
+    def _shutdown(self, selected: Optional[List[str]], before_shutdown: Optional[Callable[[VmShutdownResult], None]]) -> VmShutdownResult:
+        """Track progress through graceful shutdown, optional force-off and errors."""
+        active = self._get_running_vms()
+        targets = active if selected is None else [vm for vm in selected if vm in active]
+        result = VmShutdownResult(target_vms=list(targets))
+        if not targets:
+            return result
+        running = set(self._get_running_vms(running_only=True))
+        unsupported = [vm for vm in targets if vm not in running]
+        if unsupported:
+            raise VmShutdownError("guest_not_running", unsupported, self.config.shutdown_timeout,
+                                  "Resume or shut down paused guests manually before retrying.")
+        if self.config.warning_minutes > 0:
+            self._warn_vms_parallel(targets, "WARNING: The system will shut down for backup!")
+            for remaining in range(self.config.warning_minutes, 0, -1):
+                logger.info("Waiting %d minute(s) before VM shutdown...", remaining)
+                if remaining == 1:
+                    self._warn_vms_parallel(targets, "WARNING: The system is shutting down NOW!")
+                time.sleep(60)
+        if before_shutdown is not None:
             try:
-                subprocess.run(
-                    ["virsh", "shutdown", vm],
-                    capture_output=True, timeout=30,
-                )
-            except (subprocess.TimeoutExpired, OSError) as exc:
-                logger.warning("virsh shutdown %s failed: %s", vm, exc)
+                before_shutdown(result)
+            except (OSError, ValueError) as exc:
+                raise VmShutdownError("recovery_record_failed", targets, self.config.shutdown_timeout,
+                                      type(exc).__name__) from None
+        errors = []
+        for vm in targets:
+            # Retain an uncertain request even when the subprocess times out.
+            result.pending_vms.append(vm)
+            detail = self._run_vm_command("shutdown", vm)
+            if detail:
+                errors.append(detail)
+        remaining = self._wait_for_targets(result, max(0, self.config.shutdown_timeout))
+        if remaining and self.config.force_stop is True:
+            for vm in remaining:
+                # Query again before each destructive operation; unknown is not off.
+                if vm not in self._get_running_vms():
+                    continue
+                logger.warning("Force-stopping VM %s after shutdown timeout (job opt-in)", json.dumps(vm))
+                detail = self._run_vm_command("destroy", vm)
+                if detail:
+                    errors.append(detail)
+                result.forced_vms.append(vm)
+            remaining = self._wait_for_targets(result, 10)
+        if remaining:
+            reason = "force_stop_failed" if self.config.force_stop is True else "shutdown_timeout"
+            raise VmShutdownError(reason, remaining, self.config.shutdown_timeout, " ".join(errors))
+        active_after = self._get_running_vms()
+        unexpected = [vm for vm in active_after if selected is None or vm in selected]
+        if unexpected:
+            raise VmShutdownError("guest_became_active", unexpected, self.config.shutdown_timeout)
+        logger.info("All %d target VM(s) confirmed stopped", len(targets))
+        return result
 
-        # Warten bis alle gestoppt
-        if not self._wait_for_shutdown(timeout=self.config.shutdown_timeout):
-            still_running = self._get_running_vms()
-            logger.error(
-                "ERROR: %d VM(s) could not be shut down: %s",
-                len(still_running), still_running,
-            )
-            raise SystemExit(1)
+    def _run_vm_command(self, action: str, vm: str) -> str:
+        """Return masked diagnostics for a failed virsh command, otherwise empty."""
+        try:
+            proc = subprocess.run(["virsh", action, vm], capture_output=True, text=True, timeout=30)
+            if proc.returncode == 0:
+                return ""
+            detail = f"exit {proc.returncode}: {_command_detail(proc.stderr or proc.stdout)}"
+        except subprocess.TimeoutExpired:
+            detail = "command timed out after 30s"
+        except OSError as exc:
+            detail = f"command could not run ({type(exc).__name__})"
+        message = f"virsh {action} {json.dumps(vm, ensure_ascii=False)}: {detail}"
+        logger.warning("%s", message)
+        return message
 
-        logger.info("All VMs shut down successfully")
-        return VmShutdownResult(stopped_vms=list(running))
-
-    def shutdown_selected(self, vm_names: List[str]) -> VmShutdownResult:
-        """Shuts down only selected running VMs."""
-        selected = _normalize_vm_names(vm_names)
-        if not selected:
-            logger.info("No VMs selected; skipping VM shutdown")
-            return VmShutdownResult()
-
-        if not virsh_available():
-            logger.info("virsh is unavailable; skipping selected VM shutdown")
-            return VmShutdownResult()
-
-        running_all = self._get_running_vms()
-        running = [name for name in selected if name in running_all]
-        missing = [name for name in selected if name not in running_all]
-        if missing:
-            logger.info("Selected VMs are not running or missing: %s", ", ".join(missing))
-        if not running:
-            logger.info("No selected VMs are currently running")
-            return VmShutdownResult()
-
-        logger.info("Found %d selected running VM(s)", len(running))
-        for vm in running:
-            vm_id = self._get_vm_id(vm)
-            logger.info("  - %-30s (ID: %s)", vm, vm_id)
-
-        warning_msg = (
-            "WARNING: The VM is about to be backed up. "
-            f"It will shut down in {self.config.warning_minutes} minutes."
-        )
-        logger.info(
-            "Sending warning to %d selected VM(s) (wait time: %d minutes)",
-            len(running), self.config.warning_minutes,
-        )
-        self._warn_vms_parallel(running, warning_msg)
-
-        for remaining in range(self.config.warning_minutes, 0, -1):
-            if remaining == 1:
-                logger.info("Final minute before shutdown; sending final warning to selected VMs...")
-                self._warn_vms_parallel(running, "WARNING: The system is shutting down NOW!")
-            else:
-                logger.info("Waiting %d more minute(s) before selected VM shutdown...", remaining)
-            time.sleep(60)
-
-        logger.info("Shutting down %d selected VM(s) gracefully...", len(running))
-        for vm in running:
-            logger.info("  Shutdown: %s", vm)
+    def _wait_for_targets(self, result: VmShutdownResult, timeout: int) -> List[str]:
+        """Update confirmed stops and return unresolved guests after a bounded wait."""
+        deadline = time.monotonic() + timeout
+        while True:
             try:
-                subprocess.run(
-                    ["virsh", "shutdown", vm],
-                    capture_output=True, timeout=30,
-                )
-            except (subprocess.TimeoutExpired, OSError) as exc:
-                logger.warning("virsh shutdown %s failed: %s", vm, exc)
-
-        if not self._wait_for_selected_shutdown(running, timeout=self.config.shutdown_timeout):
-            still_running = [vm for vm in running if vm in self._get_running_vms()]
-            logger.error(
-                "ERROR: %d selected VM(s) could not be shut down: %s",
-                len(still_running), still_running,
-            )
-            raise SystemExit(1)
-
-        logger.info("Selected VMs shut down successfully")
-        return VmShutdownResult(stopped_vms=list(running))
+                active = set(self._get_running_vms())
+            except VmShutdownError as exc:
+                raise VmShutdownError(exc.reason, result.target_vms, exc.timeout, exc.detail) from None
+            result.stopped_vms = [vm for vm in result.target_vms if vm not in active]
+            result.pending_vms = [vm for vm in result.pending_vms if vm in active]
+            remaining = [vm for vm in result.target_vms if vm in active]
+            remaining_time = deadline - time.monotonic()
+            if not remaining or remaining_time <= 0:
+                return remaining
+            time.sleep(min(10, remaining_time))
 
     def start_all(self, result: VmShutdownResult) -> VmStartResult:
-        """
-        Startet alle zuvor gestoppten VMs neu.
+        """Recover initially active guests without declaring pending shutdowns safe.
 
-        Fehlertolerant – einzelne Startfehler brechen den Prozess nicht ab.
-        Validiert nach startup_wait ob alle VMs laufen.
+        Restart confirmed inactive targets immediately. Observe unresolved
+        shutdown requests for up to 30 additional seconds and restart late stops.
+        Unknown states, unresolved requests and failed restarts remain failures.
+        This method never force-stops a guest.
         """
-        target_vms = _normalize_vm_names(result.stopped_vms)
-        start_result = VmStartResult(target_vms=target_vms)
-        if not target_vms:
-            return start_result
+        targets = _normalize_vm_names(result.target_vms or result.stopped_vms)
+        outcome = VmStartResult(target_vms=targets)
+        if not targets:
+            return outcome
         if not virsh_available():
-            start_result.available = False
-            start_result.failed_vms = list(target_vms)
-            logger.error(
-                "ERROR: virsh is unavailable; %d VM(s) could not be restarted: %s",
-                len(target_vms),
-                ", ".join(target_vms),
-            )
-            return start_result
-
-        logger.info("Restarting %d VM(s)...", len(target_vms))
-        for vm in target_vms:
-            logger.info("  Starting: %s", vm)
-            try:
-                proc = subprocess.run(
-                    ["virsh", "start", vm],
-                    capture_output=True, text=True, timeout=30,
-                )
-                if proc.returncode != 0:
-                    detail = (proc.stderr or proc.stdout or "virsh start failed").strip()
-                    logger.warning("  WARNING: Could not start %s: %s", vm, detail)
-            except (subprocess.TimeoutExpired, OSError) as exc:
-                logger.warning("  WARNING: Could not start %s: %s", vm, exc)
-
-        time.sleep(self.config.startup_wait)
-
-        running_after = set(self._get_running_vms())
-        start_result.started_vms = [vm for vm in target_vms if vm in running_after]
-        start_result.failed_vms = [vm for vm in target_vms if vm not in running_after]
-        if start_result.success:
-            logger.info(
-                "All VMs restarted successfully (%d/%d)",
-                start_result.count_after, start_result.count_before,
-            )
+            outcome.available = False
+            outcome.failed_vms = targets
+            return outcome
+        pending = set(result.pending_vms)
+        attempted = set()
+        recovery_wait = min(30, max(0, self.config.shutdown_timeout))
+        deadline = time.monotonic() + recovery_wait
+        try:
+            while True:
+                active = set(self._get_running_vms())
+                for vm in targets:
+                    if vm not in active and vm not in attempted:
+                        pending.discard(vm)
+                        attempted.add(vm)
+                        self._run_vm_command("start", vm)
+                remaining_time = deadline - time.monotonic()
+                if not pending or remaining_time <= 0:
+                    break
+                time.sleep(min(5, remaining_time))
+            time.sleep(max(0, self.config.startup_wait))
+            active = set(self._get_running_vms())
+            outcome.started_vms = [vm for vm in targets if vm in active and vm not in pending]
+            outcome.failed_vms = [vm for vm in targets if vm not in outcome.started_vms]
+        except VmShutdownError as exc:
+            logger.error("VM recovery state could not be verified (%s): %s", exc.reason, exc.detail)
+            outcome.failed_vms = targets
+        if outcome.failed_vms:
+            logger.error("VM recovery unresolved for: %s", json.dumps(outcome.failed_vms))
         else:
-            logger.warning(
-                "WARNING: %d VM(s) could not be started (%d/%d running)",
-                len(start_result.failed_vms),
-                start_result.count_after,
-                start_result.count_before,
-            )
-            for vm in start_result.failed_vms:
-                logger.warning("  - %s", vm)
-        return start_result
+            logger.info("All %d target VM(s) recovered", len(targets))
+        return outcome
 
     def get_vm_os_type(self, vm_name: str) -> str:
         """
@@ -460,18 +443,23 @@ class VmManager:
     # Interne Methoden
     # ------------------------------------------------------------------
 
-    def _get_running_vms(self) -> List[str]:
-        """Gibt Namen aller laufenden VMs zurück."""
+    def _get_running_vms(self, *, running_only: bool = False) -> List[str]:
+        """Return active domains (including paused); raise if state is unknown.
+
+        ``running_only`` restricts the initial snapshot to running guests.
+        An empty list is valid only after a successful libvirt query. Paused or
+        shutting-down guests must not be treated as safe to back up.
+        """
         try:
-            result = subprocess.run(
-                ["virsh", "list", "--state-running", "--name"],
-                capture_output=True, text=True, timeout=30,
-            )
-            if result.returncode != 0:
-                return []
-            return [line.strip() for line in result.stdout.splitlines() if line.strip()]
-        except (subprocess.TimeoutExpired, OSError):
-            return []
+            command = ["virsh", "list", *(["--state-running"] if running_only else []), "--name"]
+            result = subprocess.run(command, capture_output=True, text=True, timeout=30)
+        except (subprocess.TimeoutExpired, OSError) as exc:
+            raise VmShutdownError("state_query_failed", [], self.config.shutdown_timeout,
+                                  type(exc).__name__) from None
+        if result.returncode != 0:
+            raise VmShutdownError("state_query_failed", [], self.config.shutdown_timeout,
+                                  _command_detail(result.stderr or result.stdout))
+        return [line.strip() for line in result.stdout.splitlines() if line.strip()]
 
     def _get_vm_id(self, vm_name: str) -> str:
         """Gibt die Domain-ID einer VM zurück."""

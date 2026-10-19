@@ -43,6 +43,8 @@ if TYPE_CHECKING:
     from lib.borg_runner import BorgStats
     from lib.notifications import MailConfig
 
+from .vm_manager import VmShutdownError
+
 logger = logging.getLogger(__name__)
 
 _HR = "━" * 80
@@ -386,7 +388,7 @@ class BackupJob:
                         str(path) for path in exc_val.missing_paths
                     ]
                     self._final_msg = str(exc_val)
-                if isinstance(exc_val, UsbMountAccessError):
+                if isinstance(exc_val, (UsbMountAccessError, VmShutdownError)):
                     self._failure_code = exc_val.failure_code
                     self._final_msg = str(exc_val)
                     logger.error("%s", exc_val)
@@ -472,10 +474,13 @@ class BackupJob:
         borg_stats: Optional["BorgStats"] = None,
         final_msg: str = "",
     ) -> None:
-        """Setzt das Backup-Ergebnis. Muss vor Ende des with-Blocks aufgerufen werden."""
-        self._borg_exit = borg_exit
+        """Set the outcome before finalization, preserving VM preparation failures."""
+        self._borg_exit = max(2, borg_exit) if self._failure_code == VmShutdownError.failure_code else borg_exit
         self._borg_stats = borg_stats
-        self._final_msg = final_msg
+        if self._failure_code == VmShutdownError.failure_code:
+            self._final_msg = " ".join(filter(None, (self._final_msg, final_msg)))
+        else:
+            self._final_msg = final_msg
 
     @property
     def exit_code(self) -> int:
@@ -507,14 +512,17 @@ class BackupJob:
         self._borg_exit = 2
         self._cancelled = False
         self._skip_finish = False
-        self._failure_code = f"{phase.upper()}_SCRIPT_FAILED"
+        if self._failure_code != VmShutdownError.failure_code:
+            self._failure_code = f"{phase.upper()}_SCRIPT_FAILED"
         message = f"{phase.title()} script {outcome['status']} (exit {outcome['exit_code']})."
         if phase == "pre":
             message += " Backup was not started."
         self._final_msg = (self._final_msg + " " + message).strip()
 
     def set_cancelled(self, message: str = "Backup cancelled by user request.") -> None:
-        """Mark the run as deliberately cancelled after safe runtime recovery."""
+        """Mark deliberate cancellation without hiding a VM preparation failure."""
+        if self._failure_code == VmShutdownError.failure_code:
+            return
         self._cancelled = True
         self._borg_exit = 130
         self._failure_code = USER_CANCELLED
@@ -578,7 +586,8 @@ class BackupJob:
         if recovery_failures and not self._skip_finish:
             self._borg_exit = 2
             self._cancelled = False
-            self._failure_code = RUNTIME_RECOVERY_FAILED
+            if self._failure_code != VmShutdownError.failure_code:
+                self._failure_code = RUNTIME_RECOVERY_FAILED
             recovery_message = (
                 "Runtime recovery failed for "
                 + " and ".join(recovery_failures)
@@ -616,18 +625,20 @@ class BackupJob:
                 )
 
     def shutdown_vms(self, selected_names: Optional[List[str]] = None) -> None:
-        """Shut down all or selected VMs and record the returned stop state.
+        """Persist initially active targets before shutdown and retain partial progress.
 
-        The recorded VMs are restarted during explicit recovery or ``__exit__``.
-        Shutdown failures propagate from the VM manager; a partial shutdown
-        that raises before returning is not recorded here.
+        Persistence failures prevent shutdown. VmShutdownError propagates to
+        finalization, which restarts confirmed stops and retains unresolved work.
         """
+        def before_shutdown(result: "VmShutdownResult") -> None:
+            self._record_vm_recovery_state(result)
+            self._vm_shutdown_result = result
+
         if self.vm_manager is not None:
             if selected_names is None:
-                self._vm_shutdown_result = self.vm_manager.shutdown_all()
+                self._vm_shutdown_result = self.vm_manager.shutdown_all(before_shutdown=before_shutdown)
             else:
-                self._vm_shutdown_result = self.vm_manager.shutdown_selected(selected_names)
-            self._record_vm_recovery_state()
+                self._vm_shutdown_result = self.vm_manager.shutdown_selected(selected_names, before_shutdown=before_shutdown)
 
     def start_vms(self) -> None:
         """Attempt VM restart once; record the result and raise on failure."""
@@ -919,9 +930,10 @@ class BackupJob:
         if self._docker_recovery_id:
             logger.info("Runtime recovery state recorded for Docker: %s", self._docker_recovery_id)
 
-    def _record_vm_recovery_state(self) -> None:
-        result = self._vm_shutdown_result
-        if result is None or not result.stopped_vms:
+    def _record_vm_recovery_state(self, result: Optional["VmShutdownResult"] = None) -> None:
+        """Persist VM recovery intent before issuing any shutdown request."""
+        result = result if result is not None else self._vm_shutdown_result
+        if result is None or not (result.target_vms or result.stopped_vms):
             return
         try:
             from lib.runtime_recovery import record_runtime_stopped
@@ -931,7 +943,8 @@ class BackupJob:
         self._vm_recovery_id = record_runtime_stopped(
             self.config.runtime_recovery_file,
             kind="vm",
-            targets=[{"id": name, "name": name} for name in result.stopped_vms],
+            shutdown_intent=True,
+            targets=[{"id": name, "name": name} for name in (result.target_vms or result.stopped_vms)],
             job_name=self.config.job_name,
             job_id=self.config.job_id,
             backup_type=self.config.backup_type,
@@ -1019,6 +1032,8 @@ class BackupJob:
                     logger.info("%s script %s (exit %s)", phase.title(), outcome["status"], outcome["exit_code"])
                 if "pre" in failed_hooks:
                     logger.info("Backup was not started")
+            elif self._failure_code == VmShutdownError.failure_code:
+                logger.info("Backup aborted during VM preparation (exit %d); Borg backup was not started", exit_code)
             elif self._failure_code == USB_MOUNT_ACCESS_FAILED:
                 logger.info("Backup aborted during USB preflight (exit %d); Borg backup was not started", exit_code)
             else:
@@ -1267,7 +1282,7 @@ class BackupJob:
         stats = self._borg_stats
         if self._completion_repo_info is not None:
             repo_size, (repo_check_date, repo_check_status, repo_next_check) = self._completion_repo_info
-        elif self._failure_code in {REQUIRED_SOURCE_PATHS_MISSING, USB_MOUNT_ACCESS_FAILED}:
+        elif self._failure_code in {REQUIRED_SOURCE_PATHS_MISSING, USB_MOUNT_ACCESS_FAILED, VmShutdownError.failure_code}:
             repo_size = 0
             repo_check_date, repo_check_status, repo_next_check = (
                 "unknown",

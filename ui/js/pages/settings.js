@@ -1771,13 +1771,15 @@ function _renderRuntimeRecoveryEntry(entry, tone = 'warn') {
     <div class="migration-action-row ${escHtml(tone)}">
       <div>
         <strong>${escHtml(String(entry?.job_name || entry?.backup_type || 'Backup'))}</strong>
-        <span>${escHtml(settingsT('health.runtimeRecoveryDetail', {
+        <span>${escHtml(settingsT(entry?.shutdown_requested_at ? 'health.runtimeRecoveryIntentDetail' : 'health.runtimeRecoveryDetail', {
           kind: kind || 'runtime',
           state: state || 'pending',
           count: targets.length,
-          stoppedAt: String(entry?.stopped_at || '—'),
+          stoppedAt: String(entry?.shutdown_requested_at || entry?.stopped_at || '—'),
         }))}</span>
         <span>${escHtml(targetText || settingsT('health.noDetails'))}</span>
+        ${entry?.message ? `<span>${escHtml(entry.message)}</span>` : ''}
+        ${entry?.shutdown_requested_at ? `<span>${escHtml(settingsT('health.runtimeRecoveryCheckShutdown'))}</span>` : ''}
       </div>
       ${entryId ? `<button class="btn btn-secondary btn-sm migration-action-button" data-settings-action="runtime-recovery-ack" data-runtime-recovery-id="${escHtml(entryId)}">${settingsT('health.runtimeRecoveryAck')}</button>` : ''}
     </div>

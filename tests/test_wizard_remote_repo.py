@@ -170,7 +170,8 @@ def test_wizard_preview_validation_defers_appdata_risk_ack_until_save(tmp_path: 
         validate_params(params, tmp_path / "scripts", tmp_path / "data", ui_config=config)
 
 
-def test_save_storagebox_job_uses_existing_repository_object(tmp_path: Path):
+@pytest.mark.parametrize("force", [None, False, True])
+def test_save_storagebox_job_uses_existing_repository_object(tmp_path: Path, force):
     config = {"BACKUP_SCRIPTS_DIR": str(tmp_path / "data")}
     write_storage_store(config, {"storages": [{
         "storage_key": "storage_storagebox_test",
@@ -196,10 +197,18 @@ def test_save_storagebox_job_uses_existing_repository_object(tmp_path: Path):
     }]})
     params = _storagebox_params()
     params["repository_key"] = "repo_flash_storagebox_test"
+    params["vm_control"] = {"mode": "selected", "selected": ["test-vm"]}
+    if force is not None:
+        params["vm_control"]["force_stop"] = force
     result = save_job(params, tmp_path / "scripts", tmp_path / "data", config)
     metadata = json.loads(Path(result["metadata_path"]).read_text(encoding="utf-8"))
 
     assert metadata["repository_key"] == "repo_flash_storagebox_test"
+    assert metadata["vm_control"]["force_stop"] is (force is True)
+    loaded = load_job_for_wizard(result["job_id"], tmp_path / "scripts", config)
+    assert loaded["vm_control"]["force_stop"] is (force is True)
+    edited = save_job({**params, "existing_job_key": result["job_id"], "_wizard_mode": "edit"}, tmp_path / "scripts", tmp_path / "data", config)
+    assert json.loads(Path(edited["metadata_path"]).read_text())["vm_control"]["force_stop"] is (force is True)
     assert "remote_init_confirmed" not in metadata
     assert "create_repo_if_missing" not in metadata
     assert "repo" not in metadata

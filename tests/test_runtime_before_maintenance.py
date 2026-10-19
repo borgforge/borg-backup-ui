@@ -66,9 +66,12 @@ def run_backup(monkeypatch, tmp_path):
         def __init__(self, config):
             self.config = config
 
-        def shutdown_all(self):
+        def shutdown_all(self, *, before_shutdown):
+            result = vm_manager.VmShutdownResult(target_vms=["test-vm"])
+            before_shutdown(result)
             action("stop_vms")
-            return vm_manager.VmShutdownResult(stopped_vms=["test-vm"])
+            result.stopped_vms = ["test-vm"]
+            return result
 
         def start_all(self, stopped):
             assert stopped.stopped_vms == ["test-vm"]

@@ -344,9 +344,22 @@ When Docker or VM control is disabled, the related selection step is skipped. Fo
 
 > **Warning:** Appdata and VM backups can produce warnings or inconsistent data if files change during the backup. For full appdata or domains backups, stop all affected services where possible.
 
-A planned VM shutdown is reported as informational. Only a failed shutdown or restart produces a warning or error. Only containers and VMs stopped by the job that were actually running before that run are started again.
+A planned VM shutdown is reported as informational. A failed shutdown or restart, or an explicitly permitted force-off, produces a warning or error. Only containers and VMs stopped by the job that were actually running before that run are started again.
 
 Once archive creation (`borg create`) finishes, containers and VMs stopped by the job are restarted immediately, including when Borg reports warnings. Retention (`prune`), space reclamation (`compact`), and any due repository check (`check`) run afterwards and do not extend service downtime. If archive creation fails or is cancelled, cleanup still restarts the stopped workloads. If a restart fails, recovery is still attempted for the other workload type; the run ends as an error and maintenance does not start.
+
+#### VM Shutdown Failures and Optional Force-Off
+
+In the wizard's **VMs** step, **Force off VMs after the shutdown timeout** is off by default. This permission is saved per job and shown in the final review; existing jobs remain off until you explicitly enable it and save the job. It applies only to VMs within that job's selected scope that were active before preparation.
+
+- **Without force-off:** The job requests a normal shutdown and waits for **VM Shutdown Timeout (s)** under **Settings**. If a target remains active, archive creation is aborted. The log, history and failure notification identify VM preparation as the cause, with the affected VM names and timeout.
+- **With force-off:** The job first requests the same normal shutdown and waits for the same timeout. Remaining active target VMs are then powered off forcibly (`virsh destroy`). This does not delete their definitions or disks. Backup starts only after all targets have been confirmed inactive. A failed force-off or an unreadable VM state still aborts the backup. Paused guests must be resumed or shut down manually before starting the job.
+
+> **Warning:** Force-off is equivalent to cutting power. Unsaved data can be lost and guest filesystems, databases or applications can be damaged. The backup may preserve that unclean state. Enable this only if you accept that risk for the affected VMs. Increasing the shutdown timeout may be preferable for guests that need more time.
+
+Recovery is recorded before shutdown begins. If some VMs stop and another fails, the job tries to restart those already stopped. It also watches pending shutdowns for up to 30 additional seconds and restarts guests that stop during that window. A guest still shutting down, an unknown state or a failed restart remains visible under **System Health & Migration**; check the affected VM and start it manually if needed before resolving the entry. VMs already off before the job are not started. Force-off is logged as a warning. A recovery error does not replace the original preparation failure.
+
+For imported VMs, check the guest integration as well: the QEMU Guest Agent may be missing, inactive or incorrectly connected, and the guest may ignore an ACPI power-button event. Missing a Guest Agent alone does not prevent every normal shutdown; libvirt also supports ACPI. Check the guest's power settings and Guest Agent, test a normal shutdown in Unraid and review the job log before enabling force-off. See the [libvirt shutdown documentation](https://www.libvirt.org/manpages/virsh.html#shutdown).
 
 #### Docker Container Restart Priority
 
@@ -487,7 +500,7 @@ Best practices:
 
 ### 3.8 Job Groups
 
-Job groups are available starting with stable `2026.10.17.1802`. The direct script editing described here extends this feature in change #573.
+Job groups are available starting with stable `2026.10.17.1802`. The direct script editing described here is available since stable `2026.10.18.1217` (#573).
 
 A job group runs existing jobs in a fixed order. Jobs retain their sources, repositories, maintenance and Pre/Post scripts. **admin** can configure groups; **operator** and **admin** can start and stop them. **viewer** can inspect progress and logs.
 

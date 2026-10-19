@@ -59,7 +59,7 @@ def test_start_all_checks_only_target_vms(monkeypatch):
     assert result.started_vms == ["LinuxMint", "Windows11"]
     assert result.failed_vms == []
     assert result.count_after == 2
-    assert calls == [["virsh", "start", "LinuxMint"], ["virsh", "start", "Windows11"]]
+    assert calls == []  # Already active targets do not receive duplicate starts.
 
 
 def test_start_all_reports_partial_failure(monkeypatch, caplog):

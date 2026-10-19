@@ -601,7 +601,8 @@ def _runtime_control(meta: dict, kind: str) -> dict:
             if name and name not in seen:
                 seen.add(name)
                 selected.append(name)
-    return {"mode": mode, "selected": selected}
+    return {"mode": mode, "selected": selected,
+            **({"force_stop": raw.get("force_stop") is True} if kind == "vm" else {})}
 
 
 def _resolve_usb_mount_path(meta: dict, backup_scripts_dir: Path) -> str:
@@ -672,7 +673,7 @@ def main() -> int:
     from lib.borg_runner import BorgConfig, BorgRunner, parse_borg_stats  # type: ignore
     from lib.notifications import MailConfig  # type: ignore
     from lib.docker_manager import DockerConfig, DockerManager  # type: ignore
-    from lib.vm_manager import VmConfig, VmManager  # type: ignore
+    from lib.vm_manager import VmConfig, VmManager, VmShutdownError  # type: ignore
 
     job_config = BackupJobConfig.from_config(env)
     _setup_full_logging(job_config.log_file)
@@ -860,7 +861,9 @@ def main() -> int:
         if docker_control["mode"] != "none":
             docker_mgr = DockerManager(DockerConfig.from_config(env))
         if vm_control["mode"] != "none":
-            vm_mgr = VmManager(VmConfig.from_config(env))
+            vm_config = VmConfig.from_config(env)
+            vm_config.force_stop = vm_control.get("force_stop") is True
+            vm_mgr = VmManager(vm_config)
         from archive_prefix import archive_prefix_from_metadata
         archive_prefix = archive_prefix_from_metadata(meta)
         abort_on_parity = _env_flag(env.get("ABORT_ON_PARITY_CHECK"), default=True)
@@ -889,7 +892,7 @@ def main() -> int:
     except SystemExit as exc:
         result_code = job.exit_code if exc.code == 0 else 2
         return result_code
-    except (RequiredSourcePathsMissing, UsbMountAccessError):
+    except (RequiredSourcePathsMissing, UsbMountAccessError, VmShutdownError):
         result_code = 2
         return 2
     except Exception:

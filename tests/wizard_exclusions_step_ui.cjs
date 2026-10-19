@@ -115,3 +115,19 @@ test('stale script list responses do not overwrite a reopened wizard', async () 
   await context.wizardLoadScripts(1);
   assert.equal(fields.get('wiz-pre-script').value, state.scripts[0].id);
 });
+
+test('VM force-off requires a checkbox and survives edit/preview without leaking into old jobs', () => {
+  const {context, fields} = wizard();
+  context.wizardRenderRuntimeControls = () => {};
+  context._wizardSetRuntimeControl('vm', {mode: 'selected', selected: ['VM-A'], force_stop: true});
+  assert.equal(fields.get('wiz-vm-force-stop').checked, true);
+  assert.equal(context._wizardCollectParams().vm_control.force_stop, true);
+  assert.match(context._wizardRuntimePreviewText('vm', {vm_mode: 'selected', vm_selected: ['VM-A'], vm_force_stop: true}), /vmForceEnabled/);
+  context._wizardSetRuntimeControl('vm', {mode: 'all'});
+  assert.equal(fields.get('wiz-vm-force-stop').checked, false);
+  assert.equal(context._wizardCollectParams().vm_control.force_stop, false);
+  assert.match(context._wizardRuntimePreviewText('vm', {vm_mode: 'all'}), /vmForceDisabled/);
+  fields.get('wiz-vm-force-stop').checked = true;
+  fields.get('wiz-use-vm').checked = false;
+  assert.equal(context._wizardCollectParams().vm_control.force_stop, false);
+});

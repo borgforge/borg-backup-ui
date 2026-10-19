@@ -123,6 +123,7 @@ def _runtime_control_from_meta(meta: dict, kind: str) -> dict:
         "mode": mode,
         "selected": _split_runtime_selected(raw.get("selected", [])) if mode in {"selected", "except_selected"} else [],
         ack_key: bool(raw.get(ack_key, False)),
+        **({"force_stop": raw.get("force_stop") is True} if kind == "vm" else {}),
     }
 
 
@@ -797,6 +798,7 @@ def _discover_jobs_uncached(scripts_dir: Path, data_root: Path | None = None) ->
             "mode": "all" if has_vm else "none",
             "selected": [],
             "ack_domains_risk": False,
+            "force_stop": False,
         }
         return JobInfo(
             key=key,

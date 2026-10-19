@@ -70,12 +70,15 @@ def record_runtime_stopped(
     backup_location: str,
     log_file: str,
     job_id: str = "",
+    shutdown_intent: bool = False,
 ) -> str:
-    """Persist stopped Docker/VM targets before backup processing continues.
+    """Persist stopped targets or VM shutdown intent before runtime changes.
 
     Returns an entry ID, or an empty string when no valid targets remain.
     ``targets`` are deduplicated by ID/name. The entry records the current PID
     and stays pending until restart is marked or an operator acknowledges it.
+    ``shutdown_intent`` records initially active VMs before their stop requests;
+    its timestamp is an intent timestamp, not a confirmed shutdown time.
     """
     normalized_targets = _normalize_targets(targets)
     if not normalized_targets:
@@ -91,9 +94,11 @@ def record_runtime_stopped(
         "backup_location": str(backup_location or "").strip(),
         "log_file": str(log_file or "").strip(),
         "pid": os.getpid(),
-        "stopped_at": _now(),
+        "stopped_at": "" if shutdown_intent else _now(),
+        **({"shutdown_requested_at": _now()} if shutdown_intent else {}),
         "restarted_at": "",
-        "message": "Runtime targets were stopped by Borg Backup UI and have not been marked as restarted.",
+        "message": ("VM shutdown was planned by Borg Backup UI; check that all targets are running and no shutdown is pending."
+                    if shutdown_intent else "Runtime targets were stopped by Borg Backup UI and have not been marked as restarted."),
         "targets": normalized_targets,
     }
 

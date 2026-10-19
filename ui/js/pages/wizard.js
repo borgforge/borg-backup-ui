@@ -220,6 +220,8 @@ function _wizardSetRuntimeControl(kind, control = {}) {
     wizardState.selectedVms = _wizardUniqueList(control?.selected || []);
     const ack = document.getElementById('wiz-ack-domains-risk');
     if (ack) ack.checked = !!control?.ack_domains_risk;
+    const force = document.getElementById('wiz-vm-force-stop');
+    if (force) force.checked = control?.force_stop === true;
   }
   wizardRenderRuntimeControls();
 }
@@ -374,6 +376,7 @@ function wizardBindRuntimeControls() {
     'wiz-use-vm',
     'wiz-docker-mode',
     'wiz-vm-mode',
+    'wiz-vm-force-stop',
     'wiz-ack-appdata-risk',
     'wiz-ack-domains-risk',
     'wiz-final-ack-appdata-risk',
@@ -593,6 +596,7 @@ function openWizard(existingJobKey = '') {
   document.getElementById('wiz-use-vm').checked = false;
   document.getElementById('wiz-docker-mode').value = 'all';
   document.getElementById('wiz-vm-mode').value = 'all';
+  document.getElementById('wiz-vm-force-stop').checked = false;
   _wizardSyncRiskAcknowledgement('docker', false);
   _wizardSyncRiskAcknowledgement('vm', false);
   // Ensure feature toggles are visible even if stale DOM/CSS state hid them before.
@@ -969,6 +973,7 @@ function _wizardCollectParams() {
       mode: vmMode,
       selected: vmMode === 'selected' ? _wizardUniqueList(wizardState.selectedVms) : [],
       ack_domains_risk: _wizardRiskAcknowledged('vm'),
+      force_stop: vmMode !== 'none' && document.getElementById('wiz-vm-force-stop')?.checked === true,
     },
     source_paths: rawPaths,
     exclude_paths: _wizardUniqueList(wizardState.excludePaths || []),
@@ -1499,13 +1504,15 @@ function _wizardDistinctApiMessage(payload, fallback) {
 
 function _wizardRuntimePreviewText(kind, summary) {
   const mode = String(summary?.[`${kind}_mode`] || 'none');
+  const forceNote = kind === 'vm' && mode !== 'none'
+    ? ` (${wizardT(summary?.vm_force_stop ? 'wizard.vmForceEnabled' : 'wizard.vmForceDisabled')})` : '';
   if (mode === 'all') {
-    return wizardT(kind === 'docker' ? 'wizard.runtimeAllDocker' : 'wizard.runtimeAllVms');
+    return wizardT(kind === 'docker' ? 'wizard.runtimeAllDocker' : 'wizard.runtimeAllVms') + forceNote;
   }
   if (mode === 'selected') {
     const selected = Array.isArray(summary?.[`${kind}_selected`]) ? summary[`${kind}_selected`] : [];
     const label = wizardT(kind === 'docker' ? 'wizard.runtimeSelectedDocker' : 'wizard.runtimeSelectedVms');
-    return `${label}: ${selected.length ? selected.join(', ') : '-'}`;
+    return `${label}: ${selected.length ? selected.join(', ') : '-'}${forceNote}`;
   }
   if (kind === 'docker' && mode === 'except_selected') {
     const selected = Array.isArray(summary?.docker_selected) ? summary.docker_selected : [];

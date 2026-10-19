@@ -170,6 +170,7 @@ def _runtime_control_from_params(params: dict, kind: str, existing: Optional[dic
         "mode": mode,
         "selected": selected if mode in {"selected", "except_selected"} else [],
         ack_key: ack,
+        **({"force_stop": source.get("force_stop") is True} if kind == "vm" else {}),
     }
 
 
@@ -185,6 +186,7 @@ def _runtime_control_from_meta(meta: dict, kind: str) -> dict:
         "mode": mode,
         "selected": _split_selected(raw.get("selected", [])) if mode in {"selected", "except_selected"} else [],
         ack_key: bool(raw.get(ack_key, False)),
+        **({"force_stop": raw.get("force_stop") is True} if kind == "vm" else {}),
     }
 
 
@@ -381,7 +383,7 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
     meta_archive_prefixes: list[str] = []
     meta: dict = {}
     meta_docker_control = {"mode": "all" if bool(info.has_docker) else "none", "selected": [], "ack_appdata_risk": False}
-    meta_vm_control = {"mode": "all" if bool(info.has_vm) else "none", "selected": [], "ack_domains_risk": False}
+    meta_vm_control = {"mode": "all" if bool(info.has_vm) else "none", "selected": [], "ack_domains_risk": False, "force_stop": False}
     for meta_dir in get_jobs_meta_dirs(scripts_dir, data_root):
         meta_file = meta_dir / f"{job_key}.json"
         if not meta_file.exists():
@@ -594,6 +596,7 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
             "vm": use_vm,
             "docker_mode": docker_control["mode"],
             "vm_mode": vm_control["mode"],
+            "vm_force_stop": vm_control.get("force_stop", False),
             "docker_selected": docker_control["selected"],
             "vm_selected": vm_control["selected"],
             "retention": retention,
