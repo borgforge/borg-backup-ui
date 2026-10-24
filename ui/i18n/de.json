@@ -813,7 +813,9 @@
       "not_run": "Nicht ausgeführt",
       "post_condition": "Bedingung nicht erfüllt",
       "unavailable": "Dienst nicht verfügbar",
-      "after_cancel": "Nicht ausgeführt (Abbruch)"
+      "after_cancel": "Nicht ausgeführt (Abbruch)",
+      "no_container_paths": "Keine Container-Pfade in den Quellen",
+      "no_main_archive": "Nicht nötig (alles in Container-Archiven)"
     },
     "workflow": {
       "steps": "Job-Ablauf",
@@ -833,9 +835,12 @@
       "pruned": "{count} Archive gelöscht",
       "exitCode": "Exit-Code: {code}",
       "timeout": "Zeitlimit überschritten",
+      "sequenceProgress": "{done} von {total} Containergruppen gesichert",
+      "sequenceCurrent": "Aktuell: {name}",
       "names": {
         "pre_script": "Pre-Skript",
         "post_script": "Post-Skript",
+        "docker_sequence": "Docker nacheinander",
         "stop_docker": "Docker stoppen",
         "start_docker": "Docker starten",
         "stop_vms": "VMs stoppen",
@@ -943,6 +948,9 @@
     "stopDocker": "Docker-Container stoppen",
     "appdataHint": "(für Appdata-Backups)",
     "stopDockerDescription": "Docker vor dem Backup stoppen und danach starten",
+    "dockerSequential": "Container nacheinander stoppen und sichern",
+    "dockerSequentialHint": "Statt alle Container gleichzeitig zu stoppen, wird jeder Container nur so lange gestoppt, wie seine eigenen Ordner gesichert werden, und danach sofort wieder gestartet. Die Ordner werden aus den beschreibbaren Volume-Zuordnungen innerhalb der Backup-Quellen ermittelt; jeder Container erhält ein eigenes Archiv (Präfix@Container-Datum). Container mit gemeinsam genutzten Ordnern werden zusammen gestoppt. Alle übrigen Pfade landen anschließend im normalen Archiv.",
+    "dockerSequentialEnabled": "nacheinander, ein Archiv pro Container",
     "shutdownVms": "VMs herunterfahren",
     "vmHint": "(für VM-Backups)",
     "shutdownVmsDescription": "Laufende VMs vor dem Backup herunterfahren und danach starten",
@@ -1134,7 +1142,14 @@
       "unmountShares": "Netzwerkfreigaben gemäß Jobeinstellungen aufräumen",
       "postScriptAlways": "Post-Skript nach dem Aufräumen ausführen (auch bei Fehler/Abbruch/Überspringen)",
       "postScriptSuccess": "Post-Skript nach dem Aufräumen ausführen (bei Erfolg einschließlich Borg-Warnungen)",
-      "databaseBackup": "Datenbanken exportieren ({count})"
+      "databaseBackup": "Datenbanken exportieren ({count})",
+      "dockerSequence": "{count} Containergruppe(n) nacheinander sichern: stoppen -> archivieren -> starten",
+      "dockerSequenceRuntime": "Docker-Container nacheinander sichern; die Gruppen werden beim Lauf aus den Volume-Zuordnungen ermittelt",
+      "dockerSequenceGroup": "{containers}: Archiv {archive}-... ({paths})",
+      "dockerSequenceIdle": "Laufen weiter (kein beschreibbarer Pfad in den Backup-Quellen): {containers}",
+      "borgCreateMain": "Hauptarchiv für die übrigen Pfade erstellen ({count} Quelle(n), {exclusions} Ausschluss/Ausschlüsse)",
+      "borgCreateMainSkipped": "Kein Hauptarchiv nötig: alle Quellpfade liegen in Container-Archiven",
+      "borgMaintenanceSeries": "Borg-Wartung (Prune je Archivserie -> Compact -> Check)"
     },
     "yes": "ja",
     "no": "nein",

@@ -127,6 +127,7 @@ def _runtime_control_from_meta(meta: dict, kind: str) -> dict:
         "selected": _split_runtime_selected(raw.get("selected", [])) if mode in {"selected", "except_selected"} else [],
         ack_key: bool(raw.get(ack_key, False)),
         **({"force_stop": raw.get("force_stop") is True} if kind == "vm" else {}),
+        **({"sequential": mode != "none" and raw.get("sequential") is True} if kind == "docker" else {}),
     }
 
 
@@ -796,6 +797,7 @@ def _discover_jobs_uncached(scripts_dir: Path, data_root: Path | None = None) ->
             "mode": "all" if has_docker else "none",
             "selected": [],
             "ack_appdata_risk": False,
+            "sequential": False,
         }
         default_vm_control = {
             "mode": "all" if has_vm else "none",

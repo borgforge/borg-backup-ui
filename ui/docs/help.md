@@ -118,7 +118,7 @@ Ein Job verbindet Quellen mit genau einem vorhandenen Repository. Verschlüsselu
 1. **Grunddaten:** Job-Name, dauerhafte Job-ID, Archivpräfix, Icon und optionale Docker-/VM-Steuerung.
 2. **Quellen & Ziel:** Zu sichernde Ordner oder Dateien, Speichertyp, Speicherziel, Repository und Kompression.
 3. **Ausschlüsse:** Pfade, Markerdateien und eine hochgeladene Ausschlussdatei, gemeinsam sichtbar in einem eigenen Schritt.
-4. **Docker:** alle laufenden Container, nur ausgewählte Container oder alle außer ausgewählte Container stoppen und danach neu starten.
+4. **Docker:** alle laufenden Container, nur ausgewählte Container oder alle außer ausgewählte Container stoppen und danach neu starten; optional nacheinander mit einem Archiv pro Container.
 5. **VMs:** alle laufenden oder nur ausgewählte VMs herunterfahren und danach neu starten.
 6. **Retention:** gestaffelt mit optionalem Zeitfenster, letzte X Archive oder alle behalten.
 7. **Beschreibung:** verständliche Beschreibung mit optionalem Markdown.
@@ -168,6 +168,8 @@ Die Anwendung berechnet den erwarteten Lauf aus dem Zeitplan. Nach Ablauf der ko
 ## 8. Docker und VMs
 
 Bei Docker kann die Auswahl positiv oder negativ verwendet werden. **Nur ausgewählte Container** stoppt exakt die markierten Container. **Alle außer ausgewählte Container** stoppt alle laufenden Container, lässt aber die markierten Container aktiv.
+
+Mit **Container nacheinander stoppen und sichern** wird jeder Container nur gestoppt, solange seine eigenen Ordner gesichert werden, und danach sofort wieder gestartet. Die Ordner stammen aus den beschreibbaren Volume-Zuordnungen innerhalb der Backup-Quellen. Jeder Container erhält ein eigenes Archiv `<präfix>@<container>-<datum>`; Container mit gemeinsamen Ordnern werden zusammen gestoppt. Alle übrigen Pfade landen danach im normalen Archiv `<präfix>-<datum>`. Jede Archivserie wird mit der Aufbewahrung des Jobs separat bereinigt. Details: [Container nacheinander sichern](../../docs/user-manual/de/user-manual.md#container-nacheinander-sichern).
 
 Die Anwendung zeichnet vor dem Backup auf, welche Container oder VMs tatsächlich liefen. Nur diese Ziele werden danach wieder gestartet. Bei einem Abbruch oder Serverneustart weist **Runtime-Recovery** im Systemstatus auf offene Neustarts hin.
 

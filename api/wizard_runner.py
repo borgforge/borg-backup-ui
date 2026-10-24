@@ -605,7 +605,112 @@ def _runtime_control(meta: dict, kind: str) -> dict:
                 seen.add(name)
                 selected.append(name)
     return {"mode": mode, "selected": selected,
-            **({"force_stop": raw.get("force_stop") is True} if kind == "vm" else {})}
+            **({"force_stop": raw.get("force_stop") is True} if kind == "vm" else {}),
+            **({"sequential": mode != "none" and raw.get("sequential") is True} if kind == "docker" else {})}
+
+
+def _plan_docker_sequence(docker_mgr, docker_control: dict, source_paths: list, exclude_paths: list):
+    """Plan container groups from the containers running now.
+
+    Returns None when Docker is unavailable. Unreadable volume mappings raise
+    RuntimeError before any container is stopped.
+    """
+    from lib.docker_sequence import plan_sequence  # type: ignore
+
+    targets = docker_mgr.running_targets(docker_control["mode"], docker_control["selected"])
+    if targets is None:
+        return None
+    mounts = docker_mgr.writable_bind_mounts([cid for _name, cid in targets]) if targets else {}
+    return plan_sequence(source_paths, targets, mounts, exclude_paths)
+
+
+def _log_docker_sequence(plan) -> None:
+    logging.info("Sequential Docker backup: %d container group(s)", len(plan.groups))
+    for position, group in enumerate(plan.groups, 1):
+        logging.info("  %d. %s -> %s", position, ", ".join(group.containers), ", ".join(group.paths))
+        if len(group.containers) > 1:
+            logging.info("     Stopped together because their writable paths overlap")
+    if plan.idle_containers:
+        logging.info("Keep running (no writable path in the backup sources): %s", ", ".join(plan.idle_containers))
+    for name, path, reason in plan.skipped_paths:
+        logging.info("Ignored path of %s (%s): %s", name, reason, path)
+    if plan.main_paths:
+        logging.info("Main archive afterwards: %s (%d container path(s) excluded)",
+                     ", ".join(plan.main_paths), len(plan.main_excludes))
+    else:
+        logging.info("Main archive afterwards: no remaining source path")
+
+
+def _run_docker_sequence(job, plan, *, runner, control, set_phase, workflow, archive_prefix,
+                         exclude_paths, log_file) -> tuple[int, list]:
+    """Archive each planned group while only that group is stopped.
+
+    Each group is stopped, archived as '<prefix>@<key>-<timestamp>' and
+    restarted through ``job.recover_runtime`` before the next group starts.
+    Returns ``(exit_code, stats)``: the worst create exit (0 or 1), 130 after
+    cancellation or the first create error (>= 2), which ends the sequence.
+    Restart failures propagate as RuntimeError and no further group stops.
+    """
+    from lib.borg_runner import parse_borg_stats  # type: ignore
+    from lib.docker_sequence import TIMESTAMP_FORMAT, archive_name  # type: ignore
+
+    groups: list[dict] = []
+    stats: list = []
+
+    def publish(current: str = "") -> None:
+        done = sum(1 for row in groups if row["status"] in {"success", "warning"})
+        workflow.update("docker_sequence", details={
+            "target_count": len(plan.groups), "completed_count": done,
+            "current": current, "groups": groups,
+        })
+
+    publish()
+    worst = 0
+    for position, group in enumerate(plan.groups, 1):
+        if control.is_cancel_requested():
+            return 130, stats
+        name = archive_name(archive_prefix, group.key, datetime.now().strftime(TIMESTAMP_FORMAT))
+        row = {"containers": list(group.containers), "archive": name, "status": "running"}
+        groups.append(row)
+        publish(", ".join(group.containers))
+        logging.info("Container group %d/%d: %s -> archive %s", position, len(plan.groups),
+                     ", ".join(group.containers), name)
+        set_phase("stopping_docker")
+        started = time.monotonic()
+        code = 2
+        try:
+            job.stop_docker_group(group.containers)
+            if control.is_cancel_requested():
+                code = 130
+            else:
+                code = runner.create(group.paths, archive_prefix, exclude_paths=exclude_paths, archive_name=name)
+        finally:
+            row.update(status={0: "success", 1: "warning", 130: "cancelled"}.get(code, "error"),
+                       exit_code=code, duration_seconds=round(max(0.0, time.monotonic() - started), 3))
+            publish()
+            job.recover_runtime()
+        if code in (0, 1):
+            stats.append(parse_borg_stats(log_file))
+            worst = max(worst, code)
+        else:
+            return code, stats
+    return worst, stats
+
+
+def _combined_stats(stats: list, archive_name: str):
+    """Sum the statistics of all archives one sequential run created."""
+    from lib.borg_runner import BorgStats  # type: ignore
+
+    present = [item for item in stats if item is not None]
+    if not present:
+        return None
+    return BorgStats(
+        archive_name=archive_name or present[-1].archive_name,
+        original_size=sum(item.original_size for item in present),
+        compressed_size=sum(item.compressed_size for item in present),
+        deduplicated_size=sum(item.deduplicated_size for item in present),
+        files=sum(item.files for item in present),
+    )
 
 
 def _resolve_usb_mount_path(meta: dict, backup_scripts_dir: Path) -> str:
@@ -687,12 +792,14 @@ def main() -> int:
         job_config.exclude_paths.append(job_config.log_file.parent)
     from lifecycle_log import emit_lifecycle
     borg_config = BorgConfig.from_config(env)
+    docker_sequence = _runtime_control(meta, "docker")["sequential"]
+    borg_config.prune_container_series = docker_sequence
     from lib.job_workflow import JobWorkflow
     workflow = JobWorkflow.configured(
         hooks=meta.get("hooks"), docker=_runtime_control(meta, "docker")["mode"] != "none",
         vms=_runtime_control(meta, "vm")["mode"] != "none",
         prune=BorgRunner(borg_config).retention().get("mode") != "all", controller=control,
-        databases=bool(meta.get("_database_profiles")),
+        databases=bool(meta.get("_database_profiles")), docker_sequence=docker_sequence,
     )
     mail_config = MailConfig.from_config(env)
 
@@ -809,6 +916,9 @@ def main() -> int:
             job.set_cancelled()
             result_code = 130
             return result_code
+        # Container groups are planned from the job sources, never from database dumps.
+        sequence_sources = list(job_config.backup_paths)
+        database_paths = []
         if meta.get("_database_profiles"):
             from database_backup import export_profiles, validate_sources, borg_artifact_paths
             validate_sources(meta["_database_profiles"], job_config.backup_paths)
@@ -821,8 +931,41 @@ def main() -> int:
                     results=database_results,
                 )
                 workflow.update("database_backup", details={"results": database_results})
-            job_config.backup_paths.extend(borg_artifact_paths(database_results))
-        if docker_mgr is not None:
+            database_paths = borg_artifact_paths(database_results)
+            job_config.backup_paths.extend(database_paths)
+        sequence = None
+        sequence_exit = 0
+        sequence_stats = []
+        if docker_mgr is not None and docker_control["sequential"]:
+            with workflow.track("docker_sequence"):
+                sequence = _plan_docker_sequence(docker_mgr, docker_control, sequence_sources, job_config.exclude_paths)
+                if sequence is None:
+                    logging.info("Docker is disabled or unavailable; skipping sequential container backup")
+                    workflow.update("docker_sequence", status="skipped", reason="unavailable")
+                elif not sequence.groups:
+                    _log_docker_sequence(sequence)
+                    workflow.update("docker_sequence", status="skipped", reason="no_container_paths")
+                else:
+                    _log_docker_sequence(sequence)
+                    sequence_exit, sequence_stats = _run_docker_sequence(
+                        job, sequence,
+                        runner=BorgRunner(borg_config, process_controller=control, phase_callback=set_phase),
+                        control=control, set_phase=set_phase, workflow=workflow, archive_prefix=archive_prefix,
+                        exclude_paths=job_config.exclude_paths, log_file=job_config.log_file,
+                    )
+                    workflow.update("docker_sequence", status={0: "success", 1: "warning", 130: "cancelled"}
+                                    .get(sequence_exit, "error"))
+            if sequence_exit == 130 or control.is_cancel_requested():
+                logging.info("Cancellation requested; the last container group was restarted")
+                job.set_cancelled()
+                result_code = 130
+                return result_code
+            if sequence_exit >= 2:
+                job.backup_exit_code = sequence_exit
+                job.set_result(sequence_exit, final_msg=f"borg create failed for a container group (exit {sequence_exit})")
+                result_code = sequence_exit
+                return result_code
+        elif docker_mgr is not None:
             set_phase("stopping_docker")
             selected = docker_control["selected"]
             if docker_control["mode"] == "selected":
@@ -836,7 +979,10 @@ def main() -> int:
                 job.set_cancelled()
                 result_code = 130
                 return result_code
-        if vm_mgr is not None:
+        main_archive = sequence is None or bool(sequence.main_paths or database_paths)
+        if vm_mgr is not None and not main_archive:
+            logging.info("No main archive is needed; VMs keep running")
+        if vm_mgr is not None and main_archive:
             set_phase("stopping_vms")
             selected = vm_control["selected"] if vm_control["mode"] == "selected" else None
             job.shutdown_vms(selected)
@@ -855,15 +1001,36 @@ def main() -> int:
         job.borg_steps = runner.steps
         database_archive = archive_prefix + "-" + datetime.now().strftime("%Y-%m-%d_%H-%M-%S") if database_results else None
         create_options = {"archive_name": database_archive} if database_archive else {}
-        create_exit = runner.create(
-            job_config.backup_paths,
-            archive_prefix,
-            exclude_paths=job_config.exclude_paths,
-            **create_options,
-        )
-        job.backup_exit_code = create_exit
+        if sequence is None:
+            create_exit = runner.create(
+                job_config.backup_paths,
+                archive_prefix,
+                exclude_paths=job_config.exclude_paths,
+                **create_options,
+            )
+        elif main_archive:
+            # Remaining paths and database dumps, without the container group paths.
+            create_exit = runner.create(
+                [*sequence.main_paths, *database_paths],
+                archive_prefix,
+                exclude_paths=[*job_config.exclude_paths, *sequence.main_excludes],
+                **create_options,
+            )
+        else:
+            logging.info("No main archive is needed; every source path is in a container archive")
+            runner.skip_create("no_main_archive")
+            create_exit = 0
+        overall_exit = max(create_exit, sequence_exit)
+        job.backup_exit_code = overall_exit
+        run_stats = None
         if create_exit < 2:
-            job.set_result(create_exit, parse_borg_stats(job_config.log_file))
+            run_stats = parse_borg_stats(job_config.log_file)
+            if sequence is not None:
+                run_stats = _combined_stats(
+                    [*sequence_stats, *([run_stats] if main_archive else [])],
+                    run_stats.archive_name if main_archive and run_stats is not None else "",
+                )
+            job.set_result(overall_exit, run_stats)
         if control.is_cancel_requested():
             job.set_cancelled()
             result_code = 130
@@ -896,8 +1063,8 @@ def main() -> int:
             job.set_cancelled()
             result_code = 130
             return result_code
-        exit_code = max(create_exit, maint_exit)
-        job.set_result(exit_code, parse_borg_stats(job_config.log_file))
+        exit_code = max(overall_exit, maint_exit)
+        job.set_result(exit_code, run_stats if sequence is not None else parse_borg_stats(job_config.log_file))
         result_code = exit_code
         return result_code
 

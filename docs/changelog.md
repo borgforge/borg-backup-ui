@@ -1,5 +1,12 @@
 # Changelog
 
+## Pending - Sequential Docker container backups (#595)
+
+- Add the optional Docker control flag `sequential`. Plan container groups from writable bind mounts inside the job sources (Unraid pool/disk/user0 views map to `/mnt/user`; read-only binds and volumes are ignored), merge containers with equal or nested paths, and archive each group as `<prefix>@<key>-<timestamp>` while only that group is stopped. Restart every group through the existing runtime recovery before the next one; stop the sequence on cancellation, create errors or restart failures. Fail before any stop when volume mappings cannot be read.
+- Back up remaining source paths and database dumps afterwards in the regular `<prefix>-<timestamp>` archive with the group paths excluded. Shut down VMs only for that archive and skip it when nothing remains. Report summed archive statistics.
+- Prune each `<prefix>@<key>-*` series separately with exact, anchored and checkpoint-aware globs and sum the prune counters; `<prefix>-*` never selects container archives. Restore filters add `<prefix>@*` for sequential jobs. The manual repository prune still covers `<prefix>-*` only.
+- Show the option in the Docker wizard step, the live-planned groups in the flow preview and a `docker_sequence` workflow step with group progress. Add bilingual manual/help guidance plus planner, runner, UI and bundled-Borg prune tests.
+
 ## Pending - Online database engines and metadata housekeeping (#593)
 
 - Support only MariaDB, MySQL and PostgreSQL online exports. Keep MySQL/InnoDB native dumps and reject nontransactional tables. Remove MongoDB, Redis and SQLite from exports, settings and the managed script catalog.

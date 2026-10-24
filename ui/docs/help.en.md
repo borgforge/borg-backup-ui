@@ -118,7 +118,7 @@ A job connects sources to exactly one existing repository. Encryption belongs to
 1. **Basics:** Job name, permanent Job ID, archive prefix, icon and optional Docker/VM control.
 2. **Sources & Target:** Folders or files to back up, storage type, storage target, repository, and compression.
 3. **Exclusions:** Paths, marker filenames and one uploaded exclusion file, shown together in a dedicated step.
-4. **Docker:** Stop all running containers, selected containers, or all containers except selected containers and restart them afterwards.
+4. **Docker:** Stop all running containers, selected containers, or all containers except selected containers and restart them afterwards; optionally one after another with one archive per container.
 5. **VMs:** Shut down all running or selected VMs and restart them afterwards.
 6. **Retention:** Tiered with an optional time window, last X archives, or keep all.
 7. **Description:** Clear description with optional Markdown.
@@ -168,6 +168,8 @@ The application calculates the expected run from the schedule. After the configu
 ## 8. Docker and VMs
 
 Docker selection can be used as either an include or exclude list. **Selected containers only** stops exactly the checked containers. **All except selected containers** stops all running containers but keeps the checked containers running.
+
+With **Stop and back up containers one after another**, each container is only stopped while its own folders are backed up and is restarted right afterwards. The folders come from the writable volume mappings inside the backup sources. Each container gets its own archive `<prefix>@<container>-<date>`; containers with shared folders are stopped together. All remaining paths are then backed up in the regular archive `<prefix>-<date>`. Each archive series is pruned separately with the job's retention. Details: [Back up containers one after another](../../docs/user-manual/en/user-manual.md#back-up-containers-one-after-another).
 
 Before a backup, the application records which containers or VMs were actually running. Only those targets are restarted afterwards. After an interruption or server restart, **Runtime Recovery** in system health reports pending restarts.
 

@@ -15,12 +15,13 @@ Nur Python Standard-Library: subprocess, logging, time, dataclasses
 
 from __future__ import annotations
 
+import json
 import logging
 import subprocess
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -154,6 +155,68 @@ class DockerManager:
     def list_containers(self) -> List[Dict[str, str]]:
         """Returns Docker containers for UI selection."""
         return list_containers()
+
+    def running_targets(self, mode: str, selected: Optional[List[str]] = None) -> Optional[List[Tuple[str, str]]]:
+        """Return running ``(name, id)`` pairs of a job scope without stopping them.
+
+        ``mode`` is ``all``, ``selected`` or ``except_selected``; ``selected``
+        holds the chosen or excluded names. Pairs are sorted by name. Returns
+        None when Docker is unavailable.
+        """
+        if not docker_available():
+            return None
+        running = _get_running_name_id_map()
+        chosen = set(_normalize_names(selected or []))
+        if mode == "selected":
+            names = [name for name in running if name in chosen]
+        elif mode == "except_selected":
+            names = [name for name in running if name not in chosen]
+        else:
+            names = list(running)
+        return [(name, running[name]) for name in sorted(names, key=lambda name: (name.casefold(), name))]
+
+    def writable_bind_mounts(self, container_ids: List[str]) -> Dict[str, List[str]]:
+        """Return writable bind-mount host paths by container name.
+
+        Volumes and read-only binds are omitted because they cannot change
+        files below the backup sources. Raises RuntimeError when the mappings
+        cannot be read, so no sequential plan is built from partial data.
+        """
+        ids = [str(cid or "").strip() for cid in container_ids if str(cid or "").strip()]
+        if not ids:
+            return {}
+        try:
+            result = subprocess.run(
+                ["docker", "inspect", "--format", '{{.Name}}{{"\\t"}}{{json .Mounts}}', *ids],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except (subprocess.TimeoutExpired, OSError) as exc:
+            raise RuntimeError(f"Docker volume mappings could not be read ({type(exc).__name__})") from None
+        if result.returncode != 0:
+            raise RuntimeError(f"Docker volume mappings could not be read (exit {result.returncode})")
+        mounts: Dict[str, List[str]] = {}
+        for line in result.stdout.splitlines():
+            name, separator, raw = line.partition("\t")
+            name = name.strip().lstrip("/")
+            if not name or not separator:
+                continue
+            try:
+                entries = json.loads(raw) or []
+            except ValueError:
+                raise RuntimeError(f"Docker volume mappings of {name} are unreadable") from None
+            mounts[name] = [
+                str(entry.get("Source") or "")
+                for entry in entries
+                if isinstance(entry, dict)
+                and entry.get("Type") == "bind"
+                and entry.get("RW", True) is not False
+                and str(entry.get("Source") or "").startswith("/")
+            ]
+        if len(mounts) != len(ids):
+            raise RuntimeError("Docker volume mappings are incomplete")
+        return mounts
 
     def stop_all(self, log_file: str = "") -> DockerStopResult:
         """

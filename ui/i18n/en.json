@@ -813,7 +813,9 @@
       "not_run": "Not executed",
       "post_condition": "Condition not met",
       "unavailable": "Service unavailable",
-      "after_cancel": "Not executed (cancelled)"
+      "after_cancel": "Not executed (cancelled)",
+      "no_container_paths": "No container paths in the sources",
+      "no_main_archive": "Not needed (everything in container archives)"
     },
     "workflow": {
       "steps": "Job workflow",
@@ -833,9 +835,12 @@
       "pruned": "{count} archives deleted",
       "exitCode": "Exit code: {code}",
       "timeout": "Time limit exceeded",
+      "sequenceProgress": "{done} of {total} container groups backed up",
+      "sequenceCurrent": "Current: {name}",
       "names": {
         "pre_script": "Pre script",
         "post_script": "Post script",
+        "docker_sequence": "Docker one by one",
         "stop_docker": "Stop Docker",
         "start_docker": "Start Docker",
         "stop_vms": "Stop VMs",
@@ -943,6 +948,9 @@
     "stopDocker": "Stop Docker containers",
     "appdataHint": "(for Appdata backups)",
     "stopDockerDescription": "Stop Docker before the backup and restart it afterwards",
+    "dockerSequential": "Stop and back up containers one after another",
+    "dockerSequentialHint": "Instead of stopping all containers at once, each container is only stopped while its own folders are backed up and is restarted right afterwards. The folders are determined from the writable volume mappings inside the backup sources; each container gets its own archive (prefix@container-date). Containers that share folders are stopped together. All remaining paths are backed up afterwards in the regular archive.",
+    "dockerSequentialEnabled": "one after another, one archive per container",
     "shutdownVms": "Shut down VMs",
     "vmHint": "(for VM backups)",
     "shutdownVmsDescription": "Shut down running VMs before the backup and restart them afterwards",
@@ -1134,7 +1142,14 @@
       "unmountShares": "Clean up network shares according to job settings",
       "postScriptAlways": "Run Post after cleanup (also on failure/cancellation/skip)",
       "postScriptSuccess": "Run Post after cleanup (on success including Borg warnings)",
-      "databaseBackup": "Export databases ({count})"
+      "databaseBackup": "Export databases ({count})",
+      "dockerSequence": "Back up {count} container group(s) one after another: stop -> archive -> start",
+      "dockerSequenceRuntime": "Back up Docker containers one after another; groups are determined from the volume mappings at run time",
+      "dockerSequenceGroup": "{containers}: archive {archive}-... ({paths})",
+      "dockerSequenceIdle": "Keep running (no writable path in the backup sources): {containers}",
+      "borgCreateMain": "Create main archive for the remaining paths ({count} source(s), {exclusions} exclusion(s))",
+      "borgCreateMainSkipped": "No main archive needed: all source paths are in container archives",
+      "borgMaintenanceSeries": "Borg maintenance (prune each archive series -> compact -> check)"
     },
     "yes": "yes",
     "no": "no",

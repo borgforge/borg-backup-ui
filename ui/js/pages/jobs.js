@@ -344,7 +344,7 @@ function borgProgressDuration(seconds) {
 /** Return known run steps including managed database exports; older reports retain their Borg ledger. */
 function jobWorkflowSteps(job) {
   const configured = job.running ? job.run_job_steps : job.last_job_steps;
-  const allowed = ['pre_script', 'database_backup', 'stop_docker', 'stop_vms', 'create', 'start_docker', 'start_vms', 'prune', 'compact', 'check', 'post_script'];
+  const allowed = ['pre_script', 'database_backup', 'docker_sequence', 'stop_docker', 'stop_vms', 'create', 'start_docker', 'start_vms', 'prune', 'compact', 'check', 'post_script'];
   if (Array.isArray(configured) && configured.length) {
     return configured.filter(step => step && allowed.includes(step.id));
   }
@@ -373,7 +373,7 @@ function jobStepView(step, job, now) {
   const allowed = ['success', 'warning', 'error', 'cancelled', 'skipped', 'pending', 'running', 'interrupted'];
   let state = allowed.includes(step.status) ? step.status : 'pending';
   if (state === 'running' && !job.running) state = 'interrupted';
-  const reasons = ['not_due', 'keep_all', 'not_run', 'after_cancel', 'post_condition', 'unavailable'];
+  const reasons = ['not_due', 'keep_all', 'not_run', 'after_cancel', 'post_condition', 'unavailable', 'no_container_paths', 'no_main_archive'];
   let reason = state === 'skipped' && reasons.includes(step.reason) ? step.reason : state;
   if (state === 'pending' && !job.running) reason = 'not_run';
   const status = jobsT(`jobs.borgStep.${reason}`);
@@ -396,6 +396,20 @@ function jobStepDetails(step, view) {
       parts.push(`${file.database}: ${borgProgressSize(file.bytes)} / ${borgProgressDuration(Math.floor(file.duration_seconds || 0))} / ${jobsT(result.archived ? 'jobs.databaseArchived' : 'jobs.databaseDumped')}`);
     }
     if (details.error_code) parts.push(apiErrorMessage({code: details.error_code}));
+  }
+  if (step.id === 'docker_sequence') {
+    // Container groups run one after another; list only the current and problematic groups.
+    if (count('target_count')) {
+      parts.push(jobsT('jobs.workflow.sequenceProgress', {done: count('completed_count') ? details.completed_count : 0, total: details.target_count}));
+    }
+    if (view.state === 'running' && typeof details.current === 'string' && details.current) {
+      parts.push(jobsT('jobs.workflow.sequenceCurrent', {name: details.current}));
+    }
+    for (const group of Array.isArray(details.groups) ? details.groups : []) {
+      if (!['warning', 'error', 'cancelled'].includes(group?.status) || !Array.isArray(group.containers)) continue;
+      parts.push(`${group.containers.join(' + ')}: ${jobsT(`jobs.borgStep.${group.status}`)}`);
+    }
+    return (view.state === 'success' && parts.length ? parts : [view.status, ...parts]).join(' · ');
   }
   if (count('target_count')) {
     const action = ['stop_docker', 'stop_vms'].includes(step.id) ? 'targetsStopped'
@@ -479,7 +493,9 @@ function renderJobOperation(job, now = Date.now() / 1000) {
   const active = job.running && jobWorkflowSteps(job).find(step => step.status === 'running');
   const view = active && jobStepView(active, job, now);
   const progress = renderBorgProgress(job, now);
-  let html = view ? `<div class="job-active-step"><strong>${escHtml(view.label)}</strong>${progress ? '' : `<small>${escHtml(jobsT('jobs.borgElapsed', {time:view.duration}))}</small>`}</div>` : '';
+  const current = active?.id === 'docker_sequence' && typeof active.details?.current === 'string' ? active.details.current : '';
+  const label = view && current ? `${view.label}: ${current}` : view?.label;
+  let html = view ? `<div class="job-active-step"><strong>${escHtml(label)}</strong>${progress ? '' : `<small>${escHtml(jobsT('jobs.borgElapsed', {time:view.duration}))}</small>`}</div>` : '';
   if (!view && job.running && ['preparing', 'mounting', 'unmounting', 'pre_script', 'database_backup', 'post_script', 'stopping_docker', 'stopping_vms', 'recovering_docker', 'recovering_vms'].includes(job.run_phase)) {
     html += `<div class="job-active-step"><strong>${escHtml(jobsT(`jobGroups.phases.${job.run_phase}`))}</strong></div>`;
   }

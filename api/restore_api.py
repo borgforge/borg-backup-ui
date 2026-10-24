@@ -505,22 +505,26 @@ def acquire_restore_repository_lock(config: dict, info: dict, job_key: str, rest
 
 
 def _archive_filter_rows_for_restore_job(job_key: str, info: dict) -> list[dict]:
+    """Return the job's archive globs; sequential Docker jobs add '<prefix>@*'."""
     from archive_prefix import archive_prefix_from_metadata, job_archive_prefixes
     job = info.get("job") if isinstance(info.get("job"), dict) else {}
     current_prefix = archive_prefix_from_metadata(job)
     prefixes = job_archive_prefixes(job)
+    docker_control = job.get("docker_control") if isinstance(job.get("docker_control"), dict) else {}
+    separators = ["-", "@"] if docker_control.get("sequential") is True else ["-"]
     return [
         {
             "prefix": prefix,
-            "filter": f"{prefix}-*",
+            "filter": f"{prefix}{separator}*",
             "current": bool(current_prefix and prefix == current_prefix),
         }
         for prefix in prefixes
+        for separator in separators
     ]
 
 
 def _archive_prefixes_for_restore_job(job_key: str, info: dict) -> list[str]:
-    return [str(row["prefix"]) for row in _archive_filter_rows_for_restore_job(job_key, info)]
+    return list(dict.fromkeys(str(row["prefix"]) for row in _archive_filter_rows_for_restore_job(job_key, info)))
 
 
 def _run_borg_archive_list(repo: str, env: dict, archive_filter: str = "") -> dict:

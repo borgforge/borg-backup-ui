@@ -216,6 +216,8 @@ function _wizardSetRuntimeControl(kind, control = {}) {
     wizardState.selectedDockerContainers = _wizardUniqueList(control?.selected || []);
     const ack = document.getElementById('wiz-ack-appdata-risk');
     if (ack) ack.checked = !!control?.ack_appdata_risk;
+    const sequential = document.getElementById('wiz-docker-sequential');
+    if (sequential) sequential.checked = mode !== 'none' && control?.sequential === true;
   } else {
     wizardState.selectedVms = _wizardUniqueList(control?.selected || []);
     const ack = document.getElementById('wiz-ack-domains-risk');
@@ -375,6 +377,7 @@ function wizardBindRuntimeControls() {
     'wiz-use-docker',
     'wiz-use-vm',
     'wiz-docker-mode',
+    'wiz-docker-sequential',
     'wiz-vm-mode',
     'wiz-vm-force-stop',
     'wiz-ack-appdata-risk',
@@ -596,6 +599,7 @@ function openWizard(existingJobKey = '') {
   document.getElementById('wiz-use-docker').checked = false;
   document.getElementById('wiz-use-vm').checked = false;
   document.getElementById('wiz-docker-mode').value = 'all';
+  document.getElementById('wiz-docker-sequential').checked = false;
   document.getElementById('wiz-vm-mode').value = 'all';
   document.getElementById('wiz-vm-force-stop').checked = false;
   _wizardSyncRiskAcknowledgement('docker', false);
@@ -761,7 +765,7 @@ async function openWizardForJob(jobKey, mode = 'edit') {
       repository_key: String(job.repository_key || '').trim(),
       use_docker: !!job.use_docker,
       use_vm: !!job.use_vm,
-      docker_control: job.docker_control || { mode: job.use_docker ? 'all' : 'none', selected: [] },
+      docker_control: job.docker_control || { mode: job.use_docker ? 'all' : 'none', selected: [], sequential: false },
       vm_control: job.vm_control || { mode: job.use_vm ? 'all' : 'none', selected: [] },
     };
     wizardState.originalSchedule = job.schedule && typeof job.schedule === 'object'
@@ -972,6 +976,7 @@ function _wizardCollectParams() {
       mode: dockerMode,
       selected: ['selected', 'except_selected'].includes(dockerMode) ? _wizardUniqueList(wizardState.selectedDockerContainers) : [],
       ack_appdata_risk: _wizardRiskAcknowledged('docker'),
+      sequential: dockerMode !== 'none' && document.getElementById('wiz-docker-sequential')?.checked === true,
     },
     vm_control: {
       mode: vmMode,
@@ -1542,7 +1547,9 @@ function _wizardDistinctApiMessage(payload, fallback) {
 function _wizardRuntimePreviewText(kind, summary) {
   const mode = String(summary?.[`${kind}_mode`] || 'none');
   const forceNote = kind === 'vm' && mode !== 'none'
-    ? ` (${wizardT(summary?.vm_force_stop ? 'wizard.vmForceEnabled' : 'wizard.vmForceDisabled')})` : '';
+    ? ` (${wizardT(summary?.vm_force_stop ? 'wizard.vmForceEnabled' : 'wizard.vmForceDisabled')})`
+    : kind === 'docker' && mode !== 'none' && summary?.docker_sequential === true
+      ? ` (${wizardT('wizard.dockerSequentialEnabled')})` : '';
   if (mode === 'all') {
     return wizardT(kind === 'docker' ? 'wizard.runtimeAllDocker' : 'wizard.runtimeAllVms') + forceNote;
   }
@@ -1553,7 +1560,7 @@ function _wizardRuntimePreviewText(kind, summary) {
   }
   if (kind === 'docker' && mode === 'except_selected') {
     const selected = Array.isArray(summary?.docker_selected) ? summary.docker_selected : [];
-    return `${wizardT('wizard.runtimeExceptSelectedDocker')}: ${selected.length ? selected.join(', ') : '-'}`;
+    return `${wizardT('wizard.runtimeExceptSelectedDocker')}: ${selected.length ? selected.join(', ') : '-'}${forceNote}`;
   }
   return wizardT('wizard.runtimeNone');
 }

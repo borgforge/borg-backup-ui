@@ -358,11 +358,26 @@ Das planmäßige Herunterfahren einer VM wird als Information gemeldet. Ein fehl
 
 Nach Abschluss der Archiverstellung (`borg create`) werden die vom Job gestoppten Container und VMs sofort wieder gestartet, auch bei Borg-Warnungen. Erst danach laufen Aufbewahrung (`prune`), Speicherbereinigung (`compact`) und eine fällige Repository-Prüfung (`check`). Diese Wartung verlängert die Ausfallzeit der Dienste nicht. Bei Fehlern oder Abbruch der Archiverstellung erfolgt der Neustart weiterhin beim Aufräumen. Schlägt ein Neustart fehl, wird der Neustart auch für die andere Dienstgruppe versucht; der Lauf endet als Fehler und die Wartung wird nicht gestartet.
 
+#### Container nacheinander sichern
+
+Mit **Container nacheinander stoppen und sichern** im Docker-Schritt werden die Container nicht mehr gemeinsam für das ganze Backup gestoppt. Stattdessen gilt für jede Containergruppe: stoppen, eigene Ordner archivieren, sofort wieder starten. Danach folgt die nächste Gruppe. Jeder Container ist damit nur so lange gestoppt, wie die Sicherung seiner eigenen Ordner dauert. Ohne diese Option bleibt das bisherige Verhalten unverändert.
+
+- **Ordner je Container:** Beim Lauf liest die Anwendung die beschreibbaren Bind-Mounts (Volume-Zuordnungen) der laufenden Container im gewählten Umfang. Berücksichtigt werden nur Pfade innerhalb der Backup-Quellen, zum Beispiel `/mnt/user/appdata/nextcloud`. Unraid-Ansichten wie `/mnt/cache/appdata/...` oder `/mnt/disk1/appdata/...` werden der Freigabe `/mnt/user/appdata/...` zugeordnet. Schreibgeschützte Zuordnungen und Docker-Volumes werden ignoriert. Liegt eine Backup-Quelle innerhalb einer Zuordnung, gehört die ganze Quelle zu diesem Container. Ausgeschlossene oder fehlende Ordner werden übersprungen und im Lauf-Log genannt.
+- **Archive:** Jede Gruppe erhält ein eigenes Archiv `<präfix>@<container>-<datum>`, zum Beispiel `appdata@nextcloud-2026-10-24_03-00-12`. Alle übrigen Pfade der Quellen und Datenbank-Dumps werden danach ohne gestoppte Container im normalen Archiv `<präfix>-<datum>` gesichert; die Container-Ordner sind dort ausgeschlossen. Bleibt nichts übrig, entfällt dieses Archiv. Ausgewählte VMs werden nur für dieses normale Archiv heruntergefahren.
+- **Gemeinsame Ordner:** Überschneiden sich die Ordner mehrerer Container (gleicher oder verschachtelter Pfad), werden diese Container zusammen gestoppt und in einem Archiv `<präfix>@<container1>+<container2>-<datum>` gesichert. Ein Container mit einer weiten Zuordnung, etwa ein Dateimanager mit `/mnt/user`, überschneidet sich mit allen Ordnern; dann werden alle betroffenen Container gemeinsam gestoppt. Nehmen Sie solche Container mit **Alle außer ausgewählte Container** aus dem Umfang, wenn sie während des Backups nicht in die Quellen schreiben.
+- **Ohne Ordner in den Quellen:** Container ohne beschreibbaren Pfad in den Backup-Quellen werden nicht gestoppt.
+- **Fehler und Abbruch:** Die gerade gestoppte Gruppe wird immer wieder gestartet, bevor der Lauf endet. Nach einem Abbruch, einem Fehler von `borg create` oder einem fehlgeschlagenen Neustart wird keine weitere Gruppe gestoppt; normales Archiv und Wartung entfallen dann. Können die Volume-Zuordnungen nicht gelesen werden, endet der Lauf mit einem Fehler, bevor ein Container gestoppt wird.
+- **Abhängigkeiten:** Container werden einzeln gestoppt. Eine Anwendung kann daher kurz ohne ihre Datenbank laufen, zum Beispiel Nextcloud während der Sicherung von MariaDB. Die Archive eines Laufs bilden keinen gemeinsamen Zeitpunkt. Für eng gekoppelte Dienste eignen sich der normale Modus oder die Datenbank-Sicherungen.
+- **Aufbewahrung:** Jede Archivserie `<präfix>@<container>-*` wird mit der Aufbewahrung des Jobs separat bereinigt. Ein gemeinsames Prune würde je Zeitraum nur ein Archiv über alle Container behalten. Der manuelle Prune auf der Repository-Seite betrifft nur `<aktueller-präfix>-*`. Wird die Option später ausgeschaltet, bleiben vorhandene Container-Archive erhalten, werden aber nicht mehr automatisch bereinigt.
+- **Wiederherstellung:** Bei **Archive dieses Jobs** zeigt Browse & Restore für Jobs mit dieser Option zusätzlich das Muster `<präfix>@*`. Nach dem Ausschalten der Option finden Sie ältere Container-Archive über **Alle Archive im Repository** oder einen **Eigenen Filter** wie `appdata@nextcloud-*`.
+
+Die Flow-Vorschau des Wizards zeigt die aktuell ermittelten Gruppen. Beim Lauf werden sie anhand der dann laufenden Container neu bestimmt; das Lauf-Log nennt jede Gruppe mit Pfaden und Archivnamen. Im Ablaufstreifen der Job-Karte erscheint dafür der Schritt **Docker nacheinander** mit dem Fortschritt der Gruppen.
+
 Jeder Job hat eine eigene Karte mit Rahmen und Abstand. In **Alle Standorte** erscheinen separate Standortüberschriften nur für Standorte mit Jobs. Leere Standorte bleiben in der linken Auswahl mit 0 sichtbar; bei einem ausgewählten Standort entfällt die doppelte Abschnittsüberschrift.
 
 Der Gesamtstatus steht direkt unter **Betriebszustand**.
 
-Der Ablaufstreifen nutzt die gesamte Kartenbreite. Er zeigt die im Lauf konfigurierten Schritte in Ausführungsreihenfolge: gegebenenfalls Pre-Skript, Datenbank-Sicherungen, Docker/VMs stoppen, `borg create`, Docker/VMs starten, `borg prune`, `borg compact`, `borg check` und Post-Skript. Bei „Alle Archive behalten“ fehlt `prune`. Eine eingeplante, noch nicht fällige Prüfung bleibt dagegen mit „Nicht fällig“ sichtbar. Namen und gemessene Laufzeiten sind immer sichtbar; alle Schritte bleiben in einer Zeile. Reicht der Platz nicht aus, lässt sich der Ablaufstreifen horizontal scrollen, auch per Tastatur nach Auswahl mit Tab.
+Der Ablaufstreifen nutzt die gesamte Kartenbreite. Er zeigt die im Lauf konfigurierten Schritte in Ausführungsreihenfolge: gegebenenfalls Pre-Skript, Datenbank-Sicherungen, Docker/VMs stoppen, `borg create`, Docker/VMs starten, `borg prune`, `borg compact`, `borg check` und Post-Skript. Bei nacheinander gesicherten Containern ersetzt **Docker nacheinander** das Stoppen und Starten von Docker; `borg create` steht dann für das normale Archiv. Bei „Alle Archive behalten“ fehlt `prune`. Eine eingeplante, noch nicht fällige Prüfung bleibt dagegen mit „Nicht fällig“ sichtbar. Namen und gemessene Laufzeiten sind immer sichtbar; alle Schritte bleiben in einer Zeile. Reicht der Platz nicht aus, lässt sich der Ablaufstreifen horizontal scrollen, auch per Tastatur nach Auswahl mit Tab.
 
 Haken im Kreis, Kreuz im Kreis, Warndreieck, Stopp-Symbol, Minus, leerer Kreis und animierter Ring unterscheiden Erfolg, Fehler, Warnung, Abbruch, übersprungene, ausstehende und laufende Schritte auch ohne Farberkennung. Bei reduzierter Bewegung bleibt der Ring statisch. Bei Fortschrittsaktualisierungen läuft die Animation ohne Neustart weiter. Nicht ausgeführte Schritte erhalten keine erfundene Laufzeit und keinen Erfolgshaken. Dienstwiederherstellung nach Fehlern oder Abbrüchen wird ebenfalls erfasst.
 
@@ -1570,6 +1585,7 @@ und Metrikgrenzen: [Prometheus-/Grafana-Leitfaden](../../integrations/prometheus
 ### 12.3 Docker und VMs
 
 - Bei vollständigem Appdata-Backup möglichst alle Docker-Container stoppen.
+- Für kurze Ausfallzeiten Container nacheinander sichern und die geplanten Gruppen in der Flow-Vorschau prüfen.
 - Bei vollständigem Domains-Backup möglichst alle VMs herunterfahren.
 - Selektive Steuerung nur verwenden, wenn klar ist, welche Dienste Daten schreiben.
 - Runtime-Recovery-Hinweise ernst nehmen und erst nach Prüfung erledigen.
@@ -1942,6 +1958,9 @@ seitdem keine Daten hinzugekommen sind.
    Logbereinigung. Ein Pre-Fehler oder Timeout verhindert Stopp und Archivierung.
 3. Ausgewählte laufende Docker-Container stoppen, danach ausgewählte laufende VMs
    herunterfahren. Keine ausgeschalteten Dienste allein für das Backup starten.
+   Bei nacheinander gesicherten Containern wird stattdessen jede Containergruppe
+   gestoppt, in ihr eigenes Archiv gesichert und wieder gestartet; VMs werden erst
+   für das normale Archiv heruntergefahren.
 4. Archiv mit Borg erstellen. Fehler oder Abbruch führen zur Aufräum- und
    Wiederanlaufphase. Bei Warnung kann ein Archiv vorhanden sein; Details prüfen.
 5. Nach erfolgreicher Archiverstellung zuerst Docker und danach VMs wieder

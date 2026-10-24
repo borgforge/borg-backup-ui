@@ -171,6 +171,7 @@ def _runtime_control_from_params(params: dict, kind: str, existing: Optional[dic
         "selected": selected if mode in {"selected", "except_selected"} else [],
         ack_key: ack,
         **({"force_stop": source.get("force_stop") is True} if kind == "vm" else {}),
+        **({"sequential": mode != "none" and source.get("sequential") is True} if kind == "docker" else {}),
     }
 
 
@@ -187,7 +188,27 @@ def _runtime_control_from_meta(meta: dict, kind: str) -> dict:
         "selected": _split_selected(raw.get("selected", [])) if mode in {"selected", "except_selected"} else [],
         ack_key: bool(raw.get(ack_key, False)),
         **({"force_stop": raw.get("force_stop") is True} if kind == "vm" else {}),
+        **({"sequential": mode != "none" and raw.get("sequential") is True} if kind == "docker" else {}),
     }
+
+
+def _docker_sequence_preview(docker_control: dict, source_paths: list[str], exclude_paths: list[str]):
+    """Plan container groups from the live Docker state for the flow preview.
+
+    Returns None when Docker or the volume mappings are unavailable; the
+    runner then plans the groups at run time.
+    """
+    try:
+        from runtime.lib.docker_manager import DockerManager
+        from runtime.lib.docker_sequence import plan_sequence
+        manager = DockerManager()
+        targets = manager.running_targets(docker_control["mode"], docker_control["selected"])
+        if targets is None:
+            return None
+        mounts = manager.writable_bind_mounts([cid for _name, cid in targets]) if targets else {}
+        return plan_sequence(source_paths, targets, mounts, exclude_paths)
+    except Exception:
+        return None
 
 
 def _source_contains_path_component(raw_sources: list[str], component: str) -> bool:
@@ -387,7 +408,8 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
     meta_unmount_after_run = True
     meta_archive_prefixes: list[str] = []
     meta: dict = {}
-    meta_docker_control = {"mode": "all" if bool(info.has_docker) else "none", "selected": [], "ack_appdata_risk": False}
+    meta_docker_control = {"mode": "all" if bool(info.has_docker) else "none", "selected": [], "ack_appdata_risk": False,
+                           "sequential": False}
     meta_vm_control = {"mode": "all" if bool(info.has_vm) else "none", "selected": [], "ack_domains_risk": False, "force_stop": False}
     for meta_dir in get_jobs_meta_dirs(scripts_dir, data_root):
         meta_file = meta_dir / f"{job_key}.json"
@@ -507,7 +529,12 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
 
 
 def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, scripts_dir: Optional[Path] = None) -> dict:
-    """Erzeugt eine textuelle Backup-Flow-Vorschau fuer den Wizard."""
+    """Erzeugt eine textuelle Backup-Flow-Vorschau fuer den Wizard.
+
+    In sequential Docker mode the container groups are planned from the live
+    Docker state when it is reachable; otherwise the preview states that the
+    runner plans them at run time. Docker is only queried, never changed.
+    """
     location = params.get("location", "local")
     source_paths = normalize_source_paths(params.get("source_paths"), allow_empty=bool(params.get("database_profile_ids")))
     exclude_paths = _exclude_paths(params.get("exclude_paths", []))
@@ -524,6 +551,8 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
     file_activity = _bool_value(params.get("file_activity"), default=False)
     use_docker = docker_control["mode"] != "none"
     use_vm = vm_control["mode"] != "none"
+    sequential = use_docker and docker_control.get("sequential") is True
+    sequence = _docker_sequence_preview(docker_control, source_paths, exclude_paths) if sequential else None
 
     steps = []
     step_codes = []
@@ -544,7 +573,26 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
     add_step("prechecks", "Prechecks (prerequisites, parity, paths)")
     if database_profiles:
         add_step("databaseBackup", "Create required database dumps", count=sum(len(p['databases']) for p in database_profiles))
-    if use_docker:
+    if sequential:
+        prefix = str(params.get("archive_prefix") or "").strip() or "<prefix>"
+        if sequence is None:
+            add_step("dockerSequenceRuntime",
+                     "Back up Docker containers one after another; groups are determined from volume mappings at run time")
+        else:
+            add_step("dockerSequence",
+                     f"Back up {len(sequence.groups)} container group(s) one after another: stop -> archive -> start",
+                     count=len(sequence.groups))
+            for group in sequence.groups:
+                containers = ", ".join(group.containers)
+                archive = f"{prefix}@{group.key}"
+                paths = ", ".join(group.paths)
+                add_step("dockerSequenceGroup", f"{containers}: archive {archive}-... ({paths})",
+                         containers=containers, archive=archive, paths=paths)
+            if sequence.idle_containers:
+                idle = ", ".join(sequence.idle_containers)
+                add_step("dockerSequenceIdle", f"Keep running (no writable path in the backup sources): {idle}",
+                         containers=idle)
+    elif use_docker:
         if docker_control["mode"] == "selected":
             add_step("dockerStop", f"Stop selected Docker containers ({len(docker_control['selected'])})")
         elif docker_control["mode"] == "except_selected":
@@ -554,23 +602,38 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
             )
         else:
             add_step("dockerStop", "Stop all Docker containers")
-    if use_vm:
+    main_archive = not sequential or sequence is None or bool(sequence.main_paths or database_profiles)
+    if use_vm and main_archive:
         if vm_control["mode"] == "selected":
             add_step("vmStop", f"Shut down selected VMs ({len(vm_control['selected'])})")
         else:
             add_step("vmStop", "Shut down all VMs")
-    add_step(
-        "borgCreate",
-        f"Borg create ({len(source_paths)} source(s), {len(exclude_paths)} exclusion(s))",
-        count=len(source_paths),
-        exclusions=len(exclude_paths),
-    )
-    if use_docker:
+    if not sequential:
+        add_step(
+            "borgCreate",
+            f"Borg create ({len(source_paths)} source(s), {len(exclude_paths)} exclusion(s))",
+            count=len(source_paths),
+            exclusions=len(exclude_paths),
+        )
+    elif main_archive:
+        main_count = len(sequence.main_paths) if sequence is not None else len(source_paths)
+        main_exclusions = len(exclude_paths) + (len(sequence.main_excludes) if sequence is not None else 0)
+        add_step(
+            "borgCreateMain",
+            f"Borg create main archive for the remaining paths ({main_count} source(s), {main_exclusions} exclusion(s))",
+            count=main_count,
+            exclusions=main_exclusions,
+        )
+    else:
+        add_step("borgCreateMainSkipped", "No main archive needed: all source paths are in container archives")
+    if use_docker and not sequential:
         add_step("dockerStart", "Start Docker containers stopped by this job")
-    if use_vm:
+    if use_vm and main_archive:
         add_step("vmStart", "Start VMs stopped by this job")
     if retention.get("mode") == "all":
         add_step("borgMaintenanceKeepAll", "Borg maintenance (compact -> check; prune disabled)")
+    elif sequential:
+        add_step("borgMaintenanceSeries", "Borg maintenance (prune each archive series -> compact -> check)")
     else:
         add_step("borgMaintenance", "Borg maintenance (prune -> compact -> check)")
     add_step("repositoryStats", "Read final repository statistics")
@@ -606,6 +669,7 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
             "docker": use_docker,
             "vm": use_vm,
             "docker_mode": docker_control["mode"],
+            "docker_sequential": sequential,
             "vm_mode": vm_control["mode"],
             "vm_force_stop": vm_control.get("force_stop", False),
             "docker_selected": docker_control["selected"],

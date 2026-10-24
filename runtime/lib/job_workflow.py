@@ -18,14 +18,21 @@ class JobWorkflow:
         self.publish()
 
     @classmethod
-    def configured(cls, *, hooks=None, docker=False, vms=False, prune=True, controller=None, databases=False):
-        """Build the existing runner order from enabled hooks/workload policies."""
+    def configured(cls, *, hooks=None, docker=False, vms=False, prune=True, controller=None, databases=False,
+                   docker_sequence=False):
+        """Build the existing runner order from enabled hooks/workload policies.
+
+        ``docker_sequence`` replaces the Docker stop/start pair with one step
+        for the per-group archives that precede the main archive.
+        """
         hooks = hooks or {}
+        docker_pair = docker and not docker_sequence
         names = (["pre_script"] if hooks.get("pre") else [])
         names += (["database_backup"] if databases else [])
-        names += (["stop_docker"] if docker else []) + (["stop_vms"] if vms else [])
+        names += (["docker_sequence"] if docker_sequence else [])
+        names += (["stop_docker"] if docker_pair else []) + (["stop_vms"] if vms else [])
         names += ["create"]
-        names += (["start_docker"] if docker else []) + (["start_vms"] if vms else [])
+        names += (["start_docker"] if docker_pair else []) + (["start_vms"] if vms else [])
         names += (["prune"] if prune else []) + ["compact", "check"]
         names += (["post_script"] if hooks.get("post") else [])
         return cls(names, controller)

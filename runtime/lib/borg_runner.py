@@ -31,8 +31,10 @@ from typing import Dict, List, Optional
 
 try:
     from .retention_policy import normalize_retention, prune_arguments, retention_description, RetentionError
+    from .docker_sequence import archive_glob, series_glob, series_keys
 except ImportError:  # Direct CLI invocation.
     from retention_policy import normalize_retention, prune_arguments, retention_description, RetentionError
+    from docker_sequence import archive_glob, series_glob, series_keys
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +103,8 @@ class BorgConfig:
     # Grund: Initial-Backups (z. B. 1.5TB via 5MB/s) können mehrere Tage laufen.
     max_runtime_hours: int = 0
     file_activity: bool = False
+    # Sequential Docker jobs also prune each '<prefix>@<key>-<timestamp>' series.
+    prune_container_series: bool = False
 
     @classmethod
     def from_config(cls, config: Dict[str, str]) -> "BorgConfig":
@@ -256,6 +260,10 @@ class BorgRunner:
         self.steps[name].update(status="skipped", reason=reason)
         self._publish_steps()
 
+    def skip_create(self, reason: str) -> None:
+        """Record that this run intentionally creates no archive with this runner."""
+        self._skip_step("create", reason)
+
     def retention(self):
         return normalize_retention(self.config.retention_policy if self.config.retention_policy is not None else {
             period: getattr(self.config, f"keep_{period}")
@@ -272,10 +280,15 @@ class BorgRunner:
 
         Args:
             archive_prefix: Optional job-specific archive prefix. When set,
-                prune is scoped to archives matching '<prefix>-*'.
+                prune is scoped to archives matching '<prefix>-*'. With
+                ``config.prune_container_series`` every
+                '<prefix>@<key>-<timestamp>' series of sequential Docker
+                backups is then pruned separately with the same policy, and
+                the archive counters are summed.
 
         Returns:
-            Borg Exit-Code (0, 1 oder 2)
+            Borg Exit-Code (0, 1 oder 2); listing the container series failing
+            counts as error
         """
         if self.phase_callback:
             self.phase_callback("borg_prune")
@@ -285,10 +298,17 @@ class BorgRunner:
             logger.error("Borg prune blocked: %s", str(exc).lower())
             return BORG_EXIT_ERROR
         archive_prefix = str(archive_prefix or "").strip()
-        logger.info("Borg prune: archive filter %s; %s", f"{archive_prefix}-*" if archive_prefix else "all", " ".join(args))
+        exit_code = self._prune_archives(f"{archive_prefix}-*" if archive_prefix else "", args)
+        if self.config.prune_container_series and archive_prefix and exit_code < BORG_EXIT_ERROR:
+            exit_code = max(exit_code, self._prune_container_series(archive_prefix, args))
+        return exit_code
+
+    def _prune_archives(self, glob: str, args: List[str]) -> int:
+        """Run one prune command for a glob ("" selects all archives)."""
+        logger.info("Borg prune: archive filter %s; %s", glob or "all", " ".join(args))
         cmd = [
             "borg", "prune", "--verbose", "--list", "--progress", "--log-json",
-            *(["--glob-archives", f"{archive_prefix}-*"] if archive_prefix else []),
+            *(["--glob-archives", glob] if glob else []),
             *args,
         ]
         if self.config.repo:
@@ -304,6 +324,60 @@ class BorgRunner:
             logger.warning("WARNING: Borg prune failed (exit %d)", exit_code)
 
         return exit_code
+
+    def _prune_container_series(self, archive_prefix: str, args: List[str]) -> int:
+        """Prune each container archive series of the prefix on its own.
+
+        Separate series keep retention per container group; a shared glob
+        would keep only one archive per period across all groups. Stops at
+        the first error and publishes the summed archive counters.
+        """
+        names = self._list_archive_names(archive_glob(archive_prefix))
+        if names is None:
+            return BORG_EXIT_ERROR
+        keys = series_keys(archive_prefix, names)
+        logger.info("Container archive series to prune: %d", len(keys))
+        details = getattr(self.process_controller, "get_borg_details", None)
+        totals = dict(details()) if callable(details) else {}
+        worst = BORG_EXIT_OK
+        for key in keys:
+            if self.process_controller is not None and self.process_controller.is_cancel_requested():
+                return BORG_EXIT_CANCELLED
+            if self.phase_callback:
+                # A new command starts with fresh transient counters.
+                self.phase_callback("borg_prune")
+            worst = max(worst, self._prune_archives(series_glob(archive_prefix, key, keys), args))
+            if callable(details):
+                for name, value in details().items():
+                    totals[name] = totals.get(name, 0) + value
+            if worst >= BORG_EXIT_ERROR:
+                break
+        update = getattr(self.process_controller, "update_borg_details", None)
+        if callable(update) and totals:
+            try:
+                update(totals)
+            except (OSError, ValueError, TypeError):
+                pass
+        return worst
+
+    def _list_archive_names(self, glob: str) -> Optional[List[str]]:
+        """Return archive names matching a glob, or None if Borg fails."""
+        cmd = ["borg", "list", "--short", "--glob-archives", glob]
+        if self.config.repo:
+            cmd.append(self.config.repo)
+        env = os.environ.copy()
+        env["LC_ALL"] = "C"
+        env["LANG"] = "C"
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=1800)
+        except (subprocess.TimeoutExpired, OSError) as exc:
+            logger.error("Borg list of container archives failed: %s", type(exc).__name__)
+            return None
+        if result.returncode not in (BORG_EXIT_OK, BORG_EXIT_WARNING):
+            reason = (result.stderr or "").strip().splitlines()[-1:] or [""]
+            logger.error("Borg list of container archives failed (exit %d) %s", result.returncode, reason[0][:300])
+            return None
+        return [line.strip() for line in result.stdout.splitlines() if line.strip()]
 
     @_tracked_borg_step("compact")
     def compact(self) -> int:

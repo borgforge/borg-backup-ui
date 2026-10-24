@@ -79,6 +79,9 @@ If the Apps tab is unavailable, follow the official
   files. Keep archives by retention tiers, age, latest count, or keep all.
 - Stop all Docker containers, selected containers, or all except selected
   containers before a backup.
+- Optionally back up Docker containers one after another: each container is
+  only stopped while its own folders are archived, with one archive per
+  container and separate retention per archive series.
 - Stop selected VMs when a VM backup requires consistent runtime state.
 - Restart workloads stopped by the job after successful or warning-only archive
   creation, before pruning, compaction, and final repository statistics.

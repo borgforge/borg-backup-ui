@@ -350,11 +350,26 @@ A planned VM shutdown is reported as informational. A failed shutdown or restart
 
 Once archive creation (`borg create`) finishes, containers and VMs stopped by the job are restarted immediately, including when Borg reports warnings. Retention (`prune`), space reclamation (`compact`), and any due repository check (`check`) run afterwards and do not extend service downtime. If archive creation fails or is cancelled, cleanup still restarts the stopped workloads. If a restart fails, recovery is still attempted for the other workload type; the run ends as an error and maintenance does not start.
 
+#### Back up containers one after another
+
+With **Stop and back up containers one after another** in the Docker step, containers are no longer stopped together for the whole backup. Instead, each container group is stopped, its own folders are archived, and it is restarted right away before the next group follows. Each container is therefore only stopped while its own folders are backed up. Without this option, the previous behavior is unchanged.
+
+- **Folders per container:** During the run, the application reads the writable bind mounts (volume mappings) of the running containers in the selected scope. Only paths inside the backup sources count, for example `/mnt/user/appdata/nextcloud`. Unraid views such as `/mnt/cache/appdata/...` or `/mnt/disk1/appdata/...` are matched to the `/mnt/user/appdata/...` share. Read-only mappings and Docker volumes are ignored. If a backup source lies inside a mapping, the whole source belongs to that container. Excluded or missing folders are skipped and named in the run log.
+- **Archives:** Each group gets its own archive `<prefix>@<container>-<date>`, for example `appdata@nextcloud-2026-10-24_03-00-12`. All remaining source paths and database dumps are then backed up without stopped containers in the regular archive `<prefix>-<date>`, which excludes the container folders. If nothing remains, this archive is skipped. Selected VMs are only shut down for this regular archive.
+- **Shared folders:** If the folders of several containers overlap (same or nested path), these containers are stopped together and backed up in one archive `<prefix>@<container1>+<container2>-<date>`. A container with a broad mapping, such as a file manager with `/mnt/user`, overlaps with every folder; all affected containers are then stopped together. Remove such containers from the scope with **All except selected containers** if they do not write to the sources during the backup.
+- **No folders in the sources:** Containers without a writable path inside the backup sources are not stopped.
+- **Errors and cancellation:** The group that is currently stopped is always restarted before the run ends. After a cancellation, a `borg create` error, or a failed restart, no further group is stopped; the regular archive and maintenance are skipped. If the volume mappings cannot be read, the run fails before any container is stopped.
+- **Dependencies:** Containers are stopped individually. An application can therefore briefly run without its database, for example Nextcloud while MariaDB is backed up. The archives of one run do not share a single point in time. For tightly coupled services, use the regular mode or the database backups.
+- **Retention:** Each archive series `<prefix>@<container>-*` is pruned separately with the job's retention. A shared prune would keep only one archive per period across all containers. The manual prune on the repository page only covers `<current-prefix>-*`. If the option is turned off later, existing container archives are kept but are no longer pruned automatically.
+- **Restore:** With **Archives of this job**, Browse & Restore also shows the pattern `<prefix>@*` for jobs with this option. After turning the option off, find older container archives with **All archives in repository** or a **Custom filter** such as `appdata@nextcloud-*`.
+
+The wizard's flow preview shows the currently detected groups. A run determines them again from the containers running at that time; the run log names each group with its paths and archive name. The job card's workflow strip shows the step **Docker one by one** with the group progress.
+
 Each job has its own bordered card with spacing. **All locations** shows separate headings only for destinations with jobs. Empty destinations remain in the sidebar with a count of 0; selecting one location avoids a duplicate section heading.
 
 The overall result appears directly below **Operating status**.
 
-The workflow spans the full job-card width and shows the configured run steps in execution order: optional Pre script, database backups, Docker/VM shutdown, `borg create`, Docker/VM recovery, `borg prune`, `borg compact`, `borg check` and Post script. With “Keep all archives”, prune is absent. A configured check that is not due remains visible with its reason. Names and measured durations are always visible; all steps stay in one row. When space is limited, scroll the workflow horizontally; keyboard scrolling is available after focusing it with Tab.
+The workflow spans the full job-card width and shows the configured run steps in execution order: optional Pre script, database backups, Docker/VM shutdown, `borg create`, Docker/VM recovery, `borg prune`, `borg compact`, `borg check` and Post script. When containers are backed up one after another, **Docker one by one** replaces the Docker stop and start steps; `borg create` then stands for the regular archive. With “Keep all archives”, prune is absent. A configured check that is not due remains visible with its reason. Names and measured durations are always visible; all steps stay in one row. When space is limited, scroll the workflow horizontally; keyboard scrolling is available after focusing it with Tab.
 
 A circled check, circled cross, warning triangle, stop symbol, minus, empty circle and rotating ring distinguish success, failure, warning, cancellation, skipped, pending and running steps without relying on color alone. Reduced-motion preferences disable ring animation. Progress updates preserve the running animation without restarting it. Unexecuted steps never receive invented durations or success symbols. Recovery after errors or cancellation is tracked too.
 
@@ -1552,6 +1567,7 @@ history. Configuration examples and metric limits are in the
 ### 12.3 Docker and VMs
 
 - For a full appdata backup, stop all Docker containers where possible.
+- For short downtimes, back up containers one after another and check the planned groups in the flow preview.
 - For a full domains backup, shut down all VMs where possible.
 - Use selective control only if it is clear which services write data.
 - Treat runtime recovery notes seriously and resolve them only after checking.
@@ -1909,6 +1925,9 @@ Compact runs. Missing or old measurements do not prove no data has been added.
    A Pre failure or timeout prevents workload shutdown and archive creation.
 3. Stop selected running Docker containers, then shut down selected running VMs.
    Do not start previously stopped workloads merely for the backup.
+   When containers are backed up one after another, each container group is
+   instead stopped, archived on its own and restarted; VMs are only shut down
+   for the regular archive.
 4. Create the archive with Borg. Failure or cancellation enters cleanup and
    workload recovery. A warning may still leave an archive; inspect details.
 5. After successful archive creation, restart Docker and then VMs before

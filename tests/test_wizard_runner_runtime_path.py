@@ -78,7 +78,18 @@ def test_wizard_runner_preserves_docker_exclusion_runtime_control():
     assert control == {
         "mode": "except_selected",
         "selected": ["beszel", "beszel-agent"],
+        "sequential": False,
     }
+
+
+def test_wizard_runner_reads_sequential_docker_control_only_when_enabled():
+    sequential = {"mode": "all", "sequential": True}
+    assert wizard_runner._runtime_control({"docker_control": sequential}, "docker")["sequential"] is True
+    assert wizard_runner._runtime_control({"docker_control": {"mode": "none", "sequential": True}}, "docker")[
+        "sequential"] is False
+    assert wizard_runner._runtime_control({"docker_control": {"mode": "all", "sequential": "yes"}}, "docker")[
+        "sequential"] is False
+    assert "sequential" not in wizard_runner._runtime_control({"vm_control": sequential}, "vm")
 
 
 def test_wizard_runner_passes_archive_prefix_to_maintenance() -> None:

@@ -582,6 +582,20 @@ class BackupJob:
                                      **({"status": "skipped", "reason": "unavailable"} if not result.available else
                                         {"status": "error"} if not result.success else {}))
 
+    def stop_docker_group(self, names: List[str]) -> None:
+        """Stop one sequential container group after the previous group restarted.
+
+        Resets the per-group restart state, so ``recover_runtime`` restarts
+        exactly this group, also after errors or cancellation. Raises
+        RuntimeError while a previously stopped group awaits its restart.
+        """
+        if self._docker_stop_result is not None and not self._docker_restarted:
+            raise RuntimeError("The previous Docker container group has not been restarted")
+        self._docker_stop_result = None
+        self._docker_recovery_id = ""
+        self._docker_restarted = False
+        self.stop_docker(list(names))
+
     def recover_runtime(self) -> None:
         """Restart this job's stopped workloads before repository maintenance.
 

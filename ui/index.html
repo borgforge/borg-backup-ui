@@ -1723,6 +1723,13 @@
                 </div>
               </div>
               <div id="wiz-docker-selection" class="wizard-runtime-selection hidden"></div>
+              <div class="form-group">
+                <label class="form-checkbox-row" for="wiz-docker-sequential">
+                  <input type="checkbox" id="wiz-docker-sequential" aria-describedby="wiz-docker-sequential-hint">
+                  <span data-i18n="wizard.dockerSequential">Container nacheinander stoppen und sichern</span>
+                </label>
+                <p id="wiz-docker-sequential-hint" class="form-hint" data-i18n="wizard.dockerSequentialHint">Statt alle Container gleichzeitig zu stoppen, wird jeder Container nur so lange gestoppt, wie seine eigenen Ordner gesichert werden, und danach sofort wieder gestartet. Die Ordner werden aus den beschreibbaren Volume-Zuordnungen innerhalb der Backup-Quellen ermittelt; jeder Container erhält ein eigenes Archiv (Präfix@Container-Datum). Container mit gemeinsam genutzten Ordnern werden zusammen gestoppt. Alle übrigen Pfade landen anschließend im normalen Archiv.</p>
+              </div>
             </div>
           </div>
         </div>
