@@ -1871,7 +1871,6 @@ function wizardPolicyHelpContent(topic) {
   if (topic === 'docker-order') {
     return {title: wizardT('wizard.dockerOrderHelp'), retention: false,
       sections: [
-        {text: wizardT('wizard.dockerOrderHint')},
         {text: wizardT('wizard.dockerOrderNote')},
       ]};
   }
