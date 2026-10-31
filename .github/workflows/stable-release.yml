@@ -1,0 +1,44 @@
+name: Stable preview (no publication)
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Already tested version: YYYY.MM.DD.HHMM'
+        required: true
+        type: string
+      platform:
+        type: choice
+        description: 'Unraid 8 is not implemented'
+        options: [unraid-legacy, unraid-8]
+        default: unraid-legacy
+permissions:
+  contents: read
+concurrency:
+  group: stable-preview-${{ inputs.platform }}
+  cancel-in-progress: false
+jobs:
+  preview:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      PLATFORM: ${{ inputs.platform }}
+      VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Verify and prepare exact tested bytes (no rebuild)
+        run: |
+          python plugin/ci_pipeline.py stable-preview --platform "$PLATFORM" --version "$VERSION" --output .release-tmp/stable-preview
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: stable-preview-${{ inputs.platform }}-${{ github.run_id }}
+          path: .release-tmp/stable-preview/artifacts/*
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error

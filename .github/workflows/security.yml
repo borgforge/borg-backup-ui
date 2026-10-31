@@ -1,0 +1,37 @@
+name: Dependency security
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '23 5 * * 1'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: security-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: .github/requirements-security.lock
+      - run: |
+          mkdir -p .release-tmp/security-check
+          python -m pip install --require-hashes -r .github/requirements-security.lock
+      - name: Audit locked runtime dependencies (no package execution)
+        run: pip-audit --disable-pip --require-hashes -r plugin/apprise-requirements.lock --format json --output .release-tmp/security-check/runtime.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: dependency-audit-${{ github.run_id }}
+          path: .release-tmp/security-check/runtime.json
+          retention-days: 14

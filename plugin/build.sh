@@ -25,6 +25,14 @@ PLG_FILE="${REPO_DIR}/${NAME}.plg"
 APPRISE_LOCK_FILE="${SCRIPT_DIR}/apprise-requirements.lock"
 APPRISE_VENDOR_DIR="${REPO_DIR}/runtime/vendor"
 APPRISE_VENDOR_VERSION=""
+BUILD_METRICS_FILE="${BUILD_METRICS_FILE:-${BUILD_OUTPUT_DIR}/metrics.jsonl}"
+
+# Record duration/resources/exit code without including command arguments.
+measure_step() {
+  local step="$1"
+  shift
+  python3 "${SCRIPT_DIR}/build_metrics.py" --output "$BUILD_METRICS_FILE" --step "$step" -- "$@"
+}
 
 echo "==> Baue ${NAME} v${VERSION}"
 
@@ -81,9 +89,9 @@ install_apprise_vendor() {
   echo "==> Installiere hash-gepruefte Apprise Runtime nach runtime/vendor"
   rm -rf "${APPRISE_VENDOR_DIR}"
   mkdir -p "${APPRISE_VENDOR_DIR}"
-  python3 -m pip install \
+  measure_step dependencies python3 -m pip install \
     --disable-pip-version-check \
-    --no-cache-dir \
+    --no-compile \
     --only-binary=:all: \
     --require-hashes \
     --target "${APPRISE_VENDOR_DIR}" \
@@ -103,7 +111,7 @@ if not version:
 print(version)
 PY
 )"
-  PYTHONDONTWRITEBYTECODE=1 python3 -S "${SCRIPT_DIR}/check_apprise_runtime.py" "${APPRISE_VENDOR_DIR}"
+  PYTHONDONTWRITEBYTECODE=1 measure_step dependency-check python3 -S "${SCRIPT_DIR}/check_apprise_runtime.py" "${APPRISE_VENDOR_DIR}"
   find "${APPRISE_VENDOR_DIR}" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
   echo "==> Apprise Runtime: ${APPRISE_VENDOR_VERSION}"
 }
@@ -126,7 +134,7 @@ create_apprise_vendor_bundle() {
 
   # Keep the bundle hash stable across builds when the vendored dependency tree
   # did not change. This lets Unraid upgrades skip re-extracting Apprise.
-  tar --create \
+  measure_step vendor-bundle tar --create \
       --xz \
       --file="${bundle_tmp}" \
       --directory="${APPRISE_VENDOR_DIR}" \
@@ -173,7 +181,7 @@ cp "${REPO_DIR}/borg_backup_ui.conf.example" "${APP_DST}/"
 cp "${REPO_DIR}/LICENSE"                     "${APP_DST}/"
 cp -r "${REPO_DIR}/api"                      "${APP_DST}/"
 cp -r "${REPO_DIR}/ui"                       "${APP_DST}/"
-python3 "${REPO_DIR}/plugin/package_documentation.py" "${REPO_DIR}" "${APP_DST}"
+measure_step documentation python3 "${REPO_DIR}/plugin/package_documentation.py" "${REPO_DIR}" "${APP_DST}"
 if [ -d "${REPO_DIR}/runtime" ]; then
   mkdir -p "${APP_DST}/runtime"
   (
@@ -226,7 +234,7 @@ ${NAME}:
 EOF
 
 # ── .txz bauen ────────────────────────────────────────────────────────────
-python3 "${SCRIPT_DIR}/release_workflow.py" build-package \
+measure_step package python3 "${SCRIPT_DIR}/release_workflow.py" build-package \
   --root "${BUILD_DIR}" --package "${PKG_FILE}"
 
 echo "==> Paket: ${PKG_FILE}"
@@ -238,6 +246,7 @@ else
   MD5=$(md5 -q "${PKG_FILE}")  # macOS
 fi
 echo "==> MD5: ${MD5}"
+SHA256="$(sha256sum "$PKG_FILE" | cut -d' ' -f1)"
 
 # ── .plg-Datei aktualisieren (version-Entity + MD5) ──────────────────────
 if [ -f "${PLG_FILE}" ]; then
@@ -246,6 +255,8 @@ if [ -f "${PLG_FILE}" ]; then
     -e "s|<MD5>[^<]*</MD5>|<MD5>${MD5}</MD5>|" \
     "${PLG_FILE}"
   rm -f "${PLG_FILE}.bak"
+  python3 "${SCRIPT_DIR}/release_workflow.py" rewrite-package-installer \
+    --manifest "$PLG_FILE" --md5 "$MD5" --sha256 "$SHA256"
   echo "==> ${PLG_FILE} aktualisiert (version + MD5)"
 fi
 

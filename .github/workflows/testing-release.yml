@@ -1,0 +1,68 @@
+name: Testing candidate (no publication)
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Candidate version: YYYY.MM.DD.HHMM'
+        required: true
+        type: string
+      platform:
+        description: 'Unraid 8 is reserved and fails closed until SDK validation'
+        type: choice
+        options: [unraid-legacy, unraid-8]
+        default: unraid-legacy
+permissions:
+  contents: read
+concurrency:
+  group: candidate-${{ inputs.platform }}-${{ inputs.version }}
+  cancel-in-progress: false
+jobs:
+  target:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - env:
+          PLATFORM: ${{ inputs.platform }}
+          VERSION: ${{ inputs.version }}
+        run: PYTHONPATH=plugin python3 -c 'import os; from build_targets import target,validate_version; target(os.environ["PLATFORM"],"testing"); validate_version(os.environ["VERSION"])'
+  checks:
+    needs: target
+    uses: ./.github/workflows/checks.yml
+  build:
+    needs: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      TMPDIR: ${{ github.workspace }}/.release-tmp/ci/tmp
+      PIP_CACHE_DIR: ${{ github.workspace }}/.release-tmp/pip-cache
+      PLATFORM: ${{ inputs.platform }}
+      VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - run: mkdir -p "$TMPDIR" "$PIP_CACHE_DIR"
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .release-tmp/pip-cache
+          key: wheels-v1-${{ runner.os }}-${{ runner.arch }}-py312-${{ hashFiles('plugin/apprise-requirements.lock') }}
+      - name: Prepare candidate only
+        run: |
+          umask 0022
+          python plugin/ci_pipeline.py prepare --platform "$PLATFORM" --version "$VERSION" --output .release-tmp/candidate
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: candidate-${{ inputs.platform }}-${{ github.run_id }}
+          path: |
+            .release-tmp/candidate/artifacts/*
+            .release-tmp/candidate/metrics.jsonl
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
