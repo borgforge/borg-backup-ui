@@ -16,7 +16,7 @@ def test_apprise_lock_is_hash_pinned() -> None:
     lock = ROOT / "plugin" / "apprise-requirements.lock"
     text = lock.read_text(encoding="utf-8")
 
-    assert "apprise==1.13.1" in text
+    assert "apprise==2.1.0" in text
     assert "--hash=sha256:" in text
     for package in ("requests==", "PyYAML==", "certifi=="):
         assert package in text
@@ -90,15 +90,15 @@ def test_vendor_upgrade_extracts_once_and_rejects_corrupt_bundle(tmp_path) -> No
     vendor.mkdir()
     (vendor / "old.txt").write_text("old runtime")
     marker = vendor / ".apprise-vendor.json"
-    marker.write_text(json.dumps({"version": "1.12.0", "sha256": "old"}, indent=2))
+    marker.write_text(json.dumps({"version": "1.13.1", "sha256": "old"}, indent=2))
     payload = tmp_path / "source" / "apprise"
     payload.mkdir(parents=True)
-    (payload / "__init__.py").write_text('__version__ = "1.13.1"\n')
+    (payload / "__init__.py").write_text('__version__ = "2.1.0"\n')
     bundle = tmp_path / "vendor.tar.xz"
     with tarfile.open(bundle, "w:xz") as archive:
         archive.add(payload, arcname="apprise")
     metadata = tmp_path / "apprise-vendor.json"
-    metadata.write_text(json.dumps({"version": "1.13.1", "bundle": bundle.name,
+    metadata.write_text(json.dumps({"version": "2.1.0", "bundle": bundle.name,
                                    "sha256": hashlib.sha256(bundle.read_bytes()).hexdigest()}, indent=2))
     script = tmp_path / "install-vendor.sh"
     script.write_text('''set -eu
@@ -109,14 +109,14 @@ VENDOR_BUNDLE_DIR="$1"
 VENDOR_TMP="$1/vendor.tmp"
 ''' + functions + "\nensure_apprise_vendor\n")
     first = subprocess.run(["bash", str(script), str(tmp_path)], check=True, capture_output=True, text=True)
-    assert "extracting Apprise runtime 1.13.1" in first.stdout
+    assert "extracting Apprise runtime 2.1.0" in first.stdout
     assert not (vendor / "old.txt").exists()
     before = (marker.stat().st_ino, marker.stat().st_mtime_ns)
     second = subprocess.run(["bash", str(script), str(tmp_path)], check=True, capture_output=True, text=True)
     assert "unchanged, skipping extraction" in second.stdout
     assert before == (marker.stat().st_ino, marker.stat().st_mtime_ns)
-    marker.write_text(json.dumps({"version": "1.12.0", "sha256": "old"}, indent=2))
+    marker.write_text(json.dumps({"version": "1.13.1", "sha256": "old"}, indent=2))
     bundle.write_bytes(b"corrupt")
     failed = subprocess.run(["bash", str(script), str(tmp_path)], capture_output=True, text=True)
     assert failed.returncode != 0 and "SHA256 does not match" in failed.stdout
-    assert (vendor / "apprise/__init__.py").read_text() == '__version__ = "1.13.1"\n'
+    assert (vendor / "apprise/__init__.py").read_text() == '__version__ = "2.1.0"\n'

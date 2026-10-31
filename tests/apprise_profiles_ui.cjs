@@ -39,16 +39,18 @@ for (const language of ['de', 'en']) {
     }
     assert.ok(context._renderAppriseUrlConfig('custom-provider', {}, true).includes('apprise-profile-url'));
 
-    const profile = {id: 'old-alerts', name: 'Old alerts', provider: 'apprise', url_set: true,
-      warning_code: 'apprise_notificationapi_retired', selected_events: ['backup_success']};
-    state.appriseProfiles = [profile];
-    state.appriseSelectedProfileId = profile.id;
-    const warning = translate('api.messages.apprise_notificationapi_retired');
-    assert.ok(context.renderSettingsAppriseProfiles().includes(warning));
-    state.appriseDraftProfile = context._appriseDraftFromProfile(profile);
-    assert.ok(context.renderSettingsAppriseProfiles().includes(warning));
-    state.appriseDraftProfile = null;
-    state.appriseProfiles = [{...profile, provider: 'ntfy', warning_code: ''}];
-    assert.ok(!context.renderSettingsAppriseProfiles().includes(warning));
+    for (const code of ['apprise_notificationapi_retired', 'apprise_chime_retired']) {
+      const profile = {id: 'old-alerts', name: 'Old alerts', provider: 'apprise', url_set: true,
+        warning_code: code, selected_events: ['backup_success']};
+      state.appriseProfiles = [profile];
+      state.appriseSelectedProfileId = profile.id;
+      const warning = translate(`api.messages.${code}`);
+      assert.ok(context.renderSettingsAppriseProfiles().includes(warning));
+      state.appriseDraftProfile = context._appriseDraftFromProfile(profile);
+      assert.ok(context.renderSettingsAppriseProfiles().includes(warning));
+      state.appriseDraftProfile = null;
+      state.appriseProfiles = [{...profile, provider: 'ntfy', warning_code: ''}];
+      assert.ok(!context.renderSettingsAppriseProfiles().includes(warning));
+    }
   });
 }
