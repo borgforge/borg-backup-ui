@@ -337,6 +337,7 @@ If Docker or VM control is enabled, the wizard shows dedicated selection steps.
 Options:
 
 - **All running containers**, **selected containers only**, or **all except selected containers**
+- **Order** of the containers for stopping and restarting, see "Job Start and Stop Order"
 - **All running VMs** or **selected VMs only**
 
 When `/mnt/user/appdata` is backed up, the application recommends stopping all Docker containers. When `/mnt/user/domains` is backed up, it recommends shutting down all VMs. If only selected services are stopped, the warning must be acknowledged deliberately.
@@ -392,9 +393,21 @@ Recovery is recorded before shutdown begins. If some VMs stop and another fails,
 
 For imported VMs, check the guest integration as well: the QEMU Guest Agent may be missing, inactive or incorrectly connected, and the guest may ignore an ACPI power-button event. Missing a Guest Agent alone does not prevent every normal shutdown; libvirt also supports ACPI. Check the guest's power settings and Guest Agent, test a normal shutdown in Unraid and review the job log before enabling force-off. See the [libvirt shutdown documentation](https://www.libvirt.org/manpages/virsh.html#shutdown).
 
+#### Job Start and Stop Order
+
+In the Docker step of the job wizard, the **Order** list shows all containers in the selected scope. Drag an entry to the desired position or move it with the arrows:
+
+- After archive creation, Borg Backup UI starts the containers stopped by the job from top to bottom. The next start follows once Docker has confirmed the previous one. The pauses between the label priority groups do not apply to the listed containers.
+- Before the backup, the containers are stopped one by one in reverse order. Put databases at the top: they start first and stop last.
+- Containers that are not in the saved order, such as containers added later, stop first and start after the listed containers according to their label priority.
+
+As long as you move nothing, the list shows the default order (`backup.start.priority` label, then name) and the job saves no order of its own. The containers are then stopped together and started by priority group as before. **Restore default order** returns to this behavior. Stopping one by one can take considerably longer than stopping together, while starting without group pauses is considerably shorter. For the listed containers, the custom order replaces the label priority groups, including the pauses between them. The flow preview and the run log show the order in use.
+
+> **Note:** In neither mode does Borg Backup UI wait for Docker health checks or application readiness. A database started first therefore does not necessarily accept connections yet when the next application starts. Applications should retry failed connections themselves.
+
 #### Docker Container Restart Priority
 
-The priority controls only the order in which containers stopped by Borg Backup UI are started again after archive creation. It does not control the stop order or Unraid's normal autostart order.
+The priority controls only the order in which containers stopped by Borg Backup UI are started again after archive creation. It does not control the stop order or Unraid's normal autostart order. If a job defines its own order, that order applies to the listed containers.
 
 Configure the label on each affected container in Unraid:
 

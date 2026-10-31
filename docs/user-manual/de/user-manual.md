@@ -345,6 +345,7 @@ Wenn Docker- oder VM-Steuerung aktiviert ist, zeigt der Wizard eigene Schritte f
 Optionen:
 
 - **Alle laufenden Container**, **nur ausgewählte Container** oder **alle außer den ausgewählten Containern**
+- **Reihenfolge** der Container für Stopp und Neustart, siehe „Start- und Stopp-Reihenfolge im Job“
 - **Alle laufenden VMs** oder **nur ausgewählte VMs**
 
 Bei `/mnt/user/appdata` empfiehlt die Anwendung, alle Docker-Container zu stoppen. Bei `/mnt/user/domains` empfiehlt sie, alle VMs herunterzufahren. Wenn nur einzelne Dienste gestoppt werden, muss der Hinweis bewusst bestätigt werden.
@@ -400,9 +401,21 @@ Die Wiederanlaufinformation wird vor dem ersten Shutdown gespeichert. Stoppen ei
 
 Prüfen Sie bei importierten VMs auch die Gastintegration: Der QEMU Guest Agent kann fehlen, inaktiv oder falsch angebunden sein; außerdem kann der Gast ein ACPI-Ausschaltsignal ignorieren. Ein fehlender Guest Agent verhindert allein nicht jedes normale Herunterfahren, da libvirt auch ACPI unterstützt. Prüfen Sie Energieeinstellungen und Guest Agent, testen Sie das normale Herunterfahren in Unraid und lesen Sie das Job-Log, bevor Sie das harte Ausschalten erlauben. Siehe [libvirt-Dokumentation zum Herunterfahren](https://www.libvirt.org/manpages/virsh.html#shutdown).
 
+#### Start- und Stopp-Reihenfolge im Job
+
+Im Docker-Schritt des Job-Wizards zeigt die Liste **Reihenfolge** alle Container im gewählten Umfang. Ziehen Sie einen Eintrag an die gewünschte Stelle oder verschieben Sie ihn mit den Pfeilen:
+
+- Nach der Archiverstellung startet Borg Backup UI die vom Job gestoppten Container von oben nach unten. Der nächste Start folgt, sobald Docker den vorherigen Start bestätigt hat. Die Pausen zwischen den Prioritätsgruppen des Labels entfallen für die aufgeführten Container.
+- Vor dem Backup werden die Container einzeln in umgekehrter Reihenfolge gestoppt. Stellen Sie Datenbanken nach oben: Sie starten zuerst und werden zuletzt gestoppt.
+- Container, die nicht in der gespeicherten Reihenfolge stehen, etwa später hinzugekommene, stoppen zuerst und starten nach den aufgeführten Containern gemäß ihrer Label-Priorität.
+
+Solange Sie nichts verschieben, zeigt die Liste die Standardreihenfolge (Label `backup.start.priority`, danach Name) und der Job speichert keine eigene Reihenfolge. Die Container werden dann wie bisher gemeinsam gestoppt und nach Prioritätsgruppen gestartet. **Standardreihenfolge wiederherstellen** kehrt zu diesem Verhalten zurück. Das einzelne Stoppen kann deutlich länger dauern als der gemeinsame Stopp, der Start dagegen ohne Gruppenpausen deutlich kürzer. Für die aufgeführten Container ersetzt die eigene Reihenfolge die Prioritätsgruppen des Labels einschließlich der Pausen zwischen ihnen. Flow-Vorschau und Lauf-Log nennen die verwendete Reihenfolge.
+
+> **Hinweis:** In keinem Modus wartet Borg Backup UI auf Docker-Health-Checks oder auf die Betriebsbereitschaft einer Anwendung. Eine zuerst gestartete Datenbank nimmt deshalb nicht zwingend schon Verbindungen an, wenn die nächste Anwendung startet. Anwendungen sollten fehlgeschlagene Verbindungsversuche selbst wiederholen.
+
 #### Neustart-Priorität für Docker-Container
 
-Die Priorität bestimmt ausschließlich, in welcher Reihenfolge die von Borg Backup UI gestoppten Container nach der Archiverstellung wieder gestartet werden. Sie ändert weder die Stopp-Reihenfolge noch die normale Unraid-Autostart-Reihenfolge.
+Die Priorität bestimmt ausschließlich, in welcher Reihenfolge die von Borg Backup UI gestoppten Container nach der Archiverstellung wieder gestartet werden. Sie ändert weder die Stopp-Reihenfolge noch die normale Unraid-Autostart-Reihenfolge. Legt ein Job eine eigene Reihenfolge fest, gilt diese für die dort aufgeführten Container.
 
 Konfigurieren Sie das Label für jeden betroffenen Container direkt in Unraid:
 

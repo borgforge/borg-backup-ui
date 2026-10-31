@@ -78,6 +78,7 @@ def test_wizard_runner_preserves_docker_exclusion_runtime_control():
     assert control == {
         "mode": "except_selected",
         "selected": ["beszel", "beszel-agent"],
+        "order": [],
     }
 
 

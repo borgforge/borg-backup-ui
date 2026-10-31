@@ -35,7 +35,7 @@ def run_backup(monkeypatch, tmp_path):
     state = SimpleNamespace(
         actions=[], phases=[], result=None, cancelled=False, create_exit=0,
         fail_restart="", cancel_at="", create_error=False, check_exit=0,
-        docker_mode="all", vm_mode="all",
+        docker_mode="all", vm_mode="all", docker_order=[], docker_config=None,
     )
 
     def action(name):
@@ -46,6 +46,7 @@ def run_backup(monkeypatch, tmp_path):
     class Docker:
         def __init__(self, config):
             self.config = config
+            state.docker_config = config
 
         def stop_all(self, _log):
             action("stop_docker")
@@ -111,7 +112,8 @@ def run_backup(monkeypatch, tmp_path):
     monkeypatch.setattr(wizard_runner, "_load_env_from_job", lambda *_: (
         {"BACKUP_SCRIPTS_DIR": str(tmp_path), "ABORT_ON_PARITY_CHECK": "false"},
         {"job_id": cfg.job_id, "location": "local", "archive_prefix": "appdata",
-         "docker_control": {"mode": state.docker_mode}, "vm_control": {"mode": state.vm_mode}},
+         "docker_control": {"mode": state.docker_mode, "order": state.docker_order},
+         "vm_control": {"mode": state.vm_mode}},
     ))
     monkeypatch.setattr(BackupJobConfig, "from_config", lambda _: cfg)
     monkeypatch.setattr(BackupJob, "check_prerequisites", lambda _: None)
@@ -213,3 +215,12 @@ def test_maintenance_cancellation_does_not_restart_workloads_again(run_backup, c
     assert state.phases[-1][0] == "cancelled"
     assert not state.config.lock_file.exists()
     assert runtime_recovery.summarize_runtime_recovery(state.config.runtime_recovery_file)["pending_count"] == 0
+
+
+@pytest.mark.parametrize("order", [["mariadb", "openhab"], []])
+def test_job_start_order_reaches_the_docker_manager(run_backup, order):
+    state = run_backup
+    state.docker_order = order
+    assert state.run() == 0
+    assert state.docker_config.start_order == order
+    assert state.actions[:2] == ["stop_docker", "stop_vms"]

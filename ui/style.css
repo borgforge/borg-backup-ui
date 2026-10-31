@@ -6093,6 +6093,74 @@ body.wizard-modal-open {
   font-size: 12px;
 }
 
+.wizard-order-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wizard-order-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.wizard-order-head .form-label {
+  margin: 0;
+}
+
+.wizard-order-head .wizard-runtime-card-meta {
+  margin: 0;
+}
+
+.wizard-order-head .btn {
+  margin-left: auto;
+}
+
+.wizard-order-group .form-hint {
+  margin: 0;
+}
+
+.wizard-order-row {
+  display: grid;
+  grid-template-columns: auto 2ch minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  cursor: grab;
+}
+
+.wizard-order-row:last-child {
+  border-bottom: 0;
+}
+
+.wizard-order-row:hover {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+
+.wizard-order-row.is-dragging {
+  opacity: 0.5;
+}
+
+.wizard-order-handle,
+.wizard-order-position {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.wizard-order-actions {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.wizard-order-actions .btn {
+  min-width: 30px;
+  padding-inline: 6px;
+}
+
 @media (max-width: 980px) {
   #wizard-step-1 .wizard-feature-grid {
     grid-template-columns: 1fr;

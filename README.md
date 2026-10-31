@@ -82,7 +82,8 @@ If the Apps tab is unavailable, follow the official
 - Stop selected VMs when a VM backup requires consistent runtime state.
 - Restart workloads stopped by the job after successful or warning-only archive
   creation, before pruning, compaction, and final repository statistics.
-- Configure Docker restart priority and delays for service dependencies.
+- Configure Docker restart priority and delays for service dependencies, or
+  drag containers into a per-job start order that also stops them in reverse.
 - Schedule jobs in the wizard and optionally show added, modified, and errored
   files in the live log.
 - Review a flow preview before saving the job.
