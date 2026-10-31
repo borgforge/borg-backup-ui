@@ -8,6 +8,10 @@ import shutil
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
+INVALID_HOOK_EXAMPLES = {
+    ROOT / 'docs/examples/job-hooks/pre-syntax-error.sh',
+    ROOT / 'docs/examples/job-hooks/post-syntax-error.sh',
+}
 
 
 def tracked_files() -> list[Path]:
@@ -25,7 +29,14 @@ def check() -> None:
         if path.suffix == '.py':
             py_compile.compile(str(path), doraise=True)
         elif path.suffix in ('.sh',) or path.name == 'rc.borg_backup_ui':
-            subprocess.run(['bash', '-n', str(path)], check=True)
+            if path in INVALID_HOOK_EXAMPLES:
+                # #550 ships negative examples for save-time validation. They
+                # must still fail parsing, not be silently omitted from checks.
+                result = subprocess.run(['bash', '-n', str(path)], capture_output=True)
+                if result.returncode == 0:
+                    raise RuntimeError(f'Negative syntax fixture unexpectedly parses: {path}')
+            else:
+                subprocess.run(['bash', '-n', str(path)], check=True)
         elif path.suffix in ('.js', '.cjs'):
             subprocess.run(['node', '--check', str(path)], check=True, stdout=subprocess.DEVNULL)
         elif path.suffix in ('.php', '.page'):

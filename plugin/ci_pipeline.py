@@ -28,7 +28,9 @@ def sha256(path: Path) -> str:
 def local_output(repo: Path, output: Path) -> Path:
     """Create a new repository-local preview directory; never overwrite output."""
     output = output.resolve()
-    if not output.is_relative_to((repo / '.release-tmp').resolve()):
+    temporary_root = (repo / '.release-tmp').resolve()
+    if (not temporary_root.is_relative_to(repo.resolve()) or output == temporary_root
+            or not output.is_relative_to(temporary_root)):
         raise ValueError('Output must be below repository .release-tmp')
     output.mkdir(parents=True, exist_ok=False)
     return output

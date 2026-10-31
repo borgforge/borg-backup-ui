@@ -145,6 +145,15 @@ def test_preview_output_never_overwrites_or_leaves_repository(tmp_path):
         ci.local_output(repo, output)
 
 
+def test_preview_output_rejects_escaping_temporary_root_symlink(tmp_path):
+    repo = tmp_path / 'repo'; repo.mkdir()
+    outside = tmp_path / 'outside'; outside.mkdir()
+    (repo/'.release-tmp').symlink_to(outside, target_is_directory=True)
+    with pytest.raises(ValueError, match='below repository'):
+        ci.local_output(repo, repo/'.release-tmp/candidate')
+    assert not (outside/'candidate').exists()
+
+
 def test_metrics_capture_failure_without_command_arguments(tmp_path):
     path = tmp_path / 'metrics.jsonl'
     assert measure(path, 'failed-check', [sys.executable, '-c', 'raise SystemExit(7)', 'secret-argument']) == 7

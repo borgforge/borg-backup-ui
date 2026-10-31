@@ -176,6 +176,54 @@ counts and comparable peak memory are unavailable; the baseline measured child
 RSS only while the optimized compressor runs in Python itself. New metrics
 measure each compressor as a child process for future consistent comparisons.
 
+Two complete local candidate previews used implementation commit `ba7b6fd`,
+version `2026.10.31.1600`, Python 3.12 and pip 26.2.2. The second build is an
+intentional reproducibility/cache experiment, not a second release. Subsequent
+changes only refine CI validation/reporting, outside the deployable source
+digest. The final source preflight validates the final pushed commit separately.
+
+| Preview step | Empty pip cache | Reused pip cache |
+| --- | --- | --- |
+| Source export | 0.341s | 0.354s |
+| Metadata/notes preparation | 0.045s | 0.051s |
+| Locked dependency install | 9.505s | 2.132s |
+| Offline all-provider check | 1.298s | 1.017s |
+| Documentation copy | 0.053s | 0.071s |
+| Vendor bundle | 3.206s | 3.390s |
+| Package compression | 35.123s | 35.693s |
+| Build aggregate (includes its child steps) | 50.667s | 43.110s |
+| Shared provenance validation | 3.864s | 3.606s |
+| Complete preview, including hashes and artifact copy | 59.876s | 52.223s |
+
+Both complete previews are 76,482,876 bytes with SHA256
+`7e46883be21082d812ce7b63689ff5787ad1620180b5cad7864ede3850a840c3`;
+their manifests also compare byte-for-byte. Both source digests are
+`87033573153cb5451a8b66b8b48bc0c869f7839570c7d1b6cbd2c5e1a1599fbd`.
+Cold pip logs show 11 downloads; warm logs show 11 cached wheels. The cache
+occupies 4,241,323 bytes. Actual HTTP byte counts/queue time were not measured.
+Peak child RSS was 117,232 / 117,096 KiB. The provider check exercised all 141
+Apprise providers, metadata and synthetic HTTP/SMTP success/rejection/timeout
+paths offline. Do not sum aggregate and child step durations.
+
+### Validation boundary
+
+Local validation includes successful Python/JS/PHP/shell syntax, Ruff checks,
+Borg binary SHA256 and execution, actionlint 1.7.12, npm lock installation,
+target/channel/checksum tests, old stable MD5-only manifest compatibility and
+the two complete reproducible builds above. The two intentional invalid hook
+examples from #550 are checked for expected syntax failure, not treated as
+production syntax defects. A real main-only stable-preview guard and both
+Unraid 8 target guards were exercised and refused output as intended.
+
+Final full pytest/preflight results are recorded on the implementation PR for
+the final commit. A first hosted Actions run is needed to validate runner setup,
+cache restoration, artifact retention/permissions and job scheduling. Real
+Unraid fresh install, stable-to-testing update, testing-to-stable update, reboot,
+same-version repair, uninstall preserving data, and a synthetic backup/restore
+remain manual system tests. No such installation has been simulated as passed.
+Both legacy channel snapshots remain untouched by this audit; local previews
+are not published install URLs or a stable approval.
+
 ## F. Risks
 
 Archive metadata changes need extraction/ownership and reproducibility tests;
