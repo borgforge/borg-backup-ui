@@ -97,6 +97,15 @@ CI on PRs and relevant main pushes; independent quality/security work can run
 alongside the full test suite. Keep stateful tests serial until their global
 fixtures/environment changes are proven safe for process sharding.
 
+Classify the actual delta before running source tests: a pure stable release
+uses artifact checks only, on both its PR and main push. It must preserve the
+deployable source digest, change only permitted release files, consume exactly
+the tested note fragments and pass manifest/package/provenance checks. PRs also
+compare bytes to a fetched test snapshot. A branch name cannot bypass tests;
+mixed source/release changes fail. A later test-feed rotation does not invalidate
+an already committed main release. Checkout uses depth 2 for this classification
+and fetches the exact base SHA only when missing, not all historical packages.
+
 Manual candidate and stable-preview workflows produce review artifacts only.
 They have no publish credentials, tag pushes or channel writes. A stable preview
 consumes the exact test snapshot and verifies its source digest against main;
@@ -109,7 +118,7 @@ explicit platform/channel contract and inactive Unraid 8 target.
 
 | Component | Result |
 | --- | --- |
-| `.github/workflows/ci.yml`, `checks.yml` | PR/main/dispatch CI; reusable quality and full-suite jobs run independently. Python/JS/PHP/shell syntax, focused Ruff error rules, Borg SHA256, API/UI/Borg tests. No source-branch push trigger duplicating each PR run. |
+| `.github/workflows/ci.yml`, `checks.yml` | Delta-aware PR/main/dispatch CI; source changes run reusable quality and full-suite jobs independently. Pure releases run artifact checks without rebuilding/retesting source. Python/JS/PHP/shell syntax, focused Ruff error rules, Borg SHA256, API/UI/Borg tests. No source-branch push trigger duplicating each PR run. |
 | `security.yml` | Read-only dependency audit on every PR/main push, weekly and manual dispatch; hash-locked audit tooling, no package execution for lock analysis, JSON report even on failure. |
 | `testing-release.yml` | Manual platform/version selection, fail-fast target validation, shared checks then one candidate build. Upload only review artifacts and metrics, never a channel update. |
 | `stable-release.yml` | Manual main-only preview; verify test snapshot, exact source/notes and checksums, copy tested package without building. No release, tag or PR mutation. |
@@ -276,7 +285,10 @@ installation dependencies.
 ## H. Recommendations
 
 1. Validate hosted runs first, then make stable job names required in the main
-   ruleset. Review dependency updates (#672) before any publishing activation.
+   ruleset. `CI result` is the aggregate for both source and artifact routes;
+   do not require a conditionally absent nested test job for release-only PRs.
+   Require the dependency audit separately after resolving #672, before any
+   publishing activation.
 2. Keep manual publication and byte-identical promotion until a separate reviewed
    publishing workflow can enforce bot identity, exact-source checks and stable
    environment approval. Never trigger a stable release from an ordinary push.

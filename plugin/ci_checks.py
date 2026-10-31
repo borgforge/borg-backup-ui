@@ -4,8 +4,12 @@ import argparse
 import hashlib
 from pathlib import Path
 import py_compile
+import re
 import shutil
 import subprocess
+import xml.etree.ElementTree as ET
+
+import release_workflow as release
 
 ROOT = Path(__file__).resolve().parents[1]
 INVALID_HOOK_EXAMPLES = {
@@ -69,8 +73,83 @@ def test_dependencies() -> None:
     subprocess.run([str(binary), '--version'], check=True)
 
 
+def classify_changes(repo: Path, base: str) -> str:
+    """Select source tests or artifact verification from the actual Git delta.
+
+    A release must change manifest/package only, except a version-only app edit
+    and consumed note fragments. Mixed source/release changes fail. Missing
+    history is fetched read-only by exact SHA; branch names do not grant bypasses.
+    """
+    if not base or base == '0' * 40:
+        return 'source'
+    if not re.fullmatch('[0-9a-f]{40}', base):
+        raise ValueError('CI base must be an exact Git commit SHA')
+    if subprocess.run(['git', 'cat-file', '-e', f'{base}^{{commit}}'], cwd=repo,
+                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode:
+        subprocess.run(['git', 'fetch', '--no-tags', '--depth=1', 'origin', base], cwd=repo, check=True)
+    changes = [line.split('\t') for line in str(release.run_git(
+        repo, 'diff', '--no-renames', '--name-status', base, 'HEAD')).splitlines()]
+    names = {row[1] for row in changes}
+    packages = {name for name in names if re.fullmatch(r'releases/borg-backup-ui-[^/]+\.txz', name)}
+    if 'borg-backup-ui.plg' not in names and not packages:
+        return 'source'
+    if 'borg-backup-ui.plg' not in names or not packages:
+        raise ValueError('Release delta requires both stable manifest and package')
+    for status, name in changes:
+        if name in {'borg-backup-ui.plg', 'borg_backup_ui.py'} or name in packages:
+            continue
+        if name.startswith('release-notes/pending/') and status == 'D':
+            continue
+        raise ValueError(f'Mixed source/release delta is forbidden: {name}')
+    if release.source_digest(repo, base) != release.source_digest(repo, 'HEAD'):
+        raise ValueError('Release changes deployable source beyond the version')
+    return 'artifact'
+
+
+def verify_ci_release(repo: Path, base: str, compare_test: bool) -> None:
+    """Verify a pure release delta without rerunning source tests or publishing.
+
+    PRs also compare bytes against a fetched immutable test snapshot. Main pushes
+    validate their committed release; a later rotating test feed is irrelevant.
+    """
+    if classify_changes(repo, base) != 'artifact':
+        raise ValueError('Artifact checks require a pure release delta')
+    release.require_clean(repo)
+    provenance = release.verify_release_artifacts(repo, base)
+    consumed = {item['path']: item['sha256'] for item in provenance.get('release_note_fragments', [])}
+    deleted = {name for name in str(release.run_git(
+        repo, 'diff', '--no-renames', '--diff-filter=D', '--name-only', base, 'HEAD')).splitlines()
+        if name.startswith('release-notes/pending/')}
+    if deleted != set(consumed):
+        raise ValueError('Deleted note fragments differ from the tested provenance')
+    for name, expected in consumed.items():
+        original = release.run_git(repo, 'show', f'{base}:{name}', text=False)
+        if hashlib.sha256(original).hexdigest() != expected:
+            raise ValueError(f'Consumed note fragment differs from tested content: {name}')
+    if compare_test:
+        subprocess.run(['git', 'fetch', '--no-tags', '--depth=1', 'origin', 'test-channel'], cwd=repo, check=True)
+        snapshot = str(release.run_git(repo, 'rev-parse', 'FETCH_HEAD')).strip()
+        manifest = ET.fromstring(release.run_git(repo, 'show', f'{snapshot}:borg-backup-ui-test.plg', text=False))
+        version = release.manifest_version(repo/'borg-backup-ui.plg')
+        if manifest.attrib.get('version') != version:
+            raise ValueError('Release version differs from the test snapshot')
+        package = repo/'releases'/f'borg-backup-ui-{version}.txz'
+        tested = release.run_git(repo, 'show', f'{snapshot}:releases/{package.name}', text=False)
+        with package.open('rb') as handle:
+            if hashlib.file_digest(handle, 'sha256').digest() != hashlib.sha256(tested).digest():
+                raise ValueError('Release package differs from the exact tested bytes')
+    print('Release artifact checks passed; no source tests or build repeated.')
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('check', 'test-dependencies'))
+    parser.add_argument('command', choices=('check', 'test-dependencies', 'classify', 'verify-release'))
+    parser.add_argument('--base', default='')
+    parser.add_argument('--compare-test', action='store_true')
     args = parser.parse_args()
-    (check if args.command == 'check' else test_dependencies)()
+    if args.command == 'classify':
+        print(classify_changes(ROOT, args.base))
+    elif args.command == 'verify-release':
+        verify_ci_release(ROOT, args.base, args.compare_test)
+    else:
+        (check if args.command == 'check' else test_dependencies)()

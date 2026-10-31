@@ -10,5 +10,61 @@ concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      mode: ${{ steps.delta.outputs.mode }}
+      base: ${{ steps.delta.outputs.base }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - id: delta
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          mode="$(python3 plugin/ci_checks.py classify --base "$BASE")"
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "base=$BASE" >> "$GITHUB_OUTPUT"
   checks:
+    needs: plan
+    if: needs.plan.outputs.mode == 'source'
     uses: ./.github/workflows/checks.yml
+  release-artifacts:
+    needs: plan
+    if: needs.plan.outputs.mode == 'artifact'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Verify release without rebuilding or repeating source tests
+        env:
+          BASE: ${{ needs.plan.outputs.base }}
+        run: |
+          args=()
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then args+=(--compare-test); fi
+          python3 plugin/ci_checks.py verify-release --base "$BASE" "${args[@]}"
+  result:
+    name: CI result
+    needs: [plan, checks, release-artifacts]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - env:
+          PLAN_RESULT: ${{ needs.plan.result }}
+          MODE: ${{ needs.plan.outputs.mode }}
+          SOURCE_RESULT: ${{ needs.checks.result }}
+          ARTIFACT_RESULT: ${{ needs.release-artifacts.result }}
+        run: |
+          test "$PLAN_RESULT" = success
+          case "$MODE" in
+            source) test "$SOURCE_RESULT" = success ;;
+            artifact) test "$ARTIFACT_RESULT" = success ;;
+            *) exit 1 ;;
+          esac

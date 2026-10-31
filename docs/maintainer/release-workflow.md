@@ -207,8 +207,12 @@ This is intentional. Use `deploy-test.sh` for test packages and
 
 ## 9. Read-only CI and local previews (#671)
 
-`ci.yml` runs shared syntax/static/binary-integrity checks and the full test suite
-on pull requests and main pushes. `security.yml` audits the locked runtime
+`ci.yml` classifies the actual Git delta on pull requests and main pushes.
+Source changes run shared syntax/static/binary-integrity checks and the full test
+suite. Pure release changes run artifact-only checks, including source/notes,
+retention, checksums and exact note-fragment consumption; PRs also compare the
+tested package bytes. A release branch name alone never skips tests, and mixed
+source/release changes fail. `security.yml` audits the locked runtime
 dependencies on PRs, main, manual dispatch and a weekly schedule. Dependency
 findings fail visibly; no advisories are suppressed. Both workflows use read-only
 repository permissions and do not install a plugin or publish a release.

@@ -396,7 +396,8 @@ def test_test_deploy_requires_attestation_and_exact_commit() -> None:
     assert "rewrite-package-installer" in script
     assert "build-candidate.sh" in script
     shared = (ROOT / "plugin/build-candidate.sh").read_text()
-    assert 'git -C "$REPO_DIR" archive "$SOURCE_COMMIT"' in shared
+    assert 'git -C "$1" archive "$2" --' in shared
+    assert '\' -- "$REPO_DIR" "$SOURCE_COMMIT" "$STAGE_DIR"' in shared
     assert 'REMOTE_SHA" != "$SOURCE_COMMIT' in script
     assert "pytest -q" not in script
 

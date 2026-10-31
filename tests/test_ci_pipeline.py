@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'plugin'))
 import build_targets as targets
 import ci_pipeline as ci
+import ci_checks as checks
 import release_workflow as release
 from build_metrics import measure
 
@@ -46,14 +47,14 @@ def test_invalid_version_cannot_become_a_path(version):
         targets.validate_version(version)
 
 
-def candidate_files(tmp_path):
+def candidate_files(tmp_path, source_digest='exact'):
     """Make a synthetic package with real vendor/provenance validation inputs."""
     package = tmp_path / 'borg-backup-ui-2026.10.31.1600.txz'
     prefix = 'boot/config/plugins/borg-backup-ui/'
     vendor = b'synthetic vendor content'
     meta = dict(version='test', bundle='apprise-test.tar.xz', sha256=hashlib.sha256(vendor).hexdigest())
     notes = '### Improvements\n\n- Synthetic candidate.'
-    provenance = dict(platform='unraid-legacy', version='2026.10.31.1600', source_digest='exact',
+    provenance = dict(platform='unraid-legacy', version='2026.10.31.1600', source_digest=source_digest,
                       release_notes_sha256=hashlib.sha256(notes.encode()).hexdigest())
     payload = {name: b'fixture' for name in release.EXPECTED_PACKAGE_MEMBERS}
     payload[release.PROVENANCE_MEMBER] = json.dumps(provenance).encode()
@@ -160,6 +161,100 @@ def test_metrics_capture_failure_without_command_arguments(tmp_path):
     row = json.loads(path.read_text())
     assert row['exit_code'] == 7 and row['seconds'] >= 0
     assert 'secret-argument' not in path.read_text()
+
+
+def release_fixture(tmp_path):
+    """Create a tiny committed source/release pair with real provenance checks."""
+    repo = tmp_path/'repo'; repo.mkdir()
+    def git(*args):
+        return subprocess.check_output(['git', '-C', str(repo), *args], text=True).strip()
+    git('init', '-b', 'feature')
+    git('config', 'user.name', 'Fixture')
+    git('config', 'user.email', 'fixture@example.invalid')
+    (repo/'borg_backup_ui.py').write_text('APP_VERSION = "old"\nVALUE = 1\n')
+    (repo/'borg-backup-ui.plg').write_text((ROOT/'borg-backup-ui.plg').read_text())
+    (repo/'release-notes/pending').mkdir(parents=True)
+    (repo/'release-notes/pending/README.md').write_text('Keep fragment instructions.\n')
+    git('add', '.'); git('commit', '-m', 'Source')
+    base = git('rev-parse', 'HEAD')
+    output = tmp_path/'candidate'; output.mkdir()
+    manifest, package = candidate_files(output, release.source_digest(repo, base))
+    (repo/'releases').mkdir()
+    (repo/'releases'/package.name).write_bytes(package.read_bytes())
+    release.promote_artifacts(repo, manifest, '2026.10.31.1600', release.file_md5(package),
+                              release.package_provenance(package))
+    git('add', '.'); git('commit', '-m', 'Release')
+    return repo, base, git
+
+
+def test_pure_release_uses_artifact_checks_and_rejects_corruption(tmp_path):
+    repo, base, git = release_fixture(tmp_path)
+    assert checks.classify_changes(repo, base) == 'artifact'
+    checks.verify_ci_release(repo, base, False)
+    package = next((repo/'releases').glob('*.txz'))
+    package.write_bytes(package.read_bytes()+b'corrupted')
+    git('add', '.'); git('commit', '-m', 'Corruption')
+    with pytest.raises(RuntimeError, match='MD5'):
+        checks.verify_ci_release(repo, base, False)
+
+
+@pytest.mark.parametrize('path, content', [
+    ('borg_backup_ui.py', 'APP_VERSION = "2026.10.31.1600"\nVALUE = 2\n'),
+    ('.github/workflows/ci.yml', 'unreviewed workflow change'),
+    ('release-notes/pending/new.md', 'untested release note'),
+])
+def test_release_delta_cannot_hide_source_workflow_or_new_notes(tmp_path, path, content):
+    repo, base, git = release_fixture(tmp_path)
+    target = repo/path; target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(content)
+    git('add', '.'); git('commit', '-m', 'Mixed release')
+    with pytest.raises(ValueError, match='[Rr]elease'):
+        checks.classify_changes(repo, base)
+
+
+def test_source_only_delta_keeps_full_checks_even_on_release_named_branch(tmp_path):
+    repo, _, git = release_fixture(tmp_path)
+    base = git('rev-parse', 'HEAD')
+    git('switch', '-c', 'codex/release-name-is-not-authority')
+    (repo/'borg_backup_ui.py').write_text('APP_VERSION = "2026.10.31.1600"\nVALUE = 2\n')
+    git('add', '.'); git('commit', '-m', 'Source change')
+    assert checks.classify_changes(repo, base) == 'source'
+
+
+def test_release_cannot_delete_untested_note_fragments(tmp_path):
+    repo, base, git = release_fixture(tmp_path)
+    (repo/'release-notes/pending/README.md').unlink()
+    git('add', '.'); git('commit', '-m', 'Unexpected deletion')
+    assert checks.classify_changes(repo, base) == 'artifact'
+    with pytest.raises(ValueError, match='Deleted note fragments'):
+        checks.verify_ci_release(repo, base, False)
+
+
+def test_release_pr_must_match_immutable_test_snapshot_bytes(tmp_path):
+    """Exercise real fetch/verification against a repository-local fake remote."""
+    repo, base, git = release_fixture(tmp_path)
+    remote = tmp_path/'remote.git'
+    subprocess.run(['git', 'init', '--bare', str(remote)], check=True, capture_output=True)
+    snapshot = tmp_path/'snapshot'; snapshot.mkdir()
+    def snapshot_git(*args):
+        return subprocess.check_output(['git', '-C', str(snapshot), *args], text=True).strip()
+    snapshot_git('init', '-b', 'test-channel')
+    snapshot_git('config', 'user.name', 'Fixture')
+    snapshot_git('config', 'user.email', 'fixture@example.invalid')
+    (snapshot/'borg-backup-ui-test.plg').write_bytes((tmp_path/'candidate/borg-backup-ui-test.plg').read_bytes())
+    (snapshot/'releases').mkdir()
+    package = next((tmp_path/'candidate').glob('*.txz'))
+    tested_package = snapshot/'releases'/package.name
+    tested_package.write_bytes(package.read_bytes())
+    snapshot_git('add', '.'); snapshot_git('commit', '-m', 'Test snapshot')
+    snapshot_git('push', str(remote), 'test-channel')
+    git('remote', 'add', 'origin', str(remote))
+    checks.verify_ci_release(repo, base, True)
+    tested_package.write_bytes(b'different package bytes')
+    snapshot_git('add', '.'); snapshot_git('commit', '-m', 'Changed test snapshot')
+    snapshot_git('push', str(remote), 'test-channel')
+    with pytest.raises(ValueError, match='exact tested bytes'):
+        checks.verify_ci_release(repo, base, True)
 
 
 def test_public_workflows_have_no_publication_authority():
