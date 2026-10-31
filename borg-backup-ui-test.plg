@@ -1,0 +1,476 @@
+<?xml version='1.0' standalone='yes'?>
+<!DOCTYPE PLUGIN [
+<!ENTITY name      "borg-backup-ui">
+<!ENTITY author    "Thorsten Steinberg">
+<!ENTITY version   "2026.10.31.1836">
+<!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
+<!ENTITY pluginURL "https://raw.githubusercontent.com/borgforge/borg-backup-ui/test-channel/&name;-test.plg">
+<!ENTITY bootdir   "/boot/config/plugins/&name;">
+<!ENTITY pkgurl    "https://raw.githubusercontent.com/borgforge/borg-backup-ui/test-channel/releases/&name;-&version;.txz">
+]>
+
+<PLUGIN name="&name;"
+        Title="Borg Backup UI"
+        author="&author;"
+        version="&version;"
+        launch="Settings/borg-backup-ui"
+        pluginURL="&pluginURL;"
+        description="TEST CHANNEL - Web UI for Borg Backup. Install this only on test systems."
+        icon="plugin-icon.png">
+
+<CHANGES>
+<![CDATA[
+###2026.10.31.1836###
+### Migration and compatibility
+
+- Upgrade Apprise from 1.13.1 to 2.1.0 with 158 available base providers. Existing profiles and secrets are preserved. Amazon Chime is retired; affected profiles show a warning and need another provider. URL options are validated more strictly, and legacy PGP email options have changed; see the provider inventory. No credentials or saved URLs are automatically converted. (#672)
+
+### Bug Fixes
+
+- Honor notification timeouts in worker threads and profile tests. Timeouts count as failed attempts, but already running requests may still arrive later and retries can cause duplicate notifications. Keep late provider logs private. (#672)
+
+### Security
+
+- Update bundled certifi, OAuthlib and urllib3 to address the upstream certificate-trust, OAuth and HTTP/TLS advisories reported by dependency scanning. (#672)
+
+### Improvements
+
+- **Docker start and stop order per job:** Drag containers or use the arrows in the Order list of the job wizard's Docker step. After the backup they start from top to bottom, and before the backup they stop one by one in reverse order, so a database at the top stops last and starts first. A custom order replaces the backup.start.priority groups and their pauses for the listed containers, and no mode waits for application readiness. Without changes, jobs keep the previous behavior with the labels. (#670)
+- Open Docker start and stop guidance from a compact link in the job wizard, reducing scrolling while keeping the full explanation available in a dialog. (#674)
+
+###2026.10.30.1734###
+### Bug Fixes
+
+- Show profile names, storage paths and specific errors when local database dumps cannot be listed. Keep readable profiles visible and distinguish unavailable storage from an empty backup history. (#596)
+- Accept normal Unraid permissions for database dump storage, including nobody:users and 0777, without changing existing owners or modes. New dump files use 0644 and run directories use 0755; credentials remain separately protected. (#652)
+- Make profile save status and errors clear for database, Local, USB, SMB and SSH profiles. Successful saves clear pending edits; failed saves keep the draft, and switching settings areas resolves outstanding changes. (#654)
+- Accept database backup folder paths ending in a slash and explain invalid input at the relevant field. Keep save feedback beside the form. (#656)
+- Treat folders that have not been created yet as an initial state, not a failed backup. Show clearly that local backup history covers all saved profiles. (#656)
+- Show archive ranges and paging controls above and below the repository archive list so additional backups are easy to find in short windows. Fit more entries on taller displays and retain the current archive range when resizing. (#658)
+- Keep the selected location when opening Jobs from the Dashboard, including USB on the first visit. Remove the duplicate Jobs button from the locations heading. (#658)
+- Keep repository tabs at the same compact height when switching or loading archives. Avoid the large blank area after returning to Overview; fit archive pages to the available space and scroll longer content inside the tab. (#662)
+- Fit repository management into the compact workspace with clearly separated action columns on wide screens, aligned buttons and single-line repository IDs. (#662)
+- Refresh repository job links automatically when returning to Repositories. Deleted jobs no longer appear as technical IDs or leave stale removal/deletion blockers that require a manual Refresh click. (#664)
+- Keep completed repository maintenance results within the compact workspace using two columns on wide screens. Expanded execution details scroll within their result area while Start buttons retain their position and alignment. (#666)
+
+### Improvements
+
+- Add explicit profile workflow guidance and feedback beside the form. Database discovery now clearly states that it saves the connection before loading database names. (#654)
+- Create missing backup subfolders automatically on the first test dump or backup, with shorter input guidance. (#656)
+- Show the current database, phase, elapsed time and exported/compressed data size during large test dumps. (#656)
+- Scroll expanded repositories into view and make the overview more compact, with smaller statistics and maintenance results arranged in two columns on wider screens. (#660)
+- Show the file count of the newest archive. Clarify "Refresh statistics" and place its fetch timestamp beside the figures, including when automatic refresh is off. (#660)
+- Give archive names more horizontal space and keep them on one line. Full names remain available on hover and after opening an archive. (#660)
+
+###2026.10.30.0912###
+### Bug Fixes
+
+- **Dashboard:** Removed the duplicate running-job row above attention items. Running jobs remain accessible through the existing Active runs links. (#637)
+- Skip the whole backup when an Unassigned Devices source under /mnt/disks or /mnt/remotes is not mounted, including leftover empty mount directories. Validate after Pre scripts and before database exports, service stops, and Borg operations (#639).
+- Show temporarily unmounted sources as availability warnings in System Health. Missing paths on mounted sources and inspection failures remain errors; existing history is preserved (#639).
+- Add spacing below the Jobs view tabs so the job group pane no longer touches their border (#643).
+
+### Improvements
+
+- **Compact job cards:** Separate cards use aligned status, schedule and restore-test columns, with one expandable detail area for workflow results and combined data/settings. Switching detail views keeps the same height. (#619)
+    - Workspace-attached view tabs and a framed location bar with consistently subtle outlined job counts replace the sidebar; full outcome messages appear only in expanded Workflow details.
+    - Start, Log and Cancel keep fixed positions; protected recovery phases disable Cancel without replacing it with a message. Action icons sit beneath the aligned Actions heading. Status badges use distinct symbols and subtle borderless fills, and restore dates align in a dedicated value column.
+    - Subtle VM, Docker, Pre-script and Post-script markers identify configured options; script tooltips show the assignment and post-run condition.
+    - Running jobs clearly distinguish the current action, step elapsed time and total runtime while preserving live counters, detailed results and saved outcomes.
+- **Repository cards:** Manage all registered repositories, including unassigned repositories, in separate expandable cards with exact storage-target filters, Jobs-style typography, four aligned fact columns, and all linked jobs. (#621)
+    - Overview, Archives, Maintenance, and Management share a stable detail height. Archive lists use five entries per page and disclose the existing loaded-list limit. Fixed archive/browser panes and scrolling file contents keep navigation buttons in place across folder changes.
+    - Maintenance keeps Start buttons in place and shows check scope, timestamps, duration, deleted archive names, and Borg-reported reclaimed space for Compact. Missing historical amounts remain distinct from zero.
+    - Existing archive deletion, retention confirmation, lifecycle blockers, and encrypted key recovery remain available.
+    - Group cards by storage target, reuse matching job/type icons, show missing key exports immediately, and use a left-hand disclosure like Jobs.
+    - Remove repository search and generic reachability badges. Show storage target/transport, explicit "Jobs: ..." links, archive counts, used space, and the cached-data timestamp. Only active work and concrete action warnings/errors add status notices; offline targets controlled by pre/post scripts remain normal.
+    - Retain masked execution details for successful maintenance runs, request verbose Compact output, recognize `0 B`, and hide technical archive IDs in the list.
+- **Dashboard:** Use lighter solid status colors consistently across backup charts and restore coverage. Needs attention uses a neutral card surface and warning triangles while retaining full error details. Server resource colors remain unchanged. (#623)
+- **Restore Tests:** Match Jobs with separate compact cards, location dividers, top navigation and subtly outlined location counts. Status indicators use icons and muted fills without bold text or borders. (#625)
+- **Restore test reports:** Expand reports directly inside each job card instead of switching tabs. Select earlier attempts in a stable-height panel; automatic refresh preserves selection, expanded details and scroll position. Historical reports, including those for removed jobs, remain accessible. Existing planning and run/cancel actions are retained. (#625)
+- **History:** Move location navigation above the full-width chronological table and match Jobs typography and subtle status icons. Skipped runs remain yellow. Original columns, detail expansion, log access, filters and pagination are retained. Locations appear only when jobs are configured there; removing the last job from the selected location returns the view to All locations. (#627)
+- **Reports:** Select a location and its backup job in a shared tab panel above the full-width analysis. Job icons, names, archive prefixes and search remain available, and the last selected job per location is remembered during the session. All existing metrics, growth values, trend charts, monthly results, restore details and on-demand repository information are retained. (#629)
+- **Browse & Restore:** Shared location and job tabs replace the secondary sidebar. Four visible steps guide archive selection, browsing, destination settings and review. Job changes confirm before resetting an existing selection; navigation stays in place for long content. Existing restore options, downloads, prechecks, execution monitoring and Restore History remain available. (#631)
+- **Browse & Restore:** The wizard fills the available window height and keeps Back, Next/Review, confirmation and Start in a persistent bottom action bar, including long restore plans. Short and narrow windows use an expandable location/job summary. Existing restore operations and Restore History remain available. (#633)
+- **Reports:** Reduced vertical spacing and made monthly status history scrollable with a fixed table heading. All months, metrics, trends and on-demand repository information remain available. (#635)
+- Reports and Browse & Restore now use a compact job summary and a searchable job-switch dialog with location filters. The last valid selection is remembered in the browser; existing reports, restore confirmation and Restore History remain available (#642).
+- **Live backup metrics:** Show Borg's rolling processing speed below the progress bar in the existing job view, without the last-update timestamp. An automatic background source scan adds approximate source size, progress and remaining archive-creation time for locally accessible sources, including mounted USB, SMB and SSH filesystems. Stale rates and unavailable estimates remain unknown. No per-job activation is required. The progress display appears immediately when Borg starts, without the previous 60-second delay. (#646)
+- **Borg command logging:** Backup logs now record the actual Borg invocation with a matching process exit code and unique ID. Manual repository maintenance keeps the same evidence in its execution details. Credentials are masked, argument boundaries are preserved, and existing support exports include the available log evidence. (#648)
+
+]]>
+</CHANGES>
+
+<!--
+  ══════════════════════════════════════════════════════════════════════════
+  Step 1 – Download and install the plugin package
+  The .txz contains:
+    /boot/config/plugins/borg-backup-ui/      → App files (persistent on flash)
+    /etc/rc.d/rc.borg_backup_ui               → Start/stop script
+    /usr/local/emhttp/plugins/borg-backup-ui/ → Unraid plugin metadata
+  ══════════════════════════════════════════════════════════════════════════
+-->
+<!-- BEGIN borg-backup-ui package installer -->
+<FILE Name="/tmp/borg-backup-ui-package-install-&version;.sh" Run="/bin/bash">
+<INLINE>
+#!/bin/bash
+set -e
+
+NAME="borg-backup-ui"
+VERSION="&version;"
+PACKAGE_INSTALL_SCRIPT="/tmp/borg-backup-ui-package-install-${VERSION}.sh"
+PLUGIN_DIR="/boot/config/plugins/${NAME}"
+PACKAGE_FILE="${PLUGIN_DIR}/${NAME}-${VERSION}.txz"
+PACKAGE_TMP="${PACKAGE_FILE}.tmp"
+PACKAGE_URL="&pkgurl;"
+EXPECTED_MD5="749a65a6e2aa65b3fdeb667f8255eb83"
+EXPECTED_SHA256="86d992bf8f7d65df0bb180ba09063db6681f7ffe1bd3f6ee25ca3f826e8e71f8"
+INSTALLED_MD5_FILE="${PLUGIN_DIR}/.installed-package-md5"
+VENDOR_DIR="${PLUGIN_DIR}/runtime/vendor"
+VENDOR_BUNDLE_DIR="${PLUGIN_DIR}/runtime/vendor-bundles"
+VENDOR_META="${VENDOR_BUNDLE_DIR}/apprise-vendor.json"
+VENDOR_MARKER="${VENDOR_DIR}/.apprise-vendor.json"
+VENDOR_TMP="${PLUGIN_DIR}/runtime/vendor.tmp.$$"
+
+cleanup_package_install_script() {
+  rm -f "${PACKAGE_INSTALL_SCRIPT}" 2>/dev/null || true
+}
+trap cleanup_package_install_script EXIT
+
+file_md5() {
+  if command -v md5sum >/dev/null 2>/dev/null; then
+    md5sum "$1" | awk '{print $1}'
+  else
+    md5 -q "$1"
+  fi
+}
+
+file_sha256() {
+  if command -v sha256sum >/dev/null 2>/dev/null; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
+
+json_value() {
+  _json_file="$1"
+  _json_key="$2"
+  sed -n 's/^[[:space:]]*"'"${_json_key}"'"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "${_json_file}" | head -n 1
+}
+
+package_registered() {
+  for _package_log in "/var/log/packages/${NAME}-${VERSION}"*; do
+    if [ -e "${_package_log}" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+core_payload_present() {
+  [ -f "${PLUGIN_DIR}/borg_backup_ui.py" ] || return 1
+  [ -f "/etc/rc.d/rc.borg_backup_ui" ] || return 1
+  return 0
+}
+
+app_payload_version_matches() {
+  [ -f "${PLUGIN_DIR}/borg_backup_ui.py" ] || return 1
+  grep -F -q "APP_VERSION = \"${VERSION}\"" "${PLUGIN_DIR}/borg_backup_ui.py" 2>/dev/null
+}
+
+package_payload_present() {
+  core_payload_present || return 1
+  app_payload_version_matches || return 1
+  [ -f "${VENDOR_META}" ] || return 1
+  return 0
+}
+
+vendor_ready() {
+  [ -f "${VENDOR_META}" ] || return 1
+  [ -f "${VENDOR_MARKER}" ] || return 1
+  [ -f "${VENDOR_DIR}/apprise/__init__.py" ] || return 1
+  expected_version="$(json_value "${VENDOR_META}" version)"
+  expected_sha="$(json_value "${VENDOR_META}" sha256)"
+  marker_version="$(json_value "${VENDOR_MARKER}" version)"
+  marker_sha="$(json_value "${VENDOR_MARKER}" sha256)"
+  [ -n "${expected_version}" ] || return 1
+  [ -n "${expected_sha}" ] || return 1
+  [ "${expected_version}" = "${marker_version}" ] || return 1
+  [ "${expected_sha}" = "${marker_sha}" ] || return 1
+  return 0
+}
+
+ensure_apprise_vendor() {
+  if vendor_ready; then
+    echo "Borg Backup UI: Apprise runtime is unchanged, skipping extraction."
+    return 0
+  fi
+
+  if [ ! -f "${VENDOR_META}" ]; then
+    echo "ERROR: Apprise vendor metadata is missing: ${VENDOR_META}"
+    return 1
+  fi
+
+  bundle_name="$(json_value "${VENDOR_META}" bundle)"
+  expected_sha="$(json_value "${VENDOR_META}" sha256)"
+  expected_version="$(json_value "${VENDOR_META}" version)"
+  if [ -z "${bundle_name}" ] || [ -z "${expected_sha}" ] || [ -z "${expected_version}" ]; then
+    echo "ERROR: Apprise vendor metadata is incomplete."
+    return 1
+  fi
+
+  bundle_path="${VENDOR_BUNDLE_DIR}/${bundle_name}"
+  if [ ! -f "${bundle_path}" ]; then
+    echo "ERROR: Apprise vendor bundle is missing: ${bundle_path}"
+    return 1
+  fi
+
+  actual_sha="$(file_sha256 "${bundle_path}")"
+  if [ "${actual_sha}" != "${expected_sha}" ]; then
+    echo "ERROR: Apprise vendor bundle SHA256 does not match."
+    echo "  expected: ${expected_sha}"
+    echo "  actual  : ${actual_sha}"
+    return 1
+  fi
+
+  echo "Borg Backup UI: extracting Apprise runtime ${expected_version}..."
+  rm -rf "${VENDOR_TMP}" 2>/dev/null || true
+  mkdir -p "${VENDOR_TMP}"
+  tar -xf "${bundle_path}" -C "${VENDOR_TMP}"
+  if [ ! -f "${VENDOR_TMP}/apprise/__init__.py" ]; then
+    echo "ERROR: Apprise vendor bundle does not contain a runnable runtime."
+    rm -rf "${VENDOR_TMP}" 2>/dev/null || true
+    return 1
+  fi
+  rm -rf "${VENDOR_DIR}" 2>/dev/null || true
+  mv "${VENDOR_TMP}" "${VENDOR_DIR}"
+  cp "${VENDOR_META}" "${VENDOR_MARKER}"
+}
+
+download_package() {
+  echo "Borg Backup UI: downloading package ${VERSION}..."
+  rm -f "${PACKAGE_TMP}"
+  if command -v curl >/dev/null 2>/dev/null; then
+    curl -fL --retry 3 --connect-timeout 20 -o "${PACKAGE_TMP}" "${PACKAGE_URL}"
+  elif command -v wget >/dev/null 2>/dev/null; then
+    wget -O "${PACKAGE_TMP}" "${PACKAGE_URL}"
+  else
+    echo "ERROR: Neither curl nor wget is available, cannot download package."
+    return 1
+  fi
+
+  actual_md5="$(file_md5 "${PACKAGE_TMP}")"
+  if [ "${actual_md5}" != "${EXPECTED_MD5}" ]; then
+    echo "ERROR: Package MD5 does not match."
+    echo "  expected: ${EXPECTED_MD5}"
+    echo "  actual  : ${actual_md5}"
+    rm -f "${PACKAGE_TMP}"
+    return 1
+  fi
+  if [ -n "${EXPECTED_SHA256}" ]; then
+    if [ "$(file_sha256 "${PACKAGE_TMP}")" != "${EXPECTED_SHA256}" ]; then
+      echo "ERROR: Package SHA256 does not match."
+      rm -f "${PACKAGE_TMP}"
+      return 1
+    fi
+  fi
+  mv -f "${PACKAGE_TMP}" "${PACKAGE_FILE}"
+}
+
+ensure_package_file() {
+  if [ -f "${PACKAGE_FILE}" ]; then
+    actual_md5="$(file_md5 "${PACKAGE_FILE}")"
+    if [ "${actual_md5}" = "${EXPECTED_MD5}" ]; then
+      if [ -z "${EXPECTED_SHA256}" ] || [ "$(file_sha256 "${PACKAGE_FILE}")" = "${EXPECTED_SHA256}" ]; then
+        echo "Borg Backup UI: existing package matches MD5, skipping download."
+        return 0
+      fi
+    fi
+    echo "Borg Backup UI: local package checksum differs, downloading again."
+  fi
+  download_package
+}
+
+extract_package_payload() {
+  _reason="$1"
+  ensure_package_file
+  echo "Borg Backup UI: ${_reason}"
+  tar -xf "${PACKAGE_FILE}" -C /
+}
+
+mkdir -p "${PLUGIN_DIR}"
+
+if package_registered; then
+  if ! core_payload_present; then
+    extract_package_payload "package is registered but plugin files are missing; extracting payload again."
+  elif ! app_payload_version_matches; then
+    extract_package_payload "installed payload version differs from ${VERSION}; extracting payload again."
+  elif [ ! -f "${VENDOR_META}" ]; then
+    extract_package_payload "package is registered but Apprise vendor metadata is missing; extracting payload again."
+  fi
+
+  if package_payload_present; then
+    marker_md5="$(cat "${INSTALLED_MD5_FILE}" 2>/dev/null || true)"
+    if [ "${marker_md5}" = "${EXPECTED_MD5}" ]; then
+      ensure_apprise_vendor
+      echo "Borg Backup UI: version ${VERSION} is already installed, skipping package installation."
+      exit 0
+    fi
+    if [ -f "${PACKAGE_FILE}" ]; then
+      actual_md5="$(file_md5 "${PACKAGE_FILE}")"
+      if [ "${actual_md5}" = "${EXPECTED_MD5}" ]; then
+        ensure_apprise_vendor
+        echo "Borg Backup UI: version ${VERSION} is already installed, updating MD5 marker."
+        echo "${EXPECTED_MD5}" > "${INSTALLED_MD5_FILE}" 2>/dev/null || true
+        exit 0
+      fi
+    else
+      echo "Borg Backup UI: version ${VERSION} is already installed, no download or extraction needed."
+      ensure_apprise_vendor
+      echo "${EXPECTED_MD5}" > "${INSTALLED_MD5_FILE}" 2>/dev/null || true
+      exit 0
+    fi
+  fi
+fi
+
+ensure_package_file
+echo "Borg Backup UI: installing package ${VERSION}. This can take a while on USB flash."
+upgradepkg --install-new "${PACKAGE_FILE}"
+if ! package_payload_present; then
+  extract_package_payload "package manager did not extract the full payload; extracting payload directly."
+fi
+ensure_apprise_vendor
+echo "${EXPECTED_MD5}" > "${INSTALLED_MD5_FILE}" 2>/dev/null || true
+</INLINE>
+</FILE>
+<!-- END borg-backup-ui package installer -->
+
+<!--
+  ══════════════════════════════════════════════════════════════════════════
+  Step 2 – Post-install: autostart + initial launch
+  ══════════════════════════════════════════════════════════════════════════
+-->
+<FILE Name="/tmp/borg-backup-ui-install.sh" Run="/bin/bash">
+<INLINE>
+#!/bin/bash
+PLUGIN_DIR="/boot/config/plugins/borg-backup-ui"
+PACKAGE_FILE="${PLUGIN_DIR}/borg-backup-ui-&version;.txz"
+GO_FILE="/boot/config/go"
+
+# Defensive fallback: some Unraid/plugin-manager upgradepkg runs may finish
+# without leaving the package payload in /boot/config/plugins/borg-backup-ui.
+if [ ! -f "${PLUGIN_DIR}/borg_backup_ui.py" ]; then
+  if [ -f "${PACKAGE_FILE}" ]; then
+    echo "Plugin payload missing after upgradepkg; extracting package fallback."
+    tar -xf "${PACKAGE_FILE}" -C / 2>/tmp/borg-backup-ui-install-extract.err || true
+  fi
+fi
+
+if [ ! -f "${PLUGIN_DIR}/borg_backup_ui.py" ]; then
+  echo "ERROR: borg-backup-ui payload was not installed from ${PACKAGE_FILE}."
+  if [ -s /tmp/borg-backup-ui-install-extract.err ]; then
+    cat /tmp/borg-backup-ui-install-extract.err
+  fi
+  exit 1
+fi
+
+# Create default config if none exists yet
+if [ ! -f "${PLUGIN_DIR}/borg_backup_ui.conf" ]; then
+  cp "${PLUGIN_DIR}/borg_backup_ui.conf.example" \
+     "${PLUGIN_DIR}/borg_backup_ui.conf" 2>/dev/null || true
+  echo "Created borg_backup_ui.conf from template."
+fi
+
+# Clean up legacy Borg Backup UI autostart lines from /boot/config/go.
+# The plugin install/boot flow starts the service without persistent go entries.
+if [ -f "${GO_FILE}" ]; then
+  sed -i '/# Borg Backup UI/d' "${GO_FILE}" 2>/dev/null || true
+  sed -i '/rc.borg_backup_ui/d' "${GO_FILE}" 2>/dev/null || true
+fi
+
+# Copy restore-test script to scripts/ (if phase-1 migration was done)
+# Bootstrap borg-backup runtime directories
+BORG_BASE="/boot/config/borg-backup"
+mkdir -p "${BORG_BASE}/config/jobs" "${BORG_BASE}/locks" "${BORG_BASE}/scripts"
+
+# Legacy cleanup: old external runtime lib is no longer used.
+if [ -d "${BORG_BASE}/lib" ]; then
+  rm -rf "${BORG_BASE}/lib" 2>/dev/null || true
+fi
+
+# Copy standalone backup.conf.example into runtime config path
+cp -f "${PLUGIN_DIR}/runtime/config/backup.conf.example" "${BORG_BASE}/config/backup.conf.example" 2>/dev/null || true
+if [ ! -f "${BORG_BASE}/config/backup.conf" ]; then
+  cp -f "${BORG_BASE}/config/backup.conf.example" "${BORG_BASE}/config/backup.conf" 2>/dev/null || true
+fi
+
+# Copy restore-test script into runtime scripts path
+cp -f "${PLUGIN_DIR}/runtime/scripts/borg_restore_test.py"          "${BORG_BASE}/scripts/" 2>/dev/null || true
+cp -f "${PLUGIN_DIR}/runtime/scripts/borg_restore_test.description" "${BORG_BASE}/scripts/" 2>/dev/null || true
+
+# Stop any running instance, then start fresh
+/etc/rc.d/rc.borg_backup_ui stop 2>/dev/null || true
+sleep 1
+/etc/rc.d/rc.borg_backup_ui start
+
+# Cleanup local release artifacts: keep current + previous, delete older ones
+RELEASE_DIR="${PLUGIN_DIR}"
+if [ -d "${RELEASE_DIR}" ]; then
+  _keep=0
+  ls -1t "${RELEASE_DIR}"/borg-backup-ui-*.txz 2>/dev/null | while IFS= read -r _old; do
+    _keep=$((_keep + 1))
+    if [ "${_keep}" -gt 2 ]; then
+      rm -f "${_old}" 2>/dev/null || true
+    fi
+  done
+fi
+
+rm -f /tmp/borg-backup-ui-install.sh
+rm -f /tmp/borg-backup-ui-install-extract.err
+</INLINE>
+</FILE>
+
+<FILE Name="/tmp/borg-backup-ui-remove.sh" Run="/bin/bash" Method="remove">
+<INLINE>
+#!/bin/bash
+set -e
+
+NAME="borg-backup-ui"
+PLUGIN_DIR="/boot/config/plugins/${NAME}"
+EMHTTP_DIR="/usr/local/emhttp/plugins/${NAME}"
+GO_FILE="/boot/config/go"
+RC_SCRIPT="/etc/rc.d/rc.borg_backup_ui"
+PIDFILE="/var/run/borg_backup_ui.pid"
+WAIT_PIDFILE="/var/run/borg_backup_ui_start_wait.pid"
+LOGFILE="/var/log/borg_backup_ui.log"
+CLIENT_LOGFILE="/var/log/borg_backup_ui_client.log"
+
+# Stop the service and any delayed start process before deleting payload files.
+if [ -x "${RC_SCRIPT}" ]; then
+  "${RC_SCRIPT}" stop 2>/dev/null || true
+fi
+
+# Remove legacy autostart lines from /boot/config/go.
+if [ -f "${GO_FILE}" ]; then
+  sed -i '/# Borg Backup UI/d' "${GO_FILE}" 2>/dev/null || true
+  sed -i '/rc.borg_backup_ui/d' "${GO_FILE}" 2>/dev/null || true
+fi
+
+# Remove runtime files installed outside the persistent plugin directory.
+rm -f "${RC_SCRIPT}" 2>/dev/null || true
+rm -rf "${EMHTTP_DIR}" 2>/dev/null || true
+rm -f "${PIDFILE}" "${WAIT_PIDFILE}" "${LOGFILE}" "${CLIENT_LOGFILE}" 2>/dev/null || true
+
+# Remove plugin-owned payload from the USB flash. User data outside this
+# directory, Borg repositories, jobs, histories, and configured data paths are
+# intentionally left untouched.
+if [ "${PLUGIN_DIR}" = "/boot/config/plugins/${NAME}" ]; then
+  if [ -d "${PLUGIN_DIR}" ]; then
+    rm -rf "${PLUGIN_DIR}"
+  fi
+fi
+
+rm -f /tmp/borg-backup-ui-remove.sh
+</INLINE>
+</FILE>
+
+</PLUGIN>
