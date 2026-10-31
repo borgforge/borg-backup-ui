@@ -20,7 +20,7 @@ import subprocess
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,9 @@ class DockerConfig:
     Konfiguration für Docker-Management.
 
     Werte kommen aus backup.conf (DOCKER_STOP_TIMEOUT, DOCKER_STOP_WAIT,
-    DOCKER_START_WAIT). Defaults entsprechen borg-common.sh.
+    DOCKER_START_WAIT). Defaults entsprechen borg-common.sh. ``start_order``
+    ist eine Job-Einstellung (Containernamen in Startreihenfolge) und wird vom
+    Runner gesetzt; leer bedeutet gemeinsamer Stopp und Start nach Label-Priorität.
 
     Beispiel:
         from lib.status import load_config
@@ -59,6 +61,7 @@ class DockerConfig:
     priority_wait: int = _DEFAULT_PRIORITY_WAIT
     max_retries: int = _DEFAULT_MAX_RETRIES
     retry_wait: int = _DEFAULT_RETRY_WAIT
+    start_order: List[str] = field(default_factory=list)
 
     @classmethod
     def from_config(cls, config: Dict[str, str]) -> "DockerConfig":
@@ -151,7 +154,7 @@ class DockerManager:
     def __init__(self, config: Optional[DockerConfig] = None) -> None:
         self.config = config or DockerConfig()
 
-    def list_containers(self) -> List[Dict[str, str]]:
+    def list_containers(self) -> List[Dict[str, object]]:
         """Returns Docker containers for UI selection."""
         return list_containers()
 
@@ -196,16 +199,7 @@ class DockerManager:
         self._log_running_containers(container_ids)
 
         # Container stoppen
-        try:
-            subprocess.run(
-                ["docker", "stop", "-t", str(self.config.stop_timeout)] + container_ids,
-                capture_output=True,
-                timeout=self.config.stop_timeout * len(container_ids) + 30,
-            )
-        except subprocess.TimeoutExpired:
-            logger.warning("docker stop timed out")
-        except OSError as exc:
-            logger.warning("docker stop failed: %s", exc)
+        self._stop_containers(container_ids, result.container_names)
 
         time.sleep(self.config.stop_wait)
 
@@ -259,16 +253,7 @@ class DockerManager:
         )
         self._log_running_containers(container_ids)
 
-        try:
-            subprocess.run(
-                ["docker", "stop", "-t", str(self.config.stop_timeout)] + container_ids,
-                capture_output=True,
-                timeout=self.config.stop_timeout * len(container_ids) + 30,
-            )
-        except subprocess.TimeoutExpired:
-            logger.warning("docker stop timed out")
-        except OSError as exc:
-            logger.warning("docker stop failed: %s", exc)
+        self._stop_containers(container_ids, result.container_names)
 
         time.sleep(self.config.stop_wait)
 
@@ -321,16 +306,7 @@ class DockerManager:
         )
         self._log_running_containers(container_ids)
 
-        try:
-            subprocess.run(
-                ["docker", "stop", "-t", str(self.config.stop_timeout)] + container_ids,
-                capture_output=True,
-                timeout=self.config.stop_timeout * len(container_ids) + 30,
-            )
-        except subprocess.TimeoutExpired:
-            logger.warning("docker stop timed out")
-        except OSError as exc:
-            logger.warning("docker stop failed: %s", exc)
+        self._stop_containers(container_ids, result.container_names)
 
         time.sleep(self.config.stop_wait)
 
@@ -352,7 +328,9 @@ class DockerManager:
         Startet alle zuvor gestoppten Docker Container nach Priorität.
 
         Entspricht docker_start_all() in borg-common.sh.
-        Container werden nach Label backup.start.priority (1/2/3) sortiert.
+        Container aus ``config.start_order`` starten zuerst, einzeln in dieser
+        Reihenfolge. Übrige Container werden nach Label backup.start.priority
+        (1/2/3) sortiert.
 
         Priorität 1 = Kritische Infrastruktur (Datenbanken, Redis, etc.)
         Priorität 2 = Standard-Anwendungen
@@ -375,33 +353,33 @@ class DockerManager:
             stop_result.count_before,
         )
 
+        ordered, remaining = _split_by_start_order(
+            stop_result.container_ids, stop_result.container_names, self.config.start_order
+        )
+        phases = []
+        if ordered:
+            phases.append(("=== Configured start order ===", ordered, "configured order"))
+
         # Container nach Priorität aufteilen
         groups: Dict[int, List[str]] = {1: [], 2: [], 3: []}
-        for cid in stop_result.container_ids:
+        for cid in remaining:
             priority = _get_container_priority(cid)
             groups[priority].append(cid)
+        for priority, title, label in (
+            (1, "=== Phase 1: Critical infrastructure (databases, cache) ===", "Priority 1 - infrastructure"),
+            (2, "=== Phase 2: Standard applications ===", "Priority 2 - standard"),
+            (3, "=== Phase 3: Other containers ===", "Priority 3 - other"),
+        ):
+            if groups[priority]:
+                phases.append((title, groups[priority], label))
 
-        # Prioritätsgruppen starten
+        # Phasen nacheinander starten; zwischen belegten Phasen warten
         all_failed: List[str] = []
-
-        if groups[1]:
-            logger.info("=== Phase 1: Critical infrastructure (databases, cache) ===")
-            failed = self._start_group(groups[1], "Priority 1 - infrastructure")
-            all_failed.extend(failed)
-            if groups[2] or groups[3]:
+        for index, (title, container_ids, label) in enumerate(phases):
+            logger.info(title)
+            all_failed.extend(self._start_group(container_ids, label))
+            if index < len(phases) - 1:
                 time.sleep(self.config.priority_wait)
-
-        if groups[2]:
-            logger.info("=== Phase 2: Standard applications ===")
-            failed = self._start_group(groups[2], "Priority 2 - standard")
-            all_failed.extend(failed)
-            if groups[3]:
-                time.sleep(self.config.priority_wait)
-
-        if groups[3]:
-            logger.info("=== Phase 3: Other containers ===")
-            failed = self._start_group(groups[3], "Priority 3 - other")
-            all_failed.extend(failed)
 
         # Retry-Loop für fehlgeschlagene Container
         retry_count = 1
@@ -451,6 +429,37 @@ class DockerManager:
     # -----------------------------------------------------------------------
     # Interne Hilfsmethoden
     # -----------------------------------------------------------------------
+
+    def _stop_containers(self, container_ids: List[str], container_names: List[str]) -> None:
+        """Stop containers; callers verify the result.
+
+        Without ``config.start_order`` all containers are stopped with one
+        docker call. Otherwise they are stopped one by one: containers outside
+        the order first, then the ordered ones in reverse start order.
+        Timeouts and OS errors are logged.
+        """
+        if not self.config.start_order:
+            self._docker_stop(container_ids)
+            return
+        ordered, remaining = _split_by_start_order(container_ids, container_names, self.config.start_order)
+        sequence = remaining + ordered[::-1]
+        names = dict(zip(container_ids, container_names))
+        logger.info("Stopping containers one by one in reverse start order")
+        for position, cid in enumerate(sequence, 1):
+            logger.info("  - Stopping %s (%s) [%d/%d]", names.get(cid, cid), cid, position, len(sequence))
+            self._docker_stop([cid])
+
+    def _docker_stop(self, container_ids: List[str]) -> None:
+        try:
+            subprocess.run(
+                ["docker", "stop", "-t", str(self.config.stop_timeout)] + container_ids,
+                capture_output=True,
+                timeout=self.config.stop_timeout * len(container_ids) + 30,
+            )
+        except subprocess.TimeoutExpired:
+            logger.warning("docker stop timed out")
+        except OSError as exc:
+            logger.warning("docker stop failed: %s", exc)
 
     def _start_group(self, container_ids: List[str], group_name: str) -> List[str]:
         """Startet eine Prioritätsgruppe und gibt fehlgeschlagene IDs zurück."""
@@ -521,6 +530,20 @@ def _normalize_names(names: List[str]) -> List[str]:
     return out
 
 
+def _split_by_start_order(
+    container_ids: List[str], container_names: List[str], start_order: List[str]
+) -> Tuple[List[str], List[str]]:
+    """Split IDs into those named in ``start_order`` (in that order) and the rest.
+
+    Names pair with IDs by position; the rest keeps its original order.
+    """
+    rank = {name: index for index, name in enumerate(_normalize_names(start_order))}
+    named = [(cid, str(name or "").strip().lstrip("/")) for cid, name in zip(container_ids, container_names)]
+    named += [(cid, "") for cid in container_ids[len(named):]]
+    ordered = sorted((pair for pair in named if pair[1] in rank), key=lambda pair: rank[pair[1]])
+    return [cid for cid, _name in ordered], [cid for cid, name in named if name not in rank]
+
+
 def _get_running_name_id_map() -> Dict[str, str]:
     """Returns primary container name -> ID for running containers."""
     try:
@@ -542,11 +565,16 @@ def _get_running_name_id_map() -> Dict[str, str]:
     return out
 
 
-def list_containers() -> List[Dict[str, str]]:
-    """Lists all Docker containers with basic state for the wizard."""
+def list_containers() -> List[Dict[str, object]]:
+    """Lists all Docker containers with basic state for the wizard.
+
+    ``priority`` is the backup.start.priority label (1-3, default 3), which
+    orders the restart when a job has no own start order.
+    """
     try:
         result = subprocess.run(
-            ["docker", "ps", "-a", "--format", "{{.Names}}|{{.ID}}|{{.Image}}|{{.State}}|{{.Status}}"],
+            ["docker", "ps", "-a", "--format",
+             '{{.Names}}|{{.ID}}|{{.Image}}|{{.State}}|{{.Status}}|{{.Label "backup.start.priority"}}'],
             capture_output=True,
             text=True,
             timeout=10,
@@ -558,9 +586,9 @@ def list_containers() -> List[Dict[str, str]]:
         logger.debug("Docker container inventory returned exit code %s", result.returncode)
         return []
 
-    rows: List[Dict[str, str]] = []
+    rows: List[Dict[str, object]] = []
     for line in result.stdout.strip().splitlines():
-        name, cid, image, state, status = (line.split("|", 4) + ["", "", "", "", ""])[:5]
+        name, cid, image, state, status, priority = (line.split("|", 5) + [""] * 6)[:6]
         name = name.strip().lstrip("/")
         if not name:
             continue
@@ -570,6 +598,7 @@ def list_containers() -> List[Dict[str, str]]:
             "image": image.strip(),
             "state": state.strip().lower() or "unknown",
             "status": status.strip(),
+            "priority": int(priority.strip()) if priority.strip() in {"1", "2", "3"} else 3,
         })
     return sorted(rows, key=lambda row: row.get("name", "").lower())
 

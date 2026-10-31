@@ -32,6 +32,7 @@ window.BBUI.wizardState = window.BBUI.wizardState || {
   dockerContainers: [],
   vms: [],
   selectedDockerContainers: [],
+  dockerOrder: [],
   selectedVms: [],
   unlockedStep: 1,
   originalSchedule: null,
@@ -78,6 +79,7 @@ function _wizardCloseSnapshotPayload() {
     excludePaths: wizardState.excludePaths || [],
     excludeFile: wizardState.excludeFile || null,
     dockerSelected: wizardState.selectedDockerContainers || [],
+    dockerOrder: wizardState.dockerOrder || [],
     vmSelected: wizardState.selectedVms || [],
     scheduleFrequency: wizardSchedState?.frequency || '',
     scheduleDow: wizardSchedState?.dow ?? '',
@@ -214,6 +216,7 @@ function _wizardSetRuntimeControl(kind, control = {}) {
   if (modeEl) modeEl.value = mode !== 'none' ? mode : 'all';
   if (kind === 'docker') {
     wizardState.selectedDockerContainers = _wizardUniqueList(control?.selected || []);
+    wizardState.dockerOrder = mode !== 'none' ? _wizardUniqueList(control?.order || []) : [];
     const ack = document.getElementById('wiz-ack-appdata-risk');
     if (ack) ack.checked = !!control?.ack_appdata_risk;
   } else {
@@ -236,7 +239,115 @@ function wizardRenderRuntimeControls() {
   _wizardRenderRuntimeSelection('vm');
   _wizardUpdateRuntimeCount('docker');
   _wizardUpdateRuntimeCount('vm');
+  _wizardRenderDockerOrder();
   wizardUpdateRuntimeRiskWarnings();
+}
+
+/**
+ * Return the containers of the Docker scope in their start order.
+ * A saved order comes first and further scope containers follow in the default
+ * order: backup.start.priority label (1-3), then name. Without a container
+ * inventory, "all" and "except selected" keep the saved order.
+ * @returns {string[]} Container names, first started first.
+ */
+function _wizardDockerOrderNames() {
+  const mode = _wizardRuntimeMode('docker');
+  const rows = Array.isArray(wizardState.dockerContainers) ? wizardState.dockerContainers : [];
+  const priority = new Map(rows.map(row => [String(row?.name || '').trim(), Number(row?.priority) || 3]));
+  const inventory = [...priority.keys()].filter(Boolean)
+    .sort((a, b) => priority.get(a) - priority.get(b) || a.localeCompare(b));
+  const excluded = new Set(wizardState.selectedDockerContainers || []);
+  let scope = mode === 'selected'
+    ? _wizardUniqueList(wizardState.selectedDockerContainers)
+      .sort((a, b) => (priority.get(a) || 3) - (priority.get(b) || 3) || a.localeCompare(b))
+    : inventory.filter(name => mode !== 'except_selected' || !excluded.has(name));
+  if (mode !== 'selected' && !inventory.length) scope = _wizardUniqueList(wizardState.dockerOrder);
+  const inScope = new Set(scope);
+  return _wizardUniqueList([...(wizardState.dockerOrder || []).filter(name => inScope.has(name)), ...scope]);
+}
+
+function _wizardRenderDockerOrder() {
+  const list = document.getElementById('wiz-docker-order-list');
+  if (!list) return;
+  const custom = (wizardState.dockerOrder || []).length > 0;
+  const state = document.getElementById('wiz-docker-order-state');
+  if (state) state.textContent = wizardT(custom ? 'wizard.dockerOrderCustom' : 'wizard.dockerOrderDefault');
+  document.getElementById('wiz-docker-order-reset')?.classList.toggle('hidden', !custom);
+  const names = _wizardDockerOrderNames();
+  if (!names.length) {
+    list.innerHTML = `<div class="wizard-runtime-empty">${escHtml(wizardT('wizard.dockerOrderEmpty'))}</div>`;
+    return;
+  }
+  list.innerHTML = names.map((name, index) => `<div class="wizard-order-row" role="listitem" draggable="true" data-docker-order-index="${index}">
+      <span class="wizard-order-handle" aria-hidden="true">⠿</span>
+      <span class="wizard-order-position">${index + 1}</span>
+      <span class="wizard-runtime-name">${escHtml(name)}</span>
+      <span class="wizard-order-actions">
+        <button type="button" class="btn btn-secondary btn-sm" data-docker-order-move="-1" data-docker-order-index="${index}" aria-label="${escHtml(wizardT('wizard.dockerOrderUp', {name}))}"${index === 0 ? ' disabled' : ''}>↑</button>
+        <button type="button" class="btn btn-secondary btn-sm" data-docker-order-move="1" data-docker-order-index="${index}" aria-label="${escHtml(wizardT('wizard.dockerOrderDown', {name}))}"${index === names.length - 1 ? ' disabled' : ''}>↓</button>
+      </span>
+    </div>`).join('');
+}
+
+/**
+ * Move one container in the start order and keep keyboard focus on it.
+ * @param {number} from Current position.
+ * @param {number} to Target position.
+ */
+function wizardMoveDockerOrder(from, to) {
+  const names = _wizardDockerOrderNames();
+  if (from === to || from < 0 || to < 0 || from >= names.length || to >= names.length) return;
+  const [name] = names.splice(from, 1);
+  names.splice(to, 0, name);
+  wizardState.dockerOrder = names;
+  _wizardRenderDockerOrder();
+  wizardMarkCloseSnapshotTouched();
+  const list = document.getElementById('wiz-docker-order-list');
+  const direction = to < from ? -1 : 1;
+  const button = list?.querySelector(`[data-docker-order-index="${to}"][data-docker-order-move="${direction}"]`);
+  (button && !button.disabled ? button : list?.querySelector(`[data-docker-order-index="${to}"][data-docker-order-move="${-direction}"]`))?.focus();
+}
+
+function _wizardBindDockerOrder() {
+  const list = document.getElementById('wiz-docker-order-list');
+  if (!list || list.dataset.orderBound === '1') return;
+  list.dataset.orderBound = '1';
+  document.getElementById('wiz-docker-order-reset')?.addEventListener('click', () => {
+    wizardState.dockerOrder = [];
+    _wizardRenderDockerOrder();
+    wizardMarkCloseSnapshotTouched();
+    list.querySelector('button:not([disabled])')?.focus();
+  });
+  let dragged = null;
+  list.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-docker-order-move]');
+    if (!button) return;
+    const index = Number(button.dataset.dockerOrderIndex);
+    wizardMoveDockerOrder(index, index + Number(button.dataset.dockerOrderMove));
+  });
+  list.addEventListener('dragstart', (event) => {
+    const row = event.target.closest('.wizard-order-row');
+    if (!row) return;
+    dragged = Number(row.dataset.dockerOrderIndex);
+    row.classList.add('is-dragging');
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', String(dragged));
+  });
+  list.addEventListener('dragover', (event) => {
+    if (dragged !== null && event.target.closest('.wizard-order-row')) event.preventDefault();
+  });
+  list.addEventListener('drop', (event) => {
+    const row = event.target.closest('.wizard-order-row');
+    if (!row || dragged === null) return;
+    event.preventDefault();
+    const from = dragged;
+    dragged = null;
+    wizardMoveDockerOrder(from, Number(row.dataset.dockerOrderIndex));
+  });
+  list.addEventListener('dragend', () => {
+    dragged = null;
+    list.querySelectorAll('.wizard-order-row.is-dragging').forEach(row => row.classList.remove('is-dragging'));
+  });
 }
 
 function _wizardPruneMissingDockerSelections() {
@@ -285,6 +396,7 @@ function _wizardRenderRuntimeSelection(kind) {
       else wizardState.selectedVms = Array.from(next);
       input.closest('.wizard-runtime-row')?.classList.toggle('is-selected', input.checked);
       _wizardUpdateRuntimeCount(kind);
+      if (kind === 'docker') _wizardRenderDockerOrder();
     });
   });
 }
@@ -395,6 +507,7 @@ function wizardBindRuntimeControls() {
       wizardRenderRuntimeControls();
     });
   });
+  _wizardBindDockerOrder();
 }
 
 async function wizardLoadRepositories() {
@@ -592,6 +705,7 @@ function openWizard(existingJobKey = '') {
   wizardState.selectedRepositoryKey = '';
   wizardState.remoteRepoStatus = null;
   wizardState.selectedDockerContainers = [];
+  wizardState.dockerOrder = [];
   wizardState.selectedVms = [];
   document.getElementById('wiz-use-docker').checked = false;
   document.getElementById('wiz-use-vm').checked = false;
@@ -972,6 +1086,8 @@ function _wizardCollectParams() {
       mode: dockerMode,
       selected: ['selected', 'except_selected'].includes(dockerMode) ? _wizardUniqueList(wizardState.selectedDockerContainers) : [],
       ack_appdata_risk: _wizardRiskAcknowledged('docker'),
+      // An untouched list keeps the label-based default and stores no order.
+      order: dockerMode !== 'none' && (wizardState.dockerOrder || []).length ? _wizardDockerOrderNames() : [],
     },
     vm_control: {
       mode: vmMode,
@@ -1499,6 +1615,9 @@ async function _wizardPreview() {
       vm: wizardT(summary.vm ? 'wizard.yes' : 'wizard.no'),
     }));
     lines.push(wizardT('wizard.previewDockerControl', { value: _wizardRuntimePreviewText('docker', summary) }));
+    if (summary.docker && Array.isArray(summary.docker_order) && summary.docker_order.length) {
+      lines.push(wizardT('wizard.previewDockerOrder', { value: summary.docker_order.join(' -> ') }));
+    }
     lines.push(wizardT('wizard.previewVmControl', { value: _wizardRuntimePreviewText('vm', summary) }));
     lines.push('');
     lines.push(wizardT('wizard.previewFlow'));

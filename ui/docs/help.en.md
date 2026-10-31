@@ -130,7 +130,7 @@ Collapsed cards identify failures, warnings, skipped or cancelled runs by status
 1. **Basics:** Job name, permanent Job ID, archive prefix, icon and optional Docker/VM control.
 2. **Sources & Target:** Folders or files to back up, storage type, storage target, repository, and compression.
 3. **Exclusions:** Paths, marker filenames and one uploaded exclusion file, shown together in a dedicated step.
-4. **Docker:** Stop all running containers, selected containers, or all containers except selected containers and restart them afterwards.
+4. **Docker:** Stop all running containers, selected containers, or all containers except selected containers and restart them afterwards; drag or use the arrows to set their order.
 5. **VMs:** Shut down all running or selected VMs and restart them afterwards.
 6. **Retention:** Tiered with an optional time window, last X archives, or keep all.
 7. **Description:** Clear description with optional Markdown.
@@ -180,6 +180,8 @@ The application calculates the expected run from the schedule. After the configu
 ## 8. Docker and VMs
 
 Docker selection can be used as either an include or exclude list. **Selected containers only** stops exactly the checked containers. **All except selected containers** stops all running containers but keeps the checked containers running.
+
+The **Order** list in the Docker step defines the order in which containers start from top to bottom after the backup; they are then stopped one by one in reverse order. Put databases at the top. A custom order replaces the priority groups and their pauses for the listed containers; neither Docker health checks nor application readiness are awaited. Without changes, the default order by the `backup.start.priority` label applies and the containers are stopped together.
 
 Before a backup, the application records which containers or VMs were actually running. Only those targets are restarted afterwards. After an interruption or server restart, **Runtime Recovery** in system health reports pending restarts.
 

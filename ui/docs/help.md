@@ -130,7 +130,7 @@ Eingeklappte Karten zeigen Fehler, Warnungen, übersprungene oder abgebrochene L
 1. **Grunddaten:** Job-Name, dauerhafte Job-ID, Archivpräfix, Icon und optionale Docker-/VM-Steuerung.
 2. **Quellen & Ziel:** Zu sichernde Ordner oder Dateien, Speichertyp, Speicherziel, Repository und Kompression.
 3. **Ausschlüsse:** Pfade, Markerdateien und eine hochgeladene Ausschlussdatei, gemeinsam sichtbar in einem eigenen Schritt.
-4. **Docker:** alle laufenden Container, nur ausgewählte Container oder alle außer ausgewählte Container stoppen und danach neu starten.
+4. **Docker:** alle laufenden Container, nur ausgewählte Container oder alle außer ausgewählte Container stoppen und danach neu starten; Reihenfolge per Ziehen oder Pfeilen festlegen.
 5. **VMs:** alle laufenden oder nur ausgewählte VMs herunterfahren und danach neu starten.
 6. **Retention:** gestaffelt mit optionalem Zeitfenster, letzte X Archive oder alle behalten.
 7. **Beschreibung:** verständliche Beschreibung mit optionalem Markdown.
@@ -180,6 +180,8 @@ Die Anwendung berechnet den erwarteten Lauf aus dem Zeitplan. Nach Ablauf der ko
 ## 8. Docker und VMs
 
 Bei Docker kann die Auswahl positiv oder negativ verwendet werden. **Nur ausgewählte Container** stoppt exakt die markierten Container. **Alle außer ausgewählte Container** stoppt alle laufenden Container, lässt aber die markierten Container aktiv.
+
+Die Liste **Reihenfolge** im Docker-Schritt legt fest, in welcher Reihenfolge die Container nach dem Backup von oben nach unten starten; gestoppt werden sie dann einzeln in umgekehrter Reihenfolge. Datenbanken gehören daher nach oben. Eine eigene Reihenfolge ersetzt für die aufgeführten Container die Prioritätsgruppen samt Pausen; gewartet wird weder auf Docker-Health-Checks noch auf die Betriebsbereitschaft einer Anwendung. Ohne Änderung gilt die Standardreihenfolge nach dem Label `backup.start.priority`, und die Container werden gemeinsam gestoppt.
 
 Die Anwendung zeichnet vor dem Backup auf, welche Container oder VMs tatsächlich liefen. Nur diese Ziele werden danach wieder gestartet. Bei einem Abbruch oder Serverneustart weist **Runtime-Recovery** im Systemstatus auf offene Neustarts hin.
 

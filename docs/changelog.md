@@ -1,5 +1,12 @@
 # Changelog
 
+## Pending - Docker start and stop order per job (#670)
+
+- Add a reorderable Order list (drag and arrow buttons) to the Docker step of the job wizard and store it as docker_control.order. Listed containers start first in that order after the backup and are stopped one by one in reverse order before it; unlisted containers stop first and start afterwards by backup.start.priority label.
+- Keep one docker stop call and the label priority groups for jobs without an order; an untouched list stores no order. Report the label priority in the runtime inventory so the list shows the default order the restart uses.
+- Show the stop and start order in the flow preview and the run log, and document the order in both manuals, the in-app help and the README.
+- Explain in the wizard, manuals and help that a custom order replaces the label priority groups including their pauses, stops more slowly than the single call, and does not wait for Docker health checks or application readiness.
+
 ## Pending - Compact completed maintenance results (#666)
 
 - Place desktop maintenance actions in two separated columns with aligned, stationary Start buttons. Bound result areas to the shared workspace so expanded logs scroll inside their action instead of pushing Compact below the panel. Preserve readable stacked layouts and outer scrolling on short/narrow windows.

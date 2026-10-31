@@ -171,6 +171,7 @@ def _runtime_control_from_params(params: dict, kind: str, existing: Optional[dic
         "selected": selected if mode in {"selected", "except_selected"} else [],
         ack_key: ack,
         **({"force_stop": source.get("force_stop") is True} if kind == "vm" else {}),
+        **({"order": _split_selected(source.get("order", [])) if mode != "none" else []} if kind == "docker" else {}),
     }
 
 
@@ -187,6 +188,7 @@ def _runtime_control_from_meta(meta: dict, kind: str) -> dict:
         "selected": _split_selected(raw.get("selected", [])) if mode in {"selected", "except_selected"} else [],
         ack_key: bool(raw.get(ack_key, False)),
         **({"force_stop": raw.get("force_stop") is True} if kind == "vm" else {}),
+        **({"order": _split_selected(raw.get("order", [])) if mode != "none" else []} if kind == "docker" else {}),
     }
 
 
@@ -387,7 +389,8 @@ def load_job_for_wizard(job_key: str, scripts_dir: Path, ui_config: dict) -> dic
     meta_unmount_after_run = True
     meta_archive_prefixes: list[str] = []
     meta: dict = {}
-    meta_docker_control = {"mode": "all" if bool(info.has_docker) else "none", "selected": [], "ack_appdata_risk": False}
+    meta_docker_control = {"mode": "all" if bool(info.has_docker) else "none", "selected": [], "ack_appdata_risk": False,
+                           "order": []}
     meta_vm_control = {"mode": "all" if bool(info.has_vm) else "none", "selected": [], "ack_domains_risk": False, "force_stop": False}
     for meta_dir in get_jobs_meta_dirs(scripts_dir, data_root):
         meta_file = meta_dir / f"{job_key}.json"
@@ -554,6 +557,9 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
             )
         else:
             add_step("dockerStop", "Stop all Docker containers")
+        if docker_control["order"]:
+            stop_order = " -> ".join(reversed(docker_control["order"]))
+            add_step("dockerStopOrder", f"Stop one by one in reverse start order: {stop_order}", order=stop_order)
     if use_vm:
         if vm_control["mode"] == "selected":
             add_step("vmStop", f"Shut down selected VMs ({len(vm_control['selected'])})")
@@ -565,7 +571,11 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
         count=len(source_paths),
         exclusions=len(exclude_paths),
     )
-    if use_docker:
+    if use_docker and docker_control["order"]:
+        start_order = " -> ".join(docker_control["order"])
+        add_step("dockerStartOrdered", f"Start Docker containers stopped by this job in this order: {start_order}",
+                 order=start_order)
+    elif use_docker:
         add_step("dockerStart", "Start Docker containers stopped by this job")
     if use_vm:
         add_step("vmStart", "Start VMs stopped by this job")
@@ -609,6 +619,7 @@ def generate_flow_preview(params: dict, ui_config: Optional[dict] = None, script
             "vm_mode": vm_control["mode"],
             "vm_force_stop": vm_control.get("force_stop", False),
             "docker_selected": docker_control["selected"],
+            "docker_order": docker_control["order"],
             "vm_selected": vm_control["selected"],
             "retention": retention,
             "file_activity": file_activity,

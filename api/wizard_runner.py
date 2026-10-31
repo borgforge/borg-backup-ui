@@ -595,17 +595,14 @@ def _runtime_control(meta: dict, kind: str) -> dict:
     mode = str(raw.get("mode") or "").strip().lower()
     if mode not in allowed_modes:
         mode = "all" if bool(features.get(kind, False)) else "none"
-    selected = []
-    if mode in {"selected", "except_selected"}:
-        raw_selected = raw.get("selected") if isinstance(raw.get("selected"), list) else []
-        seen = set()
-        for item in raw_selected:
-            name = str(item or "").strip()
-            if name and name not in seen:
-                seen.add(name)
-                selected.append(name)
+    def unique_names(key: str) -> list[str]:
+        values = raw.get(key) if isinstance(raw.get(key), list) else []
+        return list(dict.fromkeys(name for name in (str(item or "").strip() for item in values) if name))
+
+    selected = unique_names("selected") if mode in {"selected", "except_selected"} else []
     return {"mode": mode, "selected": selected,
-            **({"force_stop": raw.get("force_stop") is True} if kind == "vm" else {})}
+            **({"force_stop": raw.get("force_stop") is True} if kind == "vm" else {}),
+            **({"order": unique_names("order") if mode != "none" else []} if kind == "docker" else {})}
 
 
 def _resolve_usb_mount_path(meta: dict, backup_scripts_dir: Path) -> str:
@@ -907,7 +904,11 @@ def main() -> int:
         docker_control = _runtime_control(meta, "docker")
         vm_control = _runtime_control(meta, "vm")
         if docker_control["mode"] != "none":
-            docker_mgr = DockerManager(DockerConfig.from_config(env))
+            docker_config = DockerConfig.from_config(env)
+            docker_config.start_order = docker_control["order"]
+            if docker_config.start_order:
+                logging.info("Docker start order: %s", " -> ".join(docker_config.start_order))
+            docker_mgr = DockerManager(docker_config)
         if vm_control["mode"] != "none":
             vm_config = VmConfig.from_config(env)
             vm_config.force_stop = vm_control.get("force_stop") is True
