@@ -1861,7 +1861,19 @@ function wizardRetentionParams() {
   return params;
 }
 
+/**
+ * Build localized help for a wizard topic without changing its form values.
+ * @param {string} topic Docker order, exclusions or a retention help topic.
+ * @returns {object|null} Dialog title, sections and retention-link visibility;
+ *   null for an unknown topic.
+ */
 function wizardPolicyHelpContent(topic) {
+  if (topic === 'docker-order') {
+    return {title: wizardT('wizard.dockerOrderHelp'), retention: false,
+      sections: [
+        {text: wizardT('wizard.dockerOrderNote')},
+      ]};
+  }
   const params = wizardRetentionParams();
   const selected = ['tiered', 'last', 'all'].includes(params.retention_mode) ? params.retention_mode : 'tiered';
   const key = topic === 'retention' ? selected : topic;

@@ -403,6 +403,8 @@ Prüfen Sie bei importierten VMs auch die Gastintegration: Der QEMU Guest Agent 
 
 #### Start- und Stopp-Reihenfolge im Job
 
+Der Link **Hinweise zur Start- und Stoppreihenfolge** unter der Containerliste öffnet die ausführliche Erklärung in einem Dialog. Schließen Sie ihn mit **Schließen** oder Escape; die Eingaben im Job-Wizard bleiben erhalten.
+
 Im Docker-Schritt des Job-Wizards zeigt die Liste **Reihenfolge** alle Container im gewählten Umfang. Ziehen Sie einen Eintrag an die gewünschte Stelle oder verschieben Sie ihn mit den Pfeilen:
 
 - Nach der Archiverstellung startet Borg Backup UI die vom Job gestoppten Container von oben nach unten. Der nächste Start folgt, sobald Docker den vorherigen Start bestätigt hat. Die Pausen zwischen den Prioritätsgruppen des Labels entfallen für die aufgeführten Container.
