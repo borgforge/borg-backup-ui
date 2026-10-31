@@ -265,6 +265,14 @@ checks after successful hosted CI; independently versioned Unraid 8 plugin
 identity/feed after SDK review; explicit migration approval. No settings are
 modified by this task.
 
+Before publication activation, define a single version allocator/timezone and
+reject reuse of a released version for different bytes/source. Current manual
+timestamp arguments are format-checked, not a global version reservation.
+Local previews deliberately permit the same version for reproducibility
+experiments; that is not permission to overwrite a release. GitHub Release
+assets/tags and signed attestations remain proposed additions, not active
+installation dependencies.
+
 ## H. Recommendations
 
 1. Validate hosted runs first, then make stable job names required in the main

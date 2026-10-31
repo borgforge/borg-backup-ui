@@ -95,11 +95,14 @@ no Unraid 8 package/feed exists to be accidentally offered to legacy users.
 
 ## Shared source, independent releases
 
-Use the existing deployable source digest and source commit as the common core
-identity. Keep legacy `YYYY.MM.DD.HHMM` package versions. An eventual Unraid 8
-package can carry the same core commit/digest plus its own supported package
-version and packaging revision. Do not invent its native version format before
-the SDK defines it. Platform releases need not occur simultaneously.
+Use the source commit as the common code identity. The existing deployable
+source digest covers packaging inputs as well as application code; it is not
+already a pure core digest. A future shared source bundle can have its own
+content digest, while each target retains a complete build-input digest for
+promotion checks. Keep legacy `YYYY.MM.DD.HHMM` package versions. An eventual
+Unraid 8 package can reference the same core bundle plus its own supported
+package version and packaging revision. Do not invent its native version format
+before the SDK defines it. Platform releases need not occur simultaneously.
 
 Candidate metadata separates `platform`, `channel`, `version`, source commit,
 source digest, release-note digest and package SHA256. Channel is outside the
