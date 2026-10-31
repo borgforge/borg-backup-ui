@@ -186,31 +186,38 @@ def test_concurrent_creates_do_not_lose_profiles(tmp_path: Path, monkeypatch: py
     assert {row["id"] for row in profiles} == {f"alerts-{idx}" for idx in range(12)}
 
 
-def test_validate_and_test_profile_do_not_return_secret(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("saved", [True, False])
+def test_validate_and_test_profile_do_not_return_secret(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, saved) -> None:
     _ok_validation(monkeypatch)
     config = _cfg(tmp_path)
     apprise_profiles_api.create_profile(config, {
         "id": "alerts-main",
         "name": "Alerts",
         "apprise_url": "json://token@example.test",
+        "timeout_seconds": 120,
     })
     captured = {}
 
-    def fake_send(url: str, *, title: str, body: str):
+    def fake_send(url: str, *, title: str, body: str, timeout_seconds):
         captured["url"] = url
         captured["title"] = title
         captured["body"] = body
+        captured["timeout"] = timeout_seconds
         return type("Result", (), {"ok": True, "message": "sent"})()
 
     monkeypatch.setattr(apprise_profiles_api, "send_test_notification", fake_send)
 
     validation = apprise_profiles_api.validate_profile_payload(config, {"apprise_url": "json://token@example.test"})
-    tested = apprise_profiles_api.test_profile(config, {"profile_id": "alerts-main"})
+    payload = ({"profile_id": "alerts-main"} if saved else {
+        "apprise_url": "json://token@example.test", "timeout_seconds": 7,
+    })
+    tested = apprise_profiles_api.test_profile(config, payload)
 
     assert validation["success"] is True
     assert validation["url_set"] is True
     assert tested["success"] is True
     assert captured["url"] == "json://token@example.test"
+    assert captured["timeout"] == tested["timeout_seconds"] == (120 if saved else 7)
     assert "json://token" not in json.dumps(validation)
     assert "json://token" not in json.dumps(tested)
 
@@ -255,9 +262,15 @@ def test_apprise_profile_http_routes_are_wired() -> None:
     assert "p.startswith(\"/api/notification-profiles\")" in source
 
 
-@pytest.mark.parametrize("scheme", ["napi", "notificationapi", "NaPi"])
-def test_retired_profile_warning_preserves_metadata_and_secret(tmp_path, monkeypatch, scheme):
-    # Model an existing profile written with 1.12.0, including generic profiles.
+@pytest.mark.parametrize("scheme,warning_code", [
+    ("napi", "apprise_notificationapi_retired"),
+    ("notificationapi", "apprise_notificationapi_retired"),
+    ("NaPi", "apprise_notificationapi_retired"),
+    ("chime", "apprise_chime_retired"),
+    ("ChImE", "apprise_chime_retired"),
+])
+def test_retired_profile_warning_preserves_metadata_and_secret(tmp_path, monkeypatch, scheme, warning_code):
+    # Model an existing 1.x profile, including generic profiles.
     original_validate = apprise_profiles_api.validate_url
     _ok_validation(monkeypatch)
     config = _cfg(tmp_path)
@@ -272,13 +285,13 @@ def test_retired_profile_warning_preserves_metadata_and_secret(tmp_path, monkeyp
 
     for _ in range(2):
         profile = apprise_profiles_api.list_profiles(config)["profiles"][0]
-        assert profile["warning_code"] == "apprise_notificationapi_retired"
+        assert profile["warning_code"] == warning_code
         assert profile["url_set"] and profile["enabled"]
         assert "fake-secret" not in json.dumps(profile)
         for operation in (apprise_profiles_api.validate_profile_payload, apprise_profiles_api.test_profile):
             result = operation(config, {"profile_id": "old-alerts"})
             assert not result["success"]
-            assert result["message_code"] == "apprise_notificationapi_retired"
+            assert result["message_code"] == warning_code
             assert "fake-secret" not in json.dumps(result)
     assert [(path.read_bytes(), path.stat().st_mtime_ns) for path in paths] == before
 

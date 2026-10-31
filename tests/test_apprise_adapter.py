@@ -16,21 +16,39 @@ if str(RUNTIME_LIB) not in sys.path:
 import apprise_adapter  # noqa: E402
 
 
+class _FakeResult:
+    def __init__(self, ok=True):
+        self.ok = ok
+        self.closed = False
+
+    def __bool__(self):
+        return self.ok
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        self.closed = True
+
+
 class _FakeApprise:
     instances = []
 
-    def __init__(self):
+    def __init__(self, *, asset=None):
         self.urls = []
+        self.asset = asset
         _FakeApprise.instances.append(self)
 
     def add(self, url: str) -> bool:
         self.urls.append(url)
         return not str(url).startswith("broken://")
 
-    def notify(self, *, title: str, body: str) -> bool:
+    def notify(self, *, title: str, body: str, **kwargs):
         self.title = title
         self.body = body
-        return True
+        self.notify_options = kwargs
+        self.result = _FakeResult()
+        return self.result
 
     def details(self) -> dict:
         return {
@@ -73,7 +91,7 @@ class _FakeApprise:
 
 def _fake_module():
     _FakeApprise.instances = []
-    return SimpleNamespace(Apprise=_FakeApprise, __version__="1.2.3-test")
+    return SimpleNamespace(Apprise=_FakeApprise, AppriseAsset=SimpleNamespace, __version__="1.2.3-test")
 
 
 def test_supported_providers_uses_apprise_details() -> None:
@@ -148,15 +166,16 @@ def test_validate_and_send_test_notification_with_test_double() -> None:
     assert _FakeApprise.instances[-1].urls == ["example://token"]
     assert _FakeApprise.instances[-1].title == "Title"
     assert _FakeApprise.instances[-1].body == "Body"
+    assert _FakeApprise.instances[-1].result.closed
 
 
 def test_send_notification_suppresses_provider_info_logs(caplog) -> None:
     class LoggingApprise(_FakeApprise):
-        def notify(self, *, title: str, body: str) -> bool:
+        def notify(self, *, title: str, body: str, **kwargs):
             logging.getLogger("apprise.plugins.ntfy").info("Sent ntfy notification to 'https://ntfy.sh'.")
-            return super().notify(title=title, body=body)
+            return super().notify(title=title, body=body, **kwargs)
 
-    module = SimpleNamespace(Apprise=LoggingApprise, __version__="1.2.3-test")
+    module = SimpleNamespace(Apprise=LoggingApprise, AppriseAsset=SimpleNamespace, __version__="1.2.3-test")
 
     with caplog.at_level(logging.INFO):
         result = apprise_adapter.send_notification(
@@ -232,8 +251,46 @@ def test_provider_delivery_exception_does_not_expose_message_or_secret(caplog):
     with caplog.at_level(logging.DEBUG):
         result = apprise_adapter.send_notification(
             "json://fake-secret@example.test", title="Title", body="private body",
-            apprise_module=SimpleNamespace(Apprise=FailingApprise),
+            apprise_module=SimpleNamespace(Apprise=FailingApprise, AppriseAsset=SimpleNamespace),
         )
     assert not result.ok and "RuntimeError" in result.message
     assert "fake-secret" not in result.message + caplog.text
     assert "private body" not in result.message + caplog.text
+
+
+@pytest.mark.parametrize("timeout", [None, 0, 0.05, 120])
+def test_delivery_passes_profile_budget_to_call_and_service(timeout):
+    result = apprise_adapter.send_notification(
+        "example://token", title="Title", body="Body", timeout_seconds=timeout,
+        apprise_module=_fake_module(),
+    )
+    assert result.ok
+    app = _FakeApprise.instances[-1]
+    assert app.asset.service_timeout == app.notify_options["timeout"] == (timeout or 0)
+    assert app.notify_options["log_level"] > logging.CRITICAL
+
+
+def test_unsuccessful_result_is_closed_and_reported_as_failure():
+    failed = _FakeResult(False)
+
+    class FailedApprise(_FakeApprise):
+        def notify(self, **kwargs):
+            return failed
+
+    result = apprise_adapter.send_notification(
+        "example://token", title="Title", body="Body",
+        apprise_module=SimpleNamespace(Apprise=FailedApprise, AppriseAsset=SimpleNamespace),
+    )
+    assert not result.ok and failed.closed
+
+
+def test_provider_logs_stay_private_after_delivery_returns(caplog):
+    apprise_adapter.send_notification(
+        "example://token", title="Title", body="Body", apprise_module=_fake_module(),
+    )
+    with caplog.at_level(logging.DEBUG):
+        logging.getLogger("apprise").error("late fake-secret")
+        logging.getLogger("apprise.plugins.ntfy").error("late private body")
+        logging.getLogger("borg_backup_ui").warning("Application diagnostic")
+    assert "fake-secret" not in caplog.text and "private body" not in caplog.text
+    assert "Application diagnostic" in caplog.text

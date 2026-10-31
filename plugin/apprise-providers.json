@@ -1,6 +1,6 @@
 {
-  "version": "1.13.1",
-  "provider_count": 141,
+  "version": "2.1.0",
+  "provider_count": 158,
   "providers": [
     {
       "service_name": "46elks",
@@ -22,9 +22,10 @@
       ]
     },
     {
-      "service_name": "Amazon Chime",
+      "service_name": "AMQP",
       "schemas": [
-        "chime"
+        "amqp",
+        "amqps"
       ]
     },
     {
@@ -57,6 +58,12 @@
       "schemas": [
         "bark",
         "barks"
+      ]
+    },
+    {
+      "service_name": "Better Stack",
+      "schemas": [
+        "betterstack"
       ]
     },
     {
@@ -125,6 +132,13 @@
       "service_name": "Dapnet",
       "schemas": [
         "dapnet"
+      ]
+    },
+    {
+      "service_name": "Delta Chat",
+      "schemas": [
+        "deltachat",
+        "deltachats"
       ]
     },
     {
@@ -219,9 +233,29 @@
       ]
     },
     {
+      "service_name": "GitHub",
+      "schemas": [
+        "github"
+      ]
+    },
+    {
+      "service_name": "GoAlert",
+      "schemas": [
+        "goalert",
+        "goalerts"
+      ]
+    },
+    {
       "service_name": "Google Chat",
       "schemas": [
         "gchat"
+      ]
+    },
+    {
+      "service_name": "Gorush",
+      "schemas": [
+        "gorush",
+        "gorushs"
       ]
     },
     {
@@ -267,6 +301,18 @@
       "service_name": "IFTTT",
       "schemas": [
         "ifttt"
+      ]
+    },
+    {
+      "service_name": "ilert",
+      "schemas": [
+        "ilert"
+      ]
+    },
+    {
+      "service_name": "incident.io",
+      "schemas": [
+        "incidentio"
       ]
     },
     {
@@ -349,6 +395,12 @@
       ]
     },
     {
+      "service_name": "LFG Alarm",
+      "schemas": [
+        "lfg"
+      ]
+    },
+    {
       "service_name": "Line",
       "schemas": [
         "line"
@@ -400,6 +452,13 @@
       "schemas": [
         "misskey",
         "misskeys"
+      ]
+    },
+    {
+      "service_name": "Mobile Message",
+      "schemas": [
+        "mobilemessage",
+        "mobilemsg"
       ]
     },
     {
@@ -466,6 +525,13 @@
       "schemas": [
         "azure",
         "o365"
+      ]
+    },
+    {
+      "service_name": "OneBot",
+      "schemas": [
+        "onebot",
+        "onebots"
       ]
     },
     {
@@ -700,6 +766,13 @@
       ]
     },
     {
+      "service_name": "Simplepush",
+      "schemas": [
+        "simplepush",
+        "spush"
+      ]
+    },
+    {
       "service_name": "Sinch",
       "schemas": [
         "sinch"
@@ -738,7 +811,7 @@
       ]
     },
     {
-      "service_name": "Soci\u00e9t\u00e9 Fran\u00e7aise du Radiot\u00e9l\u00e9phone",
+      "service_name": "Société Française du Radiotéléphone",
       "schemas": [
         "sfr"
       ]
@@ -766,6 +839,12 @@
       "service_name": "SpugPush",
       "schemas": [
         "spugpush"
+      ]
+    },
+    {
+      "service_name": "Squadcast",
+      "schemas": [
+        "squadcast"
       ]
     },
     {
@@ -803,6 +882,12 @@
       "service_name": "Telegram",
       "schemas": [
         "tgram"
+      ]
+    },
+    {
+      "service_name": "Telnyx",
+      "schemas": [
+        "telnyx"
       ]
     },
     {
@@ -876,6 +961,12 @@
       ]
     },
     {
+      "service_name": "WPUSH",
+      "schemas": [
+        "wpush"
+      ]
+    },
+    {
       "service_name": "WxPusher",
       "schemas": [
         "wxpusher"
@@ -886,6 +977,26 @@
       "schemas": [
         "xml",
         "xmls"
+      ]
+    },
+    {
+      "service_name": "YouLMK",
+      "schemas": [
+        "youlmk"
+      ]
+    },
+    {
+      "service_name": "Zalo",
+      "schemas": [
+        "zalo"
+      ]
+    },
+    {
+      "service_name": "Zoho Cliq",
+      "schemas": [
+        "cliq",
+        "zcliq",
+        "zohocliq"
       ]
     },
     {
