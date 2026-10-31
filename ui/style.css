@@ -6122,6 +6122,24 @@ body.wizard-modal-open {
   margin: 0;
 }
 
+.wizard-order-help-link {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.wizard-order-help-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
 .wizard-order-row {
   display: grid;
   grid-template-columns: auto 2ch minmax(0, 1fr) auto;

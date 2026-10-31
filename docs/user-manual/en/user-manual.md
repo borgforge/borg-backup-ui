@@ -395,6 +395,8 @@ For imported VMs, check the guest integration as well: the QEMU Guest Agent may 
 
 #### Job Start and Stop Order
 
+The **Start and stop order guidance** link below the container list opens the full explanation in a dialog. Dismiss it with **Close** or Escape; your job wizard entries are preserved.
+
 In the Docker step of the job wizard, the **Order** list shows all containers in the selected scope. Drag an entry to the desired position or move it with the arrows:
 
 - After archive creation, Borg Backup UI starts the containers stopped by the job from top to bottom. The next start follows once Docker has confirmed the previous one. The pauses between the label priority groups do not apply to the listed containers.

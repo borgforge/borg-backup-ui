@@ -1064,6 +1064,7 @@
     "runtimeSelectionCount": "{selected} of {total} selected",
     "runtimeExclusionCount": "{selected} of {total} remain running",
     "dockerOrder": "Order",
+    "dockerOrderHelp": "Start and stop order guidance",
     "dockerOrderHint": "Drag or use the arrows to move containers. After the backup, containers start from top to bottom. With a custom order they are stopped one by one in reverse order before the backup, so containers at the top such as databases stop last.",
     "dockerOrderNote": "A custom order replaces the backup.start.priority groups for the listed containers, including the pauses between those groups: the containers start directly one after another. Stopping them one by one takes longer than stopping them together. Neither mode waits for Docker health checks or application readiness, so a database started first is not guaranteed to accept connections yet.",
     "dockerOrderDefault": "Default: by backup.start.priority label",

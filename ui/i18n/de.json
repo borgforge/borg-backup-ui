@@ -1064,6 +1064,7 @@
     "runtimeSelectionCount": "{selected} von {total} ausgewählt",
     "runtimeExclusionCount": "{selected} von {total} bleiben aktiv",
     "dockerOrder": "Reihenfolge",
+    "dockerOrderHelp": "Hinweise zur Start- und Stoppreihenfolge",
     "dockerOrderHint": "Ziehen oder mit den Pfeilen verschieben. Nach dem Backup starten die Container von oben nach unten. Bei einer eigenen Reihenfolge werden sie vor dem Backup einzeln in umgekehrter Reihenfolge gestoppt, also oben stehende Container wie Datenbanken zuletzt.",
     "dockerOrderNote": "Eine eigene Reihenfolge ersetzt für die aufgeführten Container die Prioritätsgruppen aus dem Label backup.start.priority einschließlich der Pausen zwischen diesen Gruppen: Die Container starten direkt nacheinander. Das einzelne Stoppen dauert länger als der gemeinsame Stopp. In keinem Modus wird auf Docker-Health-Checks oder die Betriebsbereitschaft einer Anwendung gewartet; eine zuerst gestartete Datenbank nimmt daher nicht zwingend schon Verbindungen an.",
     "dockerOrderDefault": "Standard: nach Label backup.start.priority",

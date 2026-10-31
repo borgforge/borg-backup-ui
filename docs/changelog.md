@@ -1,5 +1,10 @@
 # Changelog
 
+## Pending - Compact Docker ordering help (#674)
+
+- Move the detailed Docker ordering clarification below the list into the existing wizard help dialog, opened by a translated text link. Preserve the explanation of group pauses, sequential shutdown and application readiness from #670.
+- Keep the wizard entries and container order unchanged when opening or closing help. Reuse the dialog's keyboard handling, background isolation and focus return; update both manuals and in-app help.
+
 ## Pending - Docker start and stop order per job (#670)
 
 - Add a reorderable Order list (drag and arrow buttons) to the Docker step of the job wizard and store it as docker_control.order. Listed containers start first in that order after the backup and are stopped one by one in reverse order before it; unlisted containers stop first and start afterwards by backup.start.priority label.
