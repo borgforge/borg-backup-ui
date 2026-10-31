@@ -71,16 +71,41 @@ def verify_package_permissions(members: list[tarfile.TarInfo]) -> None:
 
 
 def build_package(root: Path, package: Path) -> None:
-    """Keep both builders, but publish only plugin-owned paths and explicit modes."""
+    """Write a normalized package without touching live host paths.
+
+    The portable builder compresses once, in sorted order with SOURCE_DATE_EPOCH
+    timestamps (zero when unset). Native makepkg retains its generated hooks and
+    the existing normalization pass. Portable output is replaced atomically
+    after validation. Invalid epoch, paths or archive metadata raise an error.
+    """
+    epoch = int(os.environ.get("SOURCE_DATE_EPOCH", "0"))
+    if epoch < 0:
+        raise ValueError("SOURCE_DATE_EPOCH must be nonnegative")
     makepkg = shutil.which("makepkg")
-    if makepkg:
-        subprocess.run([makepkg, "-l", "y", "-c", "y", str(package)], cwd=root, check=True)
-    else:
-        subprocess.run(
-            ["tar", "--create", "--xz", f"--file={package}",
-             "--owner=root", "--group=root", "--exclude=./.git", "."],
-            cwd=root, check=True,
-        )
+    if not makepkg:
+        with tempfile.TemporaryDirectory(prefix=".package-permissions-", dir=package.parent) as temp:
+            output = Path(temp) / package.name
+            with tarfile.open(output, "w:xz", format=tarfile.PAX_FORMAT) as archive:
+                for path in sorted(root.rglob("*")):
+                    name = path.relative_to(root).as_posix()
+                    if path.is_dir() and not path.is_symlink() and not package_owns_path(name):
+                        continue
+                    member = archive.gettarinfo(str(path), arcname=name)
+                    member.uid = member.gid = 0
+                    member.uname = member.gname = "root"
+                    member.mtime = epoch
+                    member.pax_headers = {}
+                    if member.isdir() or member.isfile() or member.islnk():
+                        member.mode = 0o755 if member.isdir() or member.mode & 0o111 else 0o644
+                    verify_package_permissions([member])
+                    if member.isfile():
+                        with path.open("rb") as handle:
+                            archive.addfile(member, handle)
+                    else:
+                        archive.addfile(member)
+            os.replace(output, package)
+        return
+    subprocess.run([makepkg, "-l", "y", "-c", "y", str(package)], cwd=root, check=True)
 
     # Filter the finished archive, including makepkg-generated install hooks.
     # Never extract it or chmod live host paths. The temporary archive stays
@@ -94,8 +119,9 @@ def build_package(root: Path, package: Path) -> None:
                     continue
                 member.uid = member.gid = 0
                 member.uname = member.gname = "root"
+                member.mtime = epoch
                 # PAX metadata must not override the normalized ownership.
-                for key in ("uid", "gid", "uname", "gname"):
+                for key in ("uid", "gid", "uname", "gname", "mtime", "atime", "ctime"):
                     member.pax_headers.pop(key, None)
                 if member.isdir() or member.isfile():
                     member.mode = 0o755 if member.isdir() or member.mode & 0o111 else 0o644
@@ -156,6 +182,8 @@ def is_deployable_path(path: str) -> bool:
         "plugin/package_documentation.py",
         "docs/auth-user-store-recovery.md",
         "plugin/build-candidate.sh",
+        "plugin/build_metrics.py",
+        "plugin/build_targets.py",
         "plugin/security_workflow.py",
         "plugin/README.md",
         "plugin/borg-backup-ui.page",
@@ -390,10 +418,17 @@ def limit_manifest_changelog(
     return manifest[:body_start] + kept + "\n" + manifest[end:]
 
 
-def package_install_block(md5: str) -> str:
+def package_install_block(md5: str, sha256: str = "") -> str:
+    """Render the legacy installer with optional additional SHA256 verification.
+
+    MD5 remains for old manifests. New candidates pass both digests. Invalid
+    hashes raise RuntimeError; this function does not install or publish.
+    """
     md5 = str(md5 or "").strip()
     if not re.fullmatch(r"[0-9a-fA-F]{32}", md5):
         raise RuntimeError("Package MD5 must be a 32 character hexadecimal digest")
+    if sha256 and not re.fullmatch(r"[0-9a-fA-F]{64}", sha256):
+        raise RuntimeError("Package SHA256 must be a 64 character hexadecimal digest")
     return f"""{PACKAGE_INSTALL_BEGIN}
 <FILE Name="/tmp/borg-backup-ui-package-install-&version;.sh" Run="/bin/bash">
 <INLINE>
@@ -408,6 +443,7 @@ PACKAGE_FILE="${{PLUGIN_DIR}}/${{NAME}}-${{VERSION}}.txz"
 PACKAGE_TMP="${{PACKAGE_FILE}}.tmp"
 PACKAGE_URL="&pkgurl;"
 EXPECTED_MD5="{md5.lower()}"
+EXPECTED_SHA256="{sha256.lower()}"
 INSTALLED_MD5_FILE="${{PLUGIN_DIR}}/.installed-package-md5"
 VENDOR_DIR="${{PLUGIN_DIR}}/runtime/vendor"
 VENDOR_BUNDLE_DIR="${{PLUGIN_DIR}}/runtime/vendor-bundles"
@@ -551,6 +587,13 @@ download_package() {{
     rm -f "${{PACKAGE_TMP}}"
     return 1
   fi
+  if [ -n "${{EXPECTED_SHA256}}" ]; then
+    if [ "$(file_sha256 "${{PACKAGE_TMP}}")" != "${{EXPECTED_SHA256}}" ]; then
+      echo "ERROR: Package SHA256 does not match."
+      rm -f "${{PACKAGE_TMP}}"
+      return 1
+    fi
+  fi
   mv -f "${{PACKAGE_TMP}}" "${{PACKAGE_FILE}}"
 }}
 
@@ -558,10 +601,12 @@ ensure_package_file() {{
   if [ -f "${{PACKAGE_FILE}}" ]; then
     actual_md5="$(file_md5 "${{PACKAGE_FILE}}")"
     if [ "${{actual_md5}}" = "${{EXPECTED_MD5}}" ]; then
-      echo "Borg Backup UI: existing package matches MD5, skipping download."
-      return 0
+      if [ -z "${{EXPECTED_SHA256}}" ] || [ "$(file_sha256 "${{PACKAGE_FILE}}")" = "${{EXPECTED_SHA256}}" ]; then
+        echo "Borg Backup UI: existing package matches MD5, skipping download."
+        return 0
+      fi
     fi
-    echo "Borg Backup UI: local package has a different MD5, downloading again."
+    echo "Borg Backup UI: local package checksum differs, downloading again."
   fi
   download_package
 }}
@@ -621,8 +666,10 @@ echo "${{EXPECTED_MD5}}" > "${{INSTALLED_MD5_FILE}}" 2>/dev/null || true
 {PACKAGE_INSTALL_END}"""
 
 
-def rewrite_package_installer(manifest: str, md5: str) -> str:
-    block = package_install_block(md5)
+def rewrite_package_installer(manifest: str, md5: str, sha256: str = "") -> str:
+    """Replace only the installer block, preserving a staged SHA256 if omitted."""
+    previous = re.search(r'EXPECTED_SHA256="([0-9a-f]{64})"', manifest)
+    block = package_install_block(md5, sha256 or (previous.group(1) if previous else ""))
     if PACKAGE_INSTALL_BLOCK_RE.search(manifest):
         return PACKAGE_INSTALL_BLOCK_RE.sub(lambda _match: block, manifest, count=1)
     if LEGACY_PACKAGE_FILE_RE.search(manifest):
@@ -747,6 +794,8 @@ def prepare_build_tree(
         "release_notes_sha256": notes_digest,
         "release_note_fragments": fragments,
         "built_at": built_at,
+        "platform": "unraid-legacy",
+        "architecture": "x86_64",
     }
     (root / PROVENANCE_NAME).write_text(
         json.dumps(provenance, indent=2, sort_keys=True) + "\n", encoding="utf-8"
@@ -832,6 +881,26 @@ def file_md5(path: Path) -> str:
     return digest.hexdigest()
 
 
+def verify_manifest_sha256(manifest: Path, package: Path) -> None:
+    """Check a declared package SHA256; allow older MD5-only manifests.
+
+    An empty digest denotes the previous installer contract. Malformed or
+    mismatching nonempty digests raise RuntimeError. No payload is extracted.
+    """
+    match = re.search(r'EXPECTED_SHA256="([^"]*)"', manifest.read_text(encoding="utf-8"))
+    if not match or not match.group(1):
+        return
+    expected = match.group(1).lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", expected):
+        raise RuntimeError("Manifest package SHA256 is malformed")
+    digest = hashlib.sha256()
+    with package.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    if digest.hexdigest() != expected:
+        raise RuntimeError("Package SHA256 mismatch")
+
+
 def verify_release_artifacts(repo: Path, main_ref: str = "HEAD", source_repo: Path | None = None) -> dict[str, object]:
     """Verify a release tree against a Git revision, optionally in another checkout.
 
@@ -846,6 +915,7 @@ def verify_release_artifacts(repo: Path, main_ref: str = "HEAD", source_repo: Pa
         raise RuntimeError(f"Stable package is missing: {package}")
     if manifest_md5(manifest) != file_md5(package):
         raise RuntimeError("Stable manifest MD5 does not match the package")
+    verify_manifest_sha256(manifest, package)
     text = manifest.read_text(encoding="utf-8")
     required = (
         f'Title="{DISPLAY_TITLE}"',
@@ -1107,7 +1177,7 @@ def command_verify_implementation_delta(args: argparse.Namespace) -> None:
 def command_rewrite_package_installer(args: argparse.Namespace) -> None:
     path = Path(args.manifest).resolve()
     text = path.read_text(encoding="utf-8")
-    path.write_text(rewrite_package_installer(text, args.md5), encoding="utf-8")
+    path.write_text(rewrite_package_installer(text, args.md5, args.sha256), encoding="utf-8")
 
 
 def parser() -> argparse.ArgumentParser:
@@ -1177,6 +1247,7 @@ def parser() -> argparse.ArgumentParser:
     item = subparsers.add_parser("rewrite-package-installer")
     item.add_argument("--manifest", required=True)
     item.add_argument("--md5", required=True)
+    item.add_argument("--sha256", default="")
     item.set_defaults(func=command_rewrite_package_installer)
     return result
 

@@ -1,0 +1,76 @@
+name: Shared checks
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: .github/requirements-ci.lock
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - run: |
+          mkdir -p .release-tmp/ci/tmp
+          python -m pip install --require-hashes -r .github/requirements-ci.lock
+          sudo apt-get update -qq
+          sudo apt-get install -y php-cli
+      - name: Syntax, static analysis and binary integrity
+        run: python plugin/build_metrics.py --output .release-tmp/ci/quality.jsonl --step quality -- python plugin/ci_checks.py check
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: quality-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .release-tmp/ci/quality.jsonl
+          retention-days: 14
+  tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      TMPDIR: ${{ github.workspace }}/.release-tmp/ci/tmp
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/api:${{ github.workspace }}/runtime
+      NODE_PATH: ${{ github.workspace }}/.github/browser/node_modules
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: mkdir -p "$TMPDIR"
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: .github/requirements-ci.lock
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: .github/browser/package-lock.json
+      - name: Test dependencies
+        run: |
+          python -m pip install --require-hashes -r .github/requirements-ci.lock
+          npm ci --ignore-scripts --prefix .github/browser
+          .github/browser/node_modules/.bin/playwright install --with-deps chromium
+          python plugin/ci_checks.py test-dependencies
+          echo "$GITHUB_WORKSPACE/.release-tmp/ci/bin" >> "$GITHUB_PATH"
+      - name: Full suite (isolated data; optional host tests stay opt-in)
+        run: |
+          umask 0022
+          python plugin/build_metrics.py --output .release-tmp/ci/tests.jsonl --step pytest -- python -m pytest -q tests -rs --durations=20 --basetemp=.release-tmp/ci/pytest --junitxml=.release-tmp/ci/tests.xml
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: tests-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .release-tmp/ci/tests.jsonl
+            .release-tmp/ci/tests.xml
+          retention-days: 14

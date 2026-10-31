@@ -15,3 +15,4 @@ CONTEXT.md
 
 # Lokale Release-/Test-Channel-Arbeitsdateien
 .release-tmp/
+.github/browser/node_modules/

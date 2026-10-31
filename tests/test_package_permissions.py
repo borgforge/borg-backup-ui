@@ -130,6 +130,7 @@ def test_artifact_validation_rejects_unsafe_payload_metadata(kind, mode, uid):
 
 
 def test_package_keeps_pax_owner_metadata_from_overriding_root(tmp_path, monkeypatch):
+    monkeypatch.setattr(workflow.shutil, "which", lambda _name: "makepkg")
     package = tmp_path / "plugin.txz"
     with tarfile.open(package, "w:xz", format=tarfile.PAX_FORMAT) as archive:
         member = tarfile.TarInfo(APP + "/payload")
@@ -147,6 +148,7 @@ def test_package_keeps_pax_owner_metadata_from_overriding_root(tmp_path, monkeyp
 
 
 def test_failed_package_filter_does_not_replace_input(tmp_path, monkeypatch):
+    monkeypatch.setattr(workflow.shutil, "which", lambda _name: "makepkg")
     package = tmp_path / "plugin.txz"
     with tarfile.open(package, "w:xz") as archive:
         archive.addfile(tarfile.TarInfo("etc/unrelated.conf"))
@@ -156,3 +158,25 @@ def test_failed_package_filter_does_not_replace_input(tmp_path, monkeypatch):
         workflow.build_package(tmp_path, package)
     assert package.read_bytes() == original
     assert not list(tmp_path.glob(".package-permissions-*"))
+
+
+def test_portable_package_is_reproducible_across_mtimes_and_rejects_unowned_files(tmp_path, monkeypatch):
+    """The single-pass writer normalizes time/owners and preserves old output on failure."""
+    monkeypatch.setattr(workflow.shutil, "which", lambda _name: None)
+    monkeypatch.setenv("SOURCE_DATE_EPOCH", "1234567890")
+    stage = tmp_path / "stage"
+    payload = stage / APP / "payload"
+    payload.parent.mkdir(parents=True)
+    payload.write_bytes(b"payload")
+    first, second = tmp_path / "first.txz", tmp_path / "second.txz"
+    workflow.build_package(stage, first)
+    os.utime(payload, (999, 999))
+    workflow.build_package(stage, second)
+    assert first.read_bytes() == second.read_bytes()
+    with tarfile.open(first) as archive:
+        assert all(member.mtime == 1234567890 for member in archive)
+    original = first.read_bytes()
+    (stage / "unexpected").write_text("must not ship")
+    with pytest.raises(RuntimeError, match="unexpected system path"):
+        workflow.build_package(stage, first)
+    assert first.read_bytes() == original

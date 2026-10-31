@@ -1,0 +1,6 @@
+{
+  "name": "borg-backup-ui-browser-tests",
+  "private": true,
+  "version": "0.0.0",
+  "devDependencies": {"playwright": "1.62.1"}
+}

@@ -32,8 +32,9 @@ stable is identical to the tested changelog; there is no separate stable text.
 Changing tested notes requires a new committed, verified test candidate.
 
 Do not run `plugin/build.sh` or `plugin/build-candidate.sh` directly. These are
-internal builders for exported, prepared source trees. The public/private
-entrypoints first verify the appropriate attestation and remote commit.
+internal builders for exported, prepared source trees. Publishing public/private
+entrypoints first verify the appropriate attestation and remote commit. The
+non-publishing CI preview described below deliberately creates no attestation.
 
 ## 2. Final source preflight
 
@@ -90,8 +91,10 @@ Build and publish the test package with:
 It does not rerun pytest and does not modify stable release files in the
 feature branch.
 
-For #484, both package builders pass their archive through the same permission
-filter. Only plugin-owned directories and Slackware package metadata retain
+For #484/#671, both package builders apply the same permission rules. The
+portable builder validates normalized entries while compressing once; native
+makepkg retains its generated hooks and subsequent normalization pass. Only
+plugin-owned directories and Slackware package metadata retain
 directory entries; shared ancestors such as `/`, `/boot`, `/etc/rc.d` and `/usr`
 are omitted. Payload directories/executables use `0755`, other regular files
 use `0644`, and ownership is `root:root`. Artifact verification rejects shared
@@ -106,8 +109,10 @@ TEST_COMMIT="$(git ls-remote origin refs/heads/test-channel | awk '{print $1}')"
 curl -fsSL "https://raw.githubusercontent.com/borgforge/borg-backup-ui/${TEST_COMMIT}/borg-backup-ui-test.plg"
 ```
 
-Check version, package URL, MD5, plugin URL, and that the snapshot contains
-exactly one package.
+Check version, package URL, MD5, SHA256 (new candidates), plugin URL, and that
+the snapshot contains exactly one package. New installers verify SHA256 on
+download and reuse of a cached package, in addition to MD5. Old MD5-only
+manifests remain readable; promotion preserves the tested installer block.
 
 ## 4. User test and merge
 
@@ -199,3 +204,55 @@ test-channel version from current source.
 
 This is intentional. Use `deploy-test.sh` for test packages and
 `promote-release.sh` for stable promotion.
+
+## 9. Read-only CI and local previews (#671)
+
+`ci.yml` classifies the actual Git delta on pull requests and main pushes.
+Source changes run shared syntax/static/binary-integrity checks and the full test
+suite. Pure release changes run artifact-only checks, including source/notes,
+retention, checksums and exact note-fragment consumption; PRs also compare the
+tested package bytes. A release branch name alone never skips tests, and mixed
+source/release changes fail. `security.yml` audits the locked runtime
+dependencies on PRs, main, manual dispatch and a weekly schedule. Dependency
+findings fail visibly; no advisories are suppressed. Both workflows use read-only
+repository permissions and do not install a plugin or publish a release.
+
+Manual `testing-release.yml` performs checks, then builds a local candidate.
+Manual `stable-release.yml` is restricted to main and prepares a stable preview
+from the current immutable test snapshot, without rebuilding. Both upload review
+artifacts with 14-day retention and **cannot publish**: there are no channel
+writes, tags, release API calls, bot secrets or write permissions. Their artifact
+download links are not Unraid update feeds. `unraid-8` fails before packaging
+until the official SDK and real target validation are available (#549).
+
+For a local preview of a clean committed tree (all output stays in the repo):
+
+```bash
+python3 plugin/ci_pipeline.py prepare --platform unraid-legacy \
+  --version YYYY.MM.DD.HHMM --output .release-tmp/preview-unique
+```
+
+Use a real timestamp version and a new output directory. Run the quality/tests
+first. This command intentionally does not require a push or issue a release
+attestation; a preview never authorizes the normal publishing entrypoints.
+Private-advisory guards still apply. Stable previews additionally require clean
+HEAD equal to fetched `origin/main` and a tested source/notes match:
+
+```bash
+python3 plugin/ci_pipeline.py stable-preview --platform unraid-legacy \
+  --version YYYY.MM.DD.HHMM --output .release-tmp/stable-preview-unique
+```
+
+Build metrics record step, wall/CPU time, peak child RSS and exit code in
+`metrics.jsonl`, without command arguments or environment. Cache only downloaded
+pip content; wheels remain hash-verified. CI keys include OS/CPU/Python and the
+runtime lock. Source export excludes retained releases/tests; archive timestamps
+use the source commit epoch. Reproducibility is scoped to the same commit,
+version, platform, lock and builder/toolchain, not arbitrary Python/xz versions.
+
+Before activating publication, review a separate change covering bot identity,
+stable environment approval, artifact provenance and immutable promotion, status
+checks, tag/asset policy and real Unraid tests. The existing manual release
+workflow and the explicit maintainer test-approval requirement remain in force.
+See [the audit](../development/ci-cd-audit.md) and
+[generation boundaries](../development/multi-generation-plugin-architecture.md).
