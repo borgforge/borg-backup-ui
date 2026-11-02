@@ -1,5 +1,6 @@
 from pathlib import Path
 from datetime import datetime
+from contextlib import nullcontext
 import importlib.util
 import json
 import logging
@@ -354,7 +355,8 @@ def test_queued_apprise_delivery_retries_without_sleeping(monkeypatch, tmp_path)
     assert read_notification_delivery_status({"BACKUP_SCRIPTS_DIR": str(tmp_path)})["deliveries"][-1]["status"] == "failed"
 
 
-def test_retired_profile_does_not_block_other_channels_or_queued_profiles(monkeypatch, tmp_path, caplog):
+@pytest.mark.parametrize("retired_scheme", ["napi", "chime"])
+def test_retired_profile_does_not_block_other_channels_or_queued_profiles(monkeypatch, tmp_path, caplog, retired_scheme):
     from lib import apprise_adapter as adapter
 
     store = tmp_path / "config" / "apprise-profiles.json"
@@ -362,7 +364,7 @@ def test_retired_profile_does_not_block_other_channels_or_queued_profiles(monkey
     secrets = tmp_path / "secrets"
     secrets.mkdir()
     rows = []
-    for pid, url in (("retired", "napi://fake-id:fake-secret@example.test"),
+    for pid, url in (("retired", f"{retired_scheme}://fake-id:fake-secret@example.test"),
                      ("working", "json://example.test/notify")):
         rows.append({"id": pid, "enabled": True, "selected_events": ["backup_success"],
                      "retry_policy": {"attempts": 1, "backoff_seconds": 0}})
@@ -370,15 +372,19 @@ def test_retired_profile_does_not_block_other_channels_or_queued_profiles(monkey
     store.write_text(json.dumps({"schema_version": 1, "profiles": rows}))
 
     class WorkingApprise:
+        def __init__(self, **kwargs):
+            pass
+
         def add(self, url):
             assert not adapter.retired_notificationapi_url(url)
+            assert not adapter.retired_chime_url(url)
             return True
 
         def notify(self, **kwargs):
-            return True
+            return nullcontext(True)
 
     monkeypatch.setattr("lib.notification_events.send_notification", lambda url, **kw: adapter.send_notification(
-        url, apprise_module=SimpleNamespace(Apprise=WorkingApprise), **kw,
+        url, apprise_module=SimpleNamespace(Apprise=WorkingApprise, AppriseAsset=SimpleNamespace), **kw,
     ))
     monkeypatch.setattr("lib.notification_events.notify", lambda **kw: True)
     monkeypatch.setattr("lib.notification_events.send_mail", lambda *args, **kw: True)

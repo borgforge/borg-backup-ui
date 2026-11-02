@@ -23,17 +23,17 @@ system only when the bundled version or SHA256 changes.
 
 | Component | Version | License | Notice |
 | --- | --- | --- | --- |
-| apprise | 1.13.1 | BSD-2-Clause | See `runtime/licenses/apprise/LICENSE`. |
-| certifi | 2026.7.22 | MPL-2.0 | Python package dependency of Apprise. |
+| apprise | 2.1.0 | BSD-2-Clause | See `runtime/licenses/apprise/LICENSE`. |
+| certifi | 2026.10.23 | MPL-2.0 | Python package dependency of Apprise. |
 | charset-normalizer | 3.5.1 | MIT | Python package dependency of Apprise. |
 | click | 8.5.0 | BSD-3-Clause | Python package dependency of Apprise. |
 | idna | 3.19 | BSD-3-Clause | Python package dependency of Apprise. |
 | Markdown | 3.10.3 | BSD-3-Clause | Python package dependency of Apprise. |
-| oauthlib | 3.3.1 | BSD-3-Clause | Python package dependency of Apprise. |
+| oauthlib | 4.0.1 | BSD-3-Clause | Python package dependency of Apprise. |
 | PyYAML | 6.0.3 | MIT | Python package dependency of Apprise. |
 | requests | 2.34.2 | Apache-2.0 | Python package dependency of Apprise. |
 | requests-oauthlib | 2.0.0 | ISC | Python package dependency of Apprise. |
-| urllib3 | 2.7.0 | MIT | Python package dependency of Apprise. |
+| urllib3 | 2.8.0 | MIT | Python package dependency of Apprise. |
 
 The package versions above must stay aligned with
 `plugin/apprise-requirements.lock`.

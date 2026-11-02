@@ -24,9 +24,11 @@ RETIRED_NOTIFICATIONAPI_MESSAGE = (
     "NotificationAPI was retired in Apprise 1.13.1. Reconfigure this profile "
     "for Pingram or another provider. Its saved settings and secret are unchanged."
 )
-_log_lock = threading.Lock()
-_log_users = 0
-_previous_log_level = logging.NOTSET
+RETIRED_CHIME_CODE = "apprise_chime_retired"
+RETIRED_CHIME_MESSAGE = (
+    "Amazon Chime was retired in Apprise 2.1.0. Reconfigure this profile "
+    "for another provider. Its saved settings and secret are unchanged."
+)
 
 
 class AppriseAdapterError(RuntimeError):
@@ -47,6 +49,12 @@ def retired_notificationapi_url(url: str) -> bool:
     return bool(separator) and scheme.lower() in {"napi", "notificationapi"}
 
 
+def retired_chime_url(url: str) -> bool:
+    """Identify a retired Chime URL by scheme without exposing its secret."""
+    scheme, separator, _ = str(url or "").strip().partition("://")
+    return bool(separator) and scheme.lower() == "chime"
+
+
 def _safe_error(value: BaseException | str) -> str:
     # Provider exceptions can contain URLs, credentials and message bodies.
     # Only our own timeout text is safe to return verbatim.
@@ -57,21 +65,16 @@ def _safe_error(value: BaseException | str) -> str:
 
 @contextmanager
 def _suppress_apprise_logs() -> Iterator[None]:
-    """Provider logs may expose URLs even when validation fails (#269)."""
-    global _log_users, _previous_log_level
+    """Keep bundled provider logs private, including workers after a timeout.
+
+    Apprise 2 may stop waiting while provider I/O continues. Suppression must
+    therefore outlive this scope; only sanitized adapter results reach the
+    application log. Other application loggers are unaffected.
+    """
     target = logging.getLogger("apprise")
-    with _log_lock:
-        if _log_users == 0:
-            _previous_log_level = target.level
-            target.setLevel(logging.CRITICAL + 1)
-        _log_users += 1
-    try:
-        yield
-    finally:
-        with _log_lock:
-            _log_users -= 1
-            if _log_users == 0:
-                target.setLevel(_previous_log_level)
+    target.setLevel(logging.CRITICAL + 1)
+    target.propagate = False
+    yield
 
 
 class _DiscoveryTimeoutError(TimeoutError):
@@ -270,6 +273,8 @@ def validate_url(
         return AppriseDeliveryResult(False, "Apprise URL is empty.")
     if retired_notificationapi_url(text):
         return AppriseDeliveryResult(False, RETIRED_NOTIFICATIONAPI_MESSAGE, RETIRED_NOTIFICATIONAPI_CODE)
+    if retired_chime_url(text):
+        return AppriseDeliveryResult(False, RETIRED_CHIME_MESSAGE, RETIRED_CHIME_CODE)
     module = load_bundled_apprise(vendor_dir=vendor_dir, apprise_module=apprise_module)
     try:
         with _suppress_apprise_logs():
@@ -286,10 +291,11 @@ def send_test_notification(
     *,
     title: str = "Borg Backup UI",
     body: str = "This is a test notification from Borg Backup UI.",
+    timeout_seconds: int | float | None = None,
     vendor_dir: Path | str | None = None,
     apprise_module: ModuleType | Any | None = None,
 ) -> AppriseDeliveryResult:
-    """Send one test notification through a generic Apprise URL."""
+    """Send a test using the same safe result and deadline rules as delivery."""
     return send_notification(
         url,
         title=title,
@@ -297,6 +303,7 @@ def send_test_notification(
         success_message="Apprise test notification sent.",
         failure_message="Apprise test notification was not delivered.",
         error_prefix="Apprise test notification failed",
+        timeout_seconds=timeout_seconds,
         vendor_dir=vendor_dir,
         apprise_module=apprise_module,
     )
@@ -314,18 +321,32 @@ def send_notification(
     vendor_dir: Path | str | None = None,
     apprise_module: ModuleType | Any | None = None,
 ) -> AppriseDeliveryResult:
-    """Send one notification through a generic Apprise URL."""
+    """Send through bundled Apprise and return only a sanitized delivery result.
+
+    ``timeout_seconds`` bounds Apprise's wait in any calling thread; None or
+    zero leaves it unlimited. Invalid limits and runtime errors return failure.
+    A timeout cannot cancel provider I/O already in progress. Only complete
+    success is reported as delivered; partial, unmatched and timed-out results
+    are failures. Provider result logs are disabled and their storage is closed.
+    A missing or unloadable bundle raises AppriseAdapterError before delivery.
+    """
     text = str(url or "").strip()
     validation = validate_url(text, vendor_dir=vendor_dir, apprise_module=apprise_module)
     if not validation.ok:
         return validation
     module = load_bundled_apprise(vendor_dir=vendor_dir, apprise_module=apprise_module)
     try:
-        with _operation_timeout(timeout_seconds, "Apprise notification delivery"):
-            with _suppress_apprise_logs():
-                app = module.Apprise()
-                app.add(text)
-                ok = bool(app.notify(title=str(title or "Borg Backup UI"), body=str(body or "")))
+        with _suppress_apprise_logs():
+            budget = 0 if timeout_seconds is None else timeout_seconds
+            # Use the profile limit rather than Apprise 2's default 60-second
+            # service cap, including for profiles allowing more than 60 seconds.
+            app = module.Apprise(asset=module.AppriseAsset(service_timeout=budget))
+            app.add(text)
+            with app.notify(
+                title=str(title or "Borg Backup UI"), body=str(body or ""),
+                timeout=budget, log_level=logging.CRITICAL + 1,
+            ) as result:
+                ok = bool(result)
     except Exception as exc:  # noqa: BLE001
         return AppriseDeliveryResult(False, f"{error_prefix}: {_safe_error(exc)}")
     return AppriseDeliveryResult(

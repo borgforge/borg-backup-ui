@@ -1,5 +1,13 @@
 # Changelog
 
+## Pending - Apprise 2.1 and notification dependency fixes (#672)
+
+- Upgrade the hash-pinned vendor runtime from Apprise 1.13.1 to 2.1.0, certifi to 2026.10.23, OAuthlib to 4.0.1 and urllib3 to 2.8.0. The updated lock resolves the six distinct upstream advisories reported by the dependency audit without suppressions; this does not establish exploitability of every advisory in this application's client usage.
+- Handle Apprise 2 result objects explicitly, close captured-log storage and apply native call/service deadlines in main and worker threads. Profile tests now pass their configured timeout to delivery. Only complete success is reported as delivered; late provider I/O can outlive a timeout and retries may duplicate delivery.
+- Keep provider logging suppressed after delivery returns so late worker errors cannot disclose URLs, credentials or message bodies. Application diagnostics continue to use sanitized results.
+- Refresh the discovered base-provider inventory from 141 to 158. Preserve retired Amazon Chime profiles and secrets with a localized reconfiguration warning, like the existing NotificationAPI warning. Do not rewrite saved URLs or migrate credentials; document stricter URL validation and replaced PGP email options.
+- Extend exact-bundle checks for token/basic-auth ntfy, HTTP/HTTPS mapping, payloads, rejected responses, TLS errors, SMTP acceptance/refusal, OAuth 1 signing/OAuth 2 refresh, CA loading, result cleanup and main/worker timeouts. Tests use synthetic credentials and mocked transports; real Unraid delivery remains a maintainer test.
+
 ## Pending - Compact Docker ordering help (#674)
 
 - Move the detailed Docker ordering clarification below the list into the existing wizard help dialog, opened by a translated text link. Preserve the explanation of group pauses, sequential shutdown and application readiness from #670.
