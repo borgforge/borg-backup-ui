@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.10.30.1734">
+<!ENTITY version   "2026.11.02.1337">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -20,6 +20,27 @@
 
 <CHANGES>
 <![CDATA[
+###2026.11.02.1337###
+### Migration and compatibility
+
+- Upgrade Apprise from 1.13.1 to 2.1.0 with 158 available base providers. Existing profiles and secrets are preserved. Amazon Chime is retired; affected profiles show a warning and need another provider. URL options are validated more strictly, and legacy PGP email options have changed; see the provider inventory. No credentials or saved URLs are automatically converted. (#672)
+
+### Bug Fixes
+
+- Honor notification timeouts in worker threads and profile tests. Timeouts count as failed attempts, but already running requests may still arrive later and retries can cause duplicate notifications. Keep late provider logs private. (#672)
+- Show overdue backups directly in collapsed job cards alongside the last run outcome. Keep only the overdue count in Latest backup runs; the detailed job list remains under Needs attention. (#679)
+- Keep the Jobs location selector in normal scroll flow so it no longer overlaps job headings and cards. (#680)
+
+### Security
+
+- Update bundled certifi, OAuthlib and urllib3 to address the upstream certificate-trust, OAuth and HTTP/TLS advisories reported by dependency scanning. (#672)
+
+### Improvements
+
+- **Docker start and stop order per job:** Drag containers or use the arrows in the Order list of the job wizard's Docker step. After the backup they start from top to bottom, and before the backup they stop one by one in reverse order, so a database at the top stops last and starts first. A custom order replaces the backup.start.priority groups and their pauses for the listed containers, and no mode waits for application readiness. Without changes, jobs keep the previous behavior with the labels. Contributed by [JonaxScript](https://github.com/JonaxScript). (#670)
+- Open Docker start and stop guidance from a compact link in the job wizard, reducing scrolling while keeping the full explanation available in a dialog. (#674)
+- Bring expanded Job and Restore Test cards into view when necessary, matching repository cards. Keep keyboard focus and respect reduced motion; background refreshes do not move the page. (#681)
+
 ###2026.10.30.1734###
 ### Bug Fixes
 
@@ -78,39 +99,6 @@
 - **Live backup metrics:** Show Borg's rolling processing speed below the progress bar in the existing job view, without the last-update timestamp. An automatic background source scan adds approximate source size, progress and remaining archive-creation time for locally accessible sources, including mounted USB, SMB and SSH filesystems. Stale rates and unavailable estimates remain unknown. No per-job activation is required. The progress display appears immediately when Borg starts, without the previous 60-second delay. (#646)
 - **Borg command logging:** Backup logs now record the actual Borg invocation with a matching process exit code and unique ID. Manual repository maintenance keeps the same evidence in its execution details. Credentials are masked, argument boundaries are preserved, and existing support exports include the available log evidence. (#648)
 
-###2026.10.27.2031###
-### Migration and compatibility
-
-- **Test-channel baseline:** Return to the current main implementation after the PR #595 preview. The experimental sequential Docker backup option is no longer included; existing archive files are not removed by the update. (#597)
-
-### Bug Fixes
-
-- Keep the preceding restore verification outcome and its original expiry after a cancelled test. Show the latest cancelled attempt separately in Jobs, saved status details and test planning; retain report history and do not revive older success over a later failure. Existing cancellation reports are handled too. (#609)
-- Handle filesystem access errors when probing a restore-test repository, including USB devices disconnected without unmounting. Record an unavailable result with mount/device guidance instead of a traceback, and leave subsequent checks untested. (#612)
-- Hide previous outcome messages while a job is running, keeping their complete text accessible under Show status. (#613)
-- Keep job card widths stable when opening live logs; long log lines scroll horizontally within the log viewer. (#613)
-
-### Improvements
-
-- Show live host CPU, available RAM and active runs on the dashboard, with a ten-minute resource history and protected restore-test consumption versus its RAM limit. (#602)
-- Use wider resource charts with a subtle fading area and clearer expanded plots, matching the dashboard design preview. (#602)
-- Read current values, labeled scales and timestamped samples directly in expanded resource charts with pointer, touch or keyboard navigation. (#602)
-- Identify running restore tests directly in the job plan and stop them with the red Cancel button. Cancellation stops the selected run, cleans up its processes and resources, and records interrupted verification. Parallel tests remain independent; cancelling an interval batch also stops its remaining tests. (#605)
-- Replace the duplicate dashboard job inventory with a management overview: location-scoped latest outcomes, restore coverage, active runs, actionable problems, 7/30/90-day run statistics, measured repository storage and location totals. Shared repositories count once; missing measurements remain unknown. (#607)
-- Add an independent inline saved-status section to Jobs with storage, check, restore and archive details. Show complete saved failure/warning messages directly in each card while retaining the existing workflow timeline and run details. (#607)
-- Place server metrics directly below the latest-backup summary row, with server history and active restore-test resource details across the full dashboard width, with CPU and RAM side by side on wide screens. (#607)
-
-- Keep dashboard trends and location totals stable during background refresh and hide locations without jobs from the dashboard table and filter. (#607)
-- Hide empty destinations from the Jobs sidebar and return to All locations when the selected destination loses its last job. (#610)
-- Simplify Restore Tests planning to four columns with compact counts, inline result labels, an action menu, and collapsible guidance. Keep start/cancel and schedule editing available. (#610)
-- Present successful reports as scoped restoration evidence with cumulative L1, L1 + L2 and L1 + L2 + L3 checks. Keep test attempts separate from evidence validity and link cancelled attempts to existing valid evidence. Preserve report filters, technical details, and retained reports. (#610)
-- Consolidate technical evidence into one expandable section, attach supporting data to each check and remove the repeated report ID/start/end execution block. Use thin separators and the normal report surface for technical fields. (#610)
-- Combine coverage percentage and its file-count basis in one report row so execution and test scope have a balanced five-row layout. (#610)
-- Group Restore Tests planning by non-empty locations with the shared location icons and job counts, keeping four columns and removing repeated location labels below job names. (#610)
-- Show Edit plan in a floating action menu matching Jobs, with a pencil icon and no row-height jump. (#610)
-- Use occupied locations instead of a duplicate job list in the Restore Tests sidebar. Show configured job icons and colors in planning and report rows. (#610)
-- Fit the dashboard overview into a compact desktop layout with four summary cards, an integrated location filter, expandable attention details and chart explanations, and a compact location table. Small screens and expanded details remain scrollable. (#615)
-
 ]]>
 </CHANGES>
 
@@ -136,7 +124,8 @@ PLUGIN_DIR="/boot/config/plugins/${NAME}"
 PACKAGE_FILE="${PLUGIN_DIR}/${NAME}-${VERSION}.txz"
 PACKAGE_TMP="${PACKAGE_FILE}.tmp"
 PACKAGE_URL="&pkgurl;"
-EXPECTED_MD5="fa681fa66f2a41d7b9eb02deb7fec6bd"
+EXPECTED_MD5="f5a94c260b7d0355e09440e3ac0ffac4"
+EXPECTED_SHA256="ac3898a9607b15bceccb0c7da1925838c7a31d2ecbef7abf441175e1d342ff59"
 INSTALLED_MD5_FILE="${PLUGIN_DIR}/.installed-package-md5"
 VENDOR_DIR="${PLUGIN_DIR}/runtime/vendor"
 VENDOR_BUNDLE_DIR="${PLUGIN_DIR}/runtime/vendor-bundles"
@@ -280,6 +269,13 @@ download_package() {
     rm -f "${PACKAGE_TMP}"
     return 1
   fi
+  if [ -n "${EXPECTED_SHA256}" ]; then
+    if [ "$(file_sha256 "${PACKAGE_TMP}")" != "${EXPECTED_SHA256}" ]; then
+      echo "ERROR: Package SHA256 does not match."
+      rm -f "${PACKAGE_TMP}"
+      return 1
+    fi
+  fi
   mv -f "${PACKAGE_TMP}" "${PACKAGE_FILE}"
 }
 
@@ -287,10 +283,12 @@ ensure_package_file() {
   if [ -f "${PACKAGE_FILE}" ]; then
     actual_md5="$(file_md5 "${PACKAGE_FILE}")"
     if [ "${actual_md5}" = "${EXPECTED_MD5}" ]; then
-      echo "Borg Backup UI: existing package matches MD5, skipping download."
-      return 0
+      if [ -z "${EXPECTED_SHA256}" ] || [ "$(file_sha256 "${PACKAGE_FILE}")" = "${EXPECTED_SHA256}" ]; then
+        echo "Borg Backup UI: existing package matches MD5, skipping download."
+        return 0
+      fi
     fi
-    echo "Borg Backup UI: local package has a different MD5, downloading again."
+    echo "Borg Backup UI: local package checksum differs, downloading again."
   fi
   download_package
 }
