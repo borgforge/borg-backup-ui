@@ -380,6 +380,7 @@ class JobInfo:
     restore_test_max_runtime_minutes: int = 0
     file_activity: bool = False
     archive_prefix: str = ""
+    has_database: bool = False  # Current profile assignments, independent of run history.
 
     @property
     def display_name(self) -> str:
@@ -782,6 +783,7 @@ def _discover_jobs_uncached(scripts_dir: Path, data_root: Path | None = None) ->
         vm_control: Optional[dict] = None,
         file_activity: bool = False,
         archive_prefix: str = "",
+        has_database: bool = False,
     ) -> JobInfo:
         desc_file = py_file.with_suffix(".description") if py_file is not None else None
         desc_text = (
@@ -813,6 +815,7 @@ def _discover_jobs_uncached(scripts_dir: Path, data_root: Path | None = None) ->
             name=(name or "").strip(),
             has_docker=bool(has_docker),
             has_vm=bool(has_vm),
+            has_database=has_database,
             description=desc_text,
             icon=(icon or "").strip().lower(),
             icon_color=(icon_color or "").strip().lower(),
@@ -898,6 +901,7 @@ def _discover_jobs_uncached(scripts_dir: Path, data_root: Path | None = None) ->
                 name=str(raw.get("name") or "").strip(),
                 has_docker=has_docker,
                 has_vm=has_vm,
+                has_database=isinstance(raw.get("database_profile_ids"), list) and bool(raw["database_profile_ids"]),
                 description=description,
                 icon=str(raw.get("icon") or "").strip().lower(),
                 icon_color=str(raw.get("icon_color") or "").strip().lower(),
@@ -982,6 +986,7 @@ def list_jobs(config: dict, latest_statuses: dict) -> List[dict]:
     Gibt alle erkannten Jobs als JSON-serialisierbares Dict zurück,
     angereichert mit dem letzten Backup-Status einschließlich optionaler
     Job-/Borg-Schritte, letztem Erfolg, Gesamtdauer, Run-ID und gespeichertem Logpfad.
+    has_database kennzeichnet aktuelle Profilzuweisungen, unabhängig vom Laufstatus.
     """
     scripts_dir = resolve_scripts_dir(config)
     data_root = resolve_data_root(config)
@@ -1031,6 +1036,7 @@ def list_jobs(config: dict, latest_statuses: dict) -> List[dict]:
                 "name": info.name or info.display_name,
                 "has_docker": info.has_docker,
                 "has_vm": info.has_vm,
+                "has_database": info.has_database,
                 "docker_control": info.docker_control or {"mode": "all" if info.has_docker else "none", "selected": []},
                 "vm_control": info.vm_control or {"mode": "all" if info.has_vm else "none", "selected": []},
                 "description": info.description,

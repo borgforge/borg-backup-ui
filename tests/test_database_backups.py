@@ -181,7 +181,8 @@ def test_database_only_sources_require_explicit_opt_in():
 from test_runtime_before_maintenance import run_backup
 
 @pytest.mark.parametrize('outcome', ['ok','failed','cancelled','archive_failed','warning','cleanup'])
-def test_runner_database_step_precedes_container_stop(run_backup, monkeypatch, tmp_path, outcome):
+def test_runner_database_step_precedes_container_stop(run_backup, monkeypatch, tmp_path, outcome, caplog):
+    caplog.set_level("INFO")
     import wizard_runner
     state=run_backup
     original=wizard_runner._load_env_from_job
@@ -208,6 +209,8 @@ def test_runner_database_step_precedes_container_stop(run_backup, monkeypatch, t
     monkeypatch.setattr(backup,'verify_archive',verify)
     monkeypatch.setattr(backup,'cleanup_run',lambda *a,**kw:state.actions.append('cleanup'))
     code=state.run()
+    assert 'Database backup phase started' in caplog.text
+    assert ('exported files verified in the Borg archive' in caplog.text) == (outcome in ('ok', 'warning', 'cleanup'))
     assert state.actions[0]=='database'
     if outcome in ('failed','cancelled'):
         assert 'create' not in state.actions and 'stop_docker' not in state.actions

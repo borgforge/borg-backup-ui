@@ -809,6 +809,7 @@ def main() -> int:
         if meta.get("_database_profiles"):
             from database_backup import export_profiles, validate_sources, borg_artifact_paths
             validate_sources(meta["_database_profiles"], job_config.backup_paths)
+            logging.info("Database backup phase started: %d profile(s); exports run before Docker/VM shutdown and Borg backup", len(meta["_database_profiles"]))
             set_phase("database_backup")
             with workflow.track("database_backup"):
                 database_results = export_profiles(
@@ -874,7 +875,9 @@ def main() -> int:
         if database_results:
             from database_backup import verify_archive, cleanup_run, write_manifest
             try:
+                logging.info("Database backup: verifying exported files in the Borg archive")
                 verify_archive(borg_config.repo, database_archive, database_results, control.is_cancel_requested)
+                logging.info("Database backup: exported files verified in the Borg archive (not a database restore test)")
                 workflow.update("database_backup", details={"results": database_results})
                 for result, profile in zip(database_results, meta["_database_profiles"]):
                     write_manifest(result)

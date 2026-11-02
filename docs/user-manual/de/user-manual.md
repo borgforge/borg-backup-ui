@@ -250,7 +250,7 @@ Jobs definieren, welche Daten wohin gesichert werden. Ein Job enthält:
 
 Die Jobs stehen in einzelnen kompakten Karten mit Abstand. Die Reiter **Einzeljobs/Jobgruppen** sind direkt an den Arbeitsbereich angesetzt. Die Jobanzahl steht bei **Alle Standorte** und bei jedem einzelnen Standort in derselben dezent umrahmten Zählmarke. Darunter liegt die beschriftete Standortleiste in einem gemeinsamen Rahmen, ohne Dropdown oder Pillen; die eigene Terminspalte zeigt Zeitpläne, letzten Restore-Test und Gültigkeit des Nachweises. Der Pfeil am Job öffnet einen gemeinsamen Detailbereich mit **Ablauf** und **Daten & Einstellungen**. Letzterer fasst Speicherdaten, Richtlinie, Archivpräfix, Beschreibung, Borg-/Repository-Checks und Restore-Nachweise zusammen. Beide Ansichten reservieren die Höhe des größeren Inhalts; beim Wechsel springt die Liste nicht. Geöffnete Details und die ausgewählte Ansicht bleiben bei Aktualisierungen erhalten.
 
-Dezente Marker unter dem Jobnamen zeigen konfigurierte **VMs**, **Docker**, **Pre-Skript** und **Post-Skript**. Skriptmarker zeigen aktuelle Zuweisungen, keine früheren Laufergebnisse; der Tooltip nennt den Skriptnamen und beim Post-Skript die Ausführungsbedingung.
+Dezente Marker unter dem Jobnamen zeigen konfigurierte **VMs**, **Docker**, **Datenbank**, **Pre-Skript** und **Post-Skript**. Skriptmarker zeigen aktuelle Zuweisungen, keine früheren Laufergebnisse; der Tooltip nennt den Skriptnamen und beim Post-Skript die Ausführungsbedingung.
 
 Status und Restore-Nachweis verwenden eindeutige Symbole und dezente Hintergrundfarben ohne Umrandung und ohne Fettschrift. Letzter Test und Gültigkeitsende stehen mit getrennten Beschriftungen und bündigen Datumswerten untereinander.
 
@@ -2223,6 +2223,18 @@ den Laufdetails erhalten. Zugeordnete Pre-/Post-Skripte erscheinen separat.
 4. Repository, Zeitplan und Borg-Aufbewahrung wie bisher auswählen. Das
    Dump-Verzeichnis darf sich nicht mit normalen Quellen überschneiden. Nur die
    fertigen Exporte des aktuellen Laufs und ihr Manifest werden automatisch hinzugefügt.
+
+Der Marker **Datenbank** auf der Job-Karte zeigt aktuell zugewiesene Datenbankprofile,
+auch ohne Docker-Stopp und bei reinen Datenbank-Jobs. Der Export ist ein eigener
+Ablaufschritt und benötigt kein zusätzliches Pre-Skript. Ein tatsächlich zugewiesenes
+Pre-Skript erhält daneben seinen eigenen Marker.
+
+Das Job-Log meldet Beginn, lokalen Abschluss und Fehler/Abbruch der Exporte mit
+Profil- und Datenbanknamen. Bei fließenden Exportdaten erscheinen höchstens alle
+30 Sekunden Fortschrittswerte je Profil. Ohne neue Daten gibt es keine regelmäßige
+Fortschrittsmeldung. Lokaler Export und spätere Rückleseprüfung im Borg-Archiv
+werden getrennt gemeldet; ein fertiger Dump allein bestätigt noch kein Borg-Backup.
+Zugangsdaten und Dump-Inhalte werden dabei nicht protokolliert.
 
 Reihenfolge: Sperren, vorhandenes Pre-Skript, Mounts/Voraussetzungen,
 **Datenbank-Sicherung**, bisherige Docker-/VM-Stopps, Borg create, Wiederherstellung

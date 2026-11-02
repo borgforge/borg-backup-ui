@@ -1,5 +1,10 @@
 # Changelog
 
+## Pending - Visible database exports and job markers (#689)
+
+- Log database export start, local completion, bounded streaming progress and sanitized failure/cancellation context. Distinguish exports from later Borg archive verification without changing execution order.
+- Expose current database-profile assignments on job cards with an independent localized Database badge; preserve real pre/post-script markers. Clarify automatic exports before Docker/VM shutdown and Borg backup in both wizard languages, help and manuals.
+
 ## Pending - Readable workflow run names (#687)
 
 - Show PR/main/manual context and check purpose before the exact CI source identifier. Add version, PR/main source and platform to testing runs, version/platform to stable preparation, and distinguish scheduled/manual audits.

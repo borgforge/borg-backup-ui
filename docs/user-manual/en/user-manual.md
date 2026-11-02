@@ -242,7 +242,7 @@ Jobs define which data is backed up and where it is stored. A job contains:
 
 Jobs appear as separate compact cards with spacing. The **Single jobs/Job groups** tabs attach directly to the workspace. The **All locations** total and each individual location count use the same subtly outlined badge. A labelled location bar below them shares the surrounding panel, without pills or a dropdown. A dedicated date column shows schedules, the latest restore test and evidence validity. The arrow next to a job opens one detail area with **Workflow** and **Data & settings**. The latter combines storage facts, policy, archive prefix, description, Borg/repository checks and restore evidence. Both views reserve the height of the larger content, so switching does not shift the list. Open details and the selected view survive refreshes.
 
-Subtle markers below the job name identify configured **VMs**, **Docker**, **Pre script** and **Post script** options. Script markers reflect current assignments, not historical run results; their tooltip names the script and the post-script execution condition.
+Subtle markers below the job name identify configured **VMs**, **Docker**, **Database**, **Pre script** and **Post script** options. Script markers reflect current assignments, not historical run results; their tooltip names the script and the post-script execution condition.
 
 Status and restore evidence use distinct symbols and subtle background fills with normal-weight text and no outline. Last test and validity dates have separate labels and vertically aligned values.
 
@@ -2175,6 +2175,18 @@ scripts appear as separate steps.
 4. Select a repository and the existing job schedule/retention as usual. The
    profile's staging directory must not overlap ordinary source directories.
    The job automatically adds only its current completed exports and manifest.
+
+The **Database** marker on the job card reflects current database-profile assignments,
+including database-only jobs and jobs without Docker shutdown. Export is a separate
+workflow step and needs no additional pre-script. An actually assigned pre-script
+has its own independent marker.
+
+The job log reports export start, local completion, and failure/cancellation with
+profile and database names. While export data is flowing, progress is logged at
+most every 30 seconds per profile. No periodic progress message is emitted without
+new data. Local export and subsequent readback verification in the Borg archive
+are reported separately; a completed dump alone does not confirm a Borg backup.
+Credentials and dump contents are not logged.
 
 Order: resource locks, existing Pre hook, existing mounts/prerequisites,
 **database backup**, existing Docker/VM stop policies, Borg create, workload

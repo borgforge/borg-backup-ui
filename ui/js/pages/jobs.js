@@ -818,6 +818,12 @@ function renderJobCard(job) {
     </span>`);
   }
 
+  if (job.has_database) {
+    features.push(`<span class="feature-badge" data-job-feature="database" title="${escHtml(jobsT('database.jobBadgeHint'))}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 4 16 4 16 0V5M4 12c0 4 16 4 16 0"/></svg>${escHtml(jobsT('database.jobBadge'))}
+    </span>`);
+  }
+
   // The existing group overview loads current script assignments for every job,
   // including jobs without group membership. Do not infer configuration from past runs.
   const hooks = window.BBUI.jobGroups?.state?.hooks?.[job.key] || {};
