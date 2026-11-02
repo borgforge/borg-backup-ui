@@ -32,6 +32,25 @@ def exact_sha(value: str) -> str:
     return value
 
 
+def run_source_sha(run: dict) -> str | None:
+    """Read the exact source identifier from a current or historical CI title.
+
+    Titles use bounded PR/main/manual labels followed by the complete SHA; free
+    text and abbreviated identifiers are rejected. This identifies runs to wait
+    for, not successful evidence: receipts, jobs, tree and policy still need
+    verification. Historical ``CI <sha>`` titles remain readable (#687).
+    """
+    title = run.get('display_title')
+    if not isinstance(title, str):
+        return None
+    legacy = re.fullmatch(r'CI ([0-9a-f]{40})', title)
+    current = re.fullmatch(
+        r'CI \| (?:PR #[1-9][0-9]*|main update|Requested source) '
+        r'\| Checks and audit \| source=([0-9a-f]{40})', title)
+    match = current or legacy
+    return match.group(1) if match else None
+
+
 def api(endpoint: str, *, binary: bool = False):
     """Read GitHub using gh credentials; never expose raw error bodies/secrets."""
     result = subprocess.run(['gh', 'api', endpoint], capture_output=True)
@@ -167,7 +186,7 @@ def verify_proof(run_id: int, expected: dict) -> dict:
         if event == 'pull_request' and (len(checked_commit['parents']) != 2
                 or checked_commit['parents'][1]['sha'] != checked_run['head_sha']):
             raise ValueError('CI PR merge identity mismatch')
-        if event == 'workflow_dispatch' and checked_run.get('display_title') != f'CI {sha}':
+        if event == 'workflow_dispatch' and run_source_sha(checked_run) != sha:
             raise ValueError('CI dispatch identity mismatch')
     require_jobs(original, {'checks / quality', 'checks / tests', 'CI result'})
     return proof

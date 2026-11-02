@@ -17,6 +17,28 @@ TREE = 'b' * 40
 EXPECTED = {'tree': TREE, 'policy': 'policy', 'environment': evidence.ENVIRONMENT}
 
 
+@pytest.mark.parametrize('title', [
+    f'CI {SHA}',
+    f'CI | PR #688 | Checks and audit | source={SHA}',
+    f'CI | main update | Checks and audit | source={SHA}',
+    f'CI | Requested source | Checks and audit | source={SHA}',
+])
+def test_source_identity_accepts_current_and_historical_titles(title):
+    assert evidence.run_source_sha({'display_title': title}) == SHA
+
+
+@pytest.mark.parametrize('title', [
+    None, 42, '', f'Other CI {SHA}', f'CI {SHA}\n',
+    f'CI | PR #0 | Checks and audit | source={SHA}',
+    f'CI | PR #688 | Checks and audit | source={SHA[:7]}',
+    f'CI | PR #688 | Checks and audit | source={SHA} extra',
+    f'CI | PR #688 | Checks and audit | source={SHA} | source={"c" * 40}',
+    f'CI | Untrusted free text | Checks and audit | source={SHA}',
+])
+def test_source_identity_rejects_partial_or_ambiguous_titles(title):
+    assert evidence.run_source_sha({'display_title': title}) is None
+
+
 def test_identity_reuses_content_not_commit_and_invalidates_test_or_policy_changes(tmp_path):
     def git(*args):
         return subprocess.check_output(['git', '-C', str(tmp_path), *args], text=True).strip()
@@ -98,6 +120,21 @@ def test_reuse_requires_actual_original_full_jobs_and_same_attempt(monkeypatch):
     jobs[1][-1]['conclusion'] = 'success'
     runs[1]['run_attempt'] = 2
     with pytest.raises(ValueError, match='run attempt'):
+        evidence.verify_proof(2, EXPECTED)
+
+
+@pytest.mark.parametrize('title', [f'CI {SHA}', f'CI | Requested source | Checks and audit | source={SHA}'])
+def test_dispatched_evidence_checks_selected_source_after_title_change(monkeypatch, title):
+    runs, _, _ = proof_api(monkeypatch)
+    for run in runs.values():
+        run.update(event='workflow_dispatch', head_sha='c' * 40, display_title=title)
+    assert evidence.verify_proof(2, EXPECTED)['tests_run_id'] == 1
+    runs[2]['display_title'] = title.replace(SHA, 'd' * 40)
+    with pytest.raises(ValueError, match='dispatch identity'):
+        evidence.verify_proof(2, EXPECTED)
+    runs[2]['display_title'] = title
+    runs[1]['display_title'] = title.replace(SHA, 'd' * 40)
+    with pytest.raises(ValueError, match='dispatch identity'):
         evidence.verify_proof(2, EXPECTED)
 
 

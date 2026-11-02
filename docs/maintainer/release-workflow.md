@@ -26,6 +26,34 @@ A workflow summary reports the version, test URL, selected source, immutable
 candidate and package SHA256. A green dispatch request alone is not completion:
 wait for the **publish** job and its verification summary before installing.
 
+## Names in the Actions overview
+
+New runs describe their source and purpose before technical identifiers (#687):
+
+| Run | Example title |
+| --- | --- |
+| Pull request CI | `CI \| PR #688 \| Checks and audit \| source=<full commit SHA>` |
+| Main CI | `CI \| main update \| Checks and audit \| source=<full commit SHA>` |
+| Explicitly requested CI | `CI \| Requested source \| Checks and audit \| source=<full commit SHA>` |
+| Test candidate | `Testing 2026.11.02.1800 \| PR #688 \| unraid-legacy` (or `main`) |
+| Stable preparation | `Prepare stable 2026.11.02.1800 \| unraid-legacy` |
+| Dependency audit | `Dependency audit \| Weekly schedule` or `Dependency audit \| Manual on main` |
+| GitHub Release | `Publish GitHub release 2026.11.02.1800` |
+
+The trailing CI SHA is the selected source/integration commit, not a random UUID.
+It remains complete because a manual source-check dispatch reports main as its
+API head SHA even when testing a PR. The resolver uses the title identifier to
+wait for running CI and reject failed checks for the exact source. Historical
+`CI <sha>` titles remain recognized. Reuse still requires verified artifacts,
+successful jobs and the identical tree/policy; a title alone is never proof.
+
+Titles use bounded PR/main/manual labels rather than arbitrary commit messages,
+keeping the source marker predictable. The PR link and branch in GitHub's run
+row provide the full change context. These names apply to new runs; existing
+history keeps its original titles. Workflow filenames and the required
+`CI result` job stay unchanged, so no ruleset/environment setup is needed.
+Protected dispatch workflows acquire the new titles after this change is merged.
+
 ## Exact-source checks and reuse
 
 The reusable `checks.yml` owns static checks and the full suite. `ci.yml` runs

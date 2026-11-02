@@ -1,5 +1,6 @@
 name: CI
-run-name: CI ${{ inputs.source_sha || github.sha }}
+run-name: >-
+  CI | ${{ github.event_name == 'pull_request' && format('PR #{0}', github.event.pull_request.number) || github.event_name == 'push' && 'main update' || 'Requested source' }} | Checks and audit | source=${{ inputs.source_sha || github.sha }}
 on:
   pull_request:
   push:
