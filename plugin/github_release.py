@@ -198,10 +198,14 @@ def tag_sha(tag: str) -> str | None:
     return evidence.exact_sha(lines[0].split()[0])
 
 
-def release_metadata(record: dict, version: str, sha: str, body: str) -> None:
-    """Reject a release with a different owner, target, title, notes or channel."""
+def release_metadata(record: dict, version: str, body: str) -> None:
+    """Reject different ownership, title, notes or channel.
+
+    The separately verified tag binds the commit: GitHub documents target_commitish
+    as unused when the tag already exists, so that hint is not source evidence.
+    """
     if (record['author']['login'] != hosted.BOT or record['tag_name'] != 'v' + version
-            or record['target_commitish'] != sha or record['name'] != version
+            or record['name'] != version
             or record['body'] != body or record['prerelease']):
         raise ValueError('Existing GitHub release metadata conflicts with the approved release')
 
@@ -285,7 +289,7 @@ def publish(version: str, sha: str, body: str, assets: dict[str, Path], director
     verified = {}
     present = set()
     if record:
-        release_metadata(record, version, sha, body)
+        release_metadata(record, version, body)
         if existing_sha != sha:
             raise ValueError('Existing release is missing its protected stable tag')
         present = verify_assets(record['id'], assets, directory, verified, complete=not record['draft'])
@@ -303,7 +307,7 @@ def publish(version: str, sha: str, body: str, assets: dict[str, Path], director
             'draft': True, 'prerelease': False, 'make_latest': 'false',
         }, directory)
         record = evidence.api(f'repos/{REPO}/releases/{int(record["id"])}')
-        release_metadata(record, version, sha, body)
+        release_metadata(record, version, body)
         if not record['draft']:
             raise ValueError('New GitHub release must remain draft until uploads are verified')
     for name in sorted(set(assets) - present):
@@ -311,7 +315,7 @@ def publish(version: str, sha: str, body: str, assets: dict[str, Path], director
     verify_assets(record['id'], assets, directory, verified, complete=True)
     # Re-read immediately before making a draft public; never edit changed notes.
     record = evidence.api(f'repos/{REPO}/releases/{int(record["id"])}')
-    release_metadata(record, version, sha, body)
+    release_metadata(record, version, body)
     if tag_sha(tag) != sha:
         raise ValueError('Stable tag changed during upload')
     if record['draft']:
@@ -319,7 +323,7 @@ def publish(version: str, sha: str, body: str, assets: dict[str, Path], director
         api_write('PATCH', f'repos/{REPO}/releases/{int(record["id"])}',
                   {'draft': False, 'make_latest': str(make_latest).lower()}, directory)
     record = evidence.api(f'repos/{REPO}/releases/{int(record["id"])}')
-    release_metadata(record, version, sha, body)
+    release_metadata(record, version, body)
     if record['draft'] or not record.get('published_at'):
         raise ValueError('GitHub release publication did not complete')
     verify_assets(record['id'], assets, directory, verified, complete=True)

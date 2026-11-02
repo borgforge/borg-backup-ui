@@ -188,8 +188,11 @@ settings or credentials. Set them before the first publication run.
    permissions: **Contents: Read and write**, **Actions: Read and write**,
    **Pull requests: Read and write**, plus implicit **Metadata: Read**. The
    bot needs repository write access and organization approval if required.
-   These workflows do not edit workflow files; **Workflows: Read and write**
-   is needed separately by the development bot when pushing workflow changes.
+   These workflows do not edit workflow files. **Workflows: Read and write**
+   is needed by the development bot when pushing workflow changes, and by the
+   `release-publish` token when GitHub requires it for a historical release
+   target whose workflow files differ from current main. The same development
+   bot token can be used in the environment; no new bot account is needed.
    Do not store this publishing token as a repository-wide Actions secret.
 3. **Settings > Rules > Rulesets > Protect main:** retain PR/review,
    conversation resolution, no deletion and no force push. After this PR has

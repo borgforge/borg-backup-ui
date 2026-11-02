@@ -298,7 +298,7 @@ def test_interrupted_draft_or_tag_resumes_without_reuploading_existing_files(tmp
     assert not any(write[0] == 'POST' for write in state['writes'])
 
 
-@pytest.mark.parametrize('tamper', ['tag', 'author', 'body', 'target', 'extra', 'missing', 'size', 'uploader', 'bytes', 'partial', 'timestamp'])
+@pytest.mark.parametrize('tamper', ['tag', 'author', 'body', 'extra', 'missing', 'size', 'uploader', 'bytes', 'partial', 'timestamp'])
 def test_conflicting_published_releases_fail_without_any_writes(tmp_path, monkeypatch, tamper):
     state, assets = remote(tmp_path, monkeypatch)
     pub.publish(VERSION, SHA, BODY, assets, tmp_path)
@@ -309,8 +309,6 @@ def test_conflicting_published_releases_fail_without_any_writes(tmp_path, monkey
         state['release']['author']['login'] = 'TheTwist76'
     elif tamper == 'body':
         state['release']['body'] = 'different notes'
-    elif tamper == 'target':
-        state['release']['target_commitish'] = OTHER
     elif tamper == 'extra':
         state['assets'].append(dict(state['assets'][0], name='unexpected'))
     elif tamper == 'missing':
@@ -328,6 +326,18 @@ def test_conflicting_published_releases_fail_without_any_writes(tmp_path, monkey
     with pytest.raises(ValueError):
         pub.publish(VERSION, SHA, BODY, assets, tmp_path)
     assert state['writes'] == []
+
+
+def test_existing_tag_binds_commit_instead_of_unused_target_commitish_hint(tmp_path, monkeypatch):
+    state, assets = remote(tmp_path, monkeypatch)
+    pub.publish(VERSION, SHA, BODY, assets, tmp_path)
+    state['release']['target_commitish'] = 'main'
+    state['writes'].clear()
+    pub.publish(VERSION, SHA, BODY, assets, tmp_path)
+    assert state['writes'] == []
+    state['tag'] = OTHER
+    with pytest.raises(ValueError, match='different commit'):
+        pub.publish(VERSION, SHA, BODY, assets, tmp_path)
 
 
 def test_older_backfill_does_not_replace_newer_latest(tmp_path, monkeypatch):
