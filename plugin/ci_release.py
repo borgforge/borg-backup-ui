@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Trusted GitHub release orchestration and local dispatch wrappers (#677).
 
-Only protected workflow_dispatch jobs on main can publish or prepare a stable
-PR. They execute this reviewed controller, never candidate scripts. Builds run
-in separate read-only jobs. Every GitHub mutation verifies borg-codex-bot.
+This module's candidate/stable entrypoints require protected workflow_dispatch
+jobs on main. They execute this reviewed controller, never candidate scripts.
+Builds run in separate read-only jobs. Every GitHub mutation verifies
+borg-codex-bot; github_release.py also reuses that identity-checked writer.
 """
 from __future__ import annotations
 
