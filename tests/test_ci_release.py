@@ -96,14 +96,14 @@ def test_existing_ci_is_reused_without_dispatch(monkeypatch):
 
 
 def test_failed_ci_blocks_even_with_older_success(monkeypatch):
-    prepare_wait(monkeypatch, [{'id': 8, 'head_sha': HEAD, 'status': 'completed', 'conclusion': 'failure'}],
+    prepare_wait(monkeypatch, [{'id': 8, 'display_title': f'CI {MERGE}', 'status': 'completed', 'conclusion': 'failure'}],
                  {'run_id': 7})
     with pytest.raises(RuntimeError, match='did not succeed'):
         ci.ensure_ci(SELECTED, dispatch=True)
 
 
 def test_running_ci_is_waited_for_without_duplicate_dispatch(monkeypatch):
-    runs = [{'id': 8, 'head_sha': HEAD, 'status': 'in_progress', 'conclusion': None}]
+    runs = [{'id': 8, 'display_title': f'CI {MERGE}', 'status': 'in_progress', 'conclusion': None}]
     prepare_wait(monkeypatch, runs, {'run_id': 8})
     monkeypatch.setattr(ci.time, 'sleep', lambda _: runs[0].update(status='completed', conclusion='success'))
     monkeypatch.setattr(ci, 'gh_write', lambda *_: pytest.fail('Redundant CI dispatch'))
@@ -118,6 +118,12 @@ def test_missing_ci_dispatches_once_then_reads_hosted_proof(monkeypatch):
         ci.evidence, 'find_proof', lambda *_: {'run_id': 9}))
     assert ci.ensure_ci(SELECTED, dispatch=True)['run_id'] == 9
     assert len(writes) == 1 and f'source_sha={MERGE}' in writes[0]
+
+
+def test_unrelated_dispatch_failure_on_same_main_does_not_block_candidate(monkeypatch):
+    prepare_wait(monkeypatch, [{'id': 8, 'head_sha': MAIN, 'display_title': f'CI {HEAD}',
+                               'status': 'completed', 'conclusion': 'failure'}], {'run_id': 7})
+    assert ci.ensure_ci({'sha': MAIN, 'head': MAIN, 'base': MAIN, 'pr': ''}, dispatch=False)['run_id'] == 7
 
 
 def test_stable_prepares_real_artifact_only_branch_without_rebuilding(tmp_path, monkeypatch):

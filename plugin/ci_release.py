@@ -121,8 +121,10 @@ def ensure_ci(selected: dict, *, dispatch: bool, timeout: int = 2700) -> dict:
     while time.monotonic() < deadline:
         current_selection(selected)
         runs = evidence.recent_runs()
-        matching = [r for r in runs if r['head_sha'] == selected['head']
-                    or r.get('display_title') == f'CI {selected["sha"]}']
+        # Dispatch runs all report main as head_sha, even when checking a PR.
+        # The run title binds both automatic and dispatched CI to the actual
+        # integration SHA; an unrelated PR failure must not block main.
+        matching = [r for r in runs if r.get('display_title') == f'CI {selected["sha"]}']
         if matching and matching[0]['status'] == 'completed' and matching[0]['conclusion'] != 'success':
             raise RuntimeError(f'CI run {matching[0]["id"]} did not succeed; repair or rerun CI first')
         active = any(r['status'] != 'completed' for r in matching)
