@@ -399,3 +399,34 @@ def test_live_operation_progress_is_in_memory_until_completion(config, profile, 
         time.sleep(.01)
     assert final['status']=='completed' and final['progress']['database']=='digikam'
     assert state['id'] not in database_api._live_progress
+
+
+@pytest.mark.parametrize('identifier,origin', [
+    ('test', 'manual'),
+    ('11111111-1111-4111-8111-111111111111', 'job'),
+    (None, 'unknown'), ('', 'unknown'), ('legacy-unknown', 'unknown'), ([], 'unknown'),
+])
+@pytest.mark.parametrize('archived', [False, True])
+def test_retained_origin_uses_manifest_identity_without_rewriting(config, profile, monkeypatch, identifier, origin, archived):
+    """Origins survive missing jobs and do not depend on export/archive success."""
+    fake_export(monkeypatch, profile)
+    results = backup.export_profiles(config, [profile], 'test', 'run')
+    try:
+        results[0].update(archived=archived, status='failed')
+        if identifier is None:
+            results[0].pop('job_id')
+        else:
+            results[0]['job_id'] = identifier
+        backup.write_manifest(results[0])
+        manifest = backup.result_directory(results[0]) / 'manifest.json'
+        before = manifest.read_bytes()
+        monkeypatch.setattr(database_api, 'list_profiles', lambda _: {'profiles':[profile]})
+        response = database_api.retained_runs(config)
+        assert not response['errors']
+        row = response['runs'][0]
+        assert row['origin'] == origin
+        assert row['job_id'] == (identifier if origin == 'job' else '')
+        assert row['archived'] is archived and row['status'] == 'failed'
+        assert manifest.read_bytes() == before
+    finally:
+        backup.close_results(results)

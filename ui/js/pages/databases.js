@@ -1,6 +1,6 @@
 'use strict';
 /** Managed database profiles and bounded test operations; password inputs are write-only and never populated from API responses. */
-const databaseState = {profiles: [], unsupportedProfiles: [], containers: [], selected: '', operation: null, polling: false, available: {}};
+const databaseState = {profiles: [], unsupportedProfiles: [], containers: [], selected: '', operation: null, polling: false, available: {}, runs: [], runErrors: [], runFilter: 'all', runPage: 0, expandedRun: '', runsRequest: 0};
 function dbT(key, params = {}) { return window.BBUI.components.i18n.t(`database.${key}`, params); }
 
 /** Fetch a database API response and expose only localized server error codes. */
@@ -95,7 +95,7 @@ function renderDatabaseSettings() {
       <div id="db-progress" class="database-progress hidden" aria-live="off"></div>
       <p id="db-result" class="status-message hidden" role="status" aria-live="polite"></p>
     </div>`)}
-    ${settingsCard(escHtml(dbT('runs')), settingsMenuIcon('backup'), `<div class="settings-body"><p class="form-help">${escHtml(dbT('runsHint'))}</p><p class="form-help">${escHtml(dbT('housekeeping'))}</p><button class="btn btn-secondary" id="db-refresh">${escHtml(dbT('refresh'))}</button><div id="db-runs"></div></div>`)}
+    ${settingsCard(escHtml(dbT('runs')), settingsMenuIcon('backup'), `<div class="settings-body database-runs-body"><p class="form-help">${escHtml(dbT('runsHint'))}</p><p class="form-help">${escHtml(dbT('runsScope'))}</p><div class="database-runs-toolbar"><div id="db-run-filters" class="database-run-filters" role="group" aria-label="${escHtml(dbT('runFilters'))}"></div><button type="button" class="btn btn-secondary" id="db-refresh">${escHtml(dbT('refresh'))}</button></div><div id="db-runs"></div><p class="form-help">${escHtml(dbT('housekeeping'))}</p></div>`)}
   </div>`;
   document.getElementById('db-engine').value = row.engine;
   document.getElementById('db-retention').value = row.retention;
@@ -308,31 +308,110 @@ async function pollDatabaseOperation() {
   finally { databaseState.polling = false; const b = document.getElementById('db-cancel'); if (b) b.disabled = !databaseState.operation; }
 }
 
-/** Show retained exports across saved profiles, with local cleanup; never dump contents. */
+/** Load retained exports without allowing a stale request to overwrite a newer view. */
 async function loadDatabaseRuns() {
   const node = document.getElementById('db-runs'); if (!node) return;
+  const request = ++databaseState.runsRequest;
   try {
     const data = await databaseRequest('/runs', undefined);
-    const errors = (data.errors || []).filter(error => error.error_code !== 'database_storage_missing');
-    const pending = (data.errors || []).filter(error => error.error_code === 'database_storage_missing');
-    node.innerHTML = data.runs.map((r,i) => {
-      const date = new Date(r.started_at || NaN);
-      const timestamp = Number.isNaN(date.getTime()) ? (r.started_at || '') : date.toLocaleString(settingsLocale(), {dateStyle:'medium', timeStyle:'long'});
-      return `<article class="database-run"><header><strong>${escHtml(r.profile_name || r.profile_id)}</strong><time datetime="${escHtml(r.started_at || '')}">${escHtml(timestamp)}</time></header>
-        <div class="database-run-meta"><span class="badge">${escHtml(dbT(r.status))}</span><span>${escHtml(r.compression === 'gzip' ? dbT('compressedSize', {size:settingsFmtBytes(r.bytes)}) : settingsFmtBytes(r.bytes))}</span>${r.compression === 'gzip' ? `<span>${escHtml(dbT('originalSize', {size:settingsFmtBytes(r.uncompressed_bytes)}))}</span>` : ''}</div>
-        <code>${escHtml(r.directory)}</code><span>${escHtml(r.archived ? dbT('archived') : dbT('notArchived'))}</span><button class="btn btn-secondary" data-cleanup="${i}">${escHtml(dbT('cleanup'))}</button></article>`;
-    }).join('') || `<p>${escHtml(dbT(errors.length ? 'runsUnavailable' : 'noRuns'))}</p>`;
-    for (const item of pending) {
-      const p = document.createElement('p');
+    if (request !== databaseState.runsRequest || node !== document.getElementById('db-runs')) return;
+    const timestamp = value => { const n = Date.parse(value || ''); return Number.isNaN(n) ? -Infinity : n; };
+    databaseState.runs = [...data.runs].sort((a,b) => timestamp(b.started_at) - timestamp(a.started_at));
+    databaseState.runErrors = data.errors || [];
+    renderDatabaseRuns();
+  } catch (e) {
+    if (request !== databaseState.runsRequest || node !== document.getElementById('db-runs')) return;
+    node.textContent = e.message;
+    document.getElementById('db-run-filters')?.replaceChildren();
+  }
+}
+
+/** Return only recognized origin values; older API rows stay explicitly unattributed. */
+function databaseRunOrigin(run) {
+  return ['job','manual'].includes(run.origin) ? run.origin : 'unknown';
+}
+
+/** Render a compact, paged table; cleanup closures retain the exact displayed run. */
+function renderDatabaseRuns() {
+  const node = document.getElementById('db-runs');
+  const filters = document.getElementById('db-run-filters');
+  if (!node || !filters) return;
+  const all = databaseState.runs;
+  const counts = {all:all.length, job:0, manual:0, unknown:0};
+  all.forEach(run => { counts[databaseRunOrigin(run)]++; });
+  const filterNames = ['all','job','manual', ...(counts.unknown || databaseState.runFilter === 'unknown' ? ['unknown'] : [])];
+  filters.innerHTML = filterNames.map(key => `<button type="button" data-run-filter="${key}" aria-pressed="${databaseState.runFilter === key}">${escHtml(dbT('runFilter.' + key))} <span>${counts[key]}</span></button>`).join('');
+  const selected = all.filter(run => databaseState.runFilter === 'all' || databaseRunOrigin(run) === databaseState.runFilter);
+  const pageSize = 10;
+  databaseState.runPage = Math.max(0, Math.min(databaseState.runPage, Math.ceil(selected.length / pageSize) - 1));
+  const first = databaseState.runPage * pageSize;
+  const visible = selected.slice(first, first + pageSize);
+  const errors = databaseState.runErrors.filter(error => error.error_code !== 'database_storage_missing');
+  const dateLabel = (run, full = false) => {
+    const date = new Date(run.started_at || NaN);
+    return Number.isNaN(date.getTime()) ? dbT('runUnknownDate') : date.toLocaleString(settingsLocale(), {dateStyle:'medium', timeStyle:full ? 'long' : 'short'});
+  };
+  const keyOf = run => JSON.stringify([run.profile_id, run.directory]);
+  const rows = visible.map((run,index) => {
+    const expanded = databaseState.expandedRun === keyOf(run);
+    const knownStatus = ['dump_completed','running','failed','cancelled','interrupted','checked','archived'].includes(run.status) ? run.status : 'runUnknownStatus';
+    const status = run.archived && !['failed','cancelled','interrupted'].includes(run.status) ? 'runArchived' : knownStatus === 'archived' ? 'runArchived' : knownStatus;
+    const tone = ['failed','cancelled','interrupted'].includes(run.status) ? 'warning' : run.archived ? 'success' : 'neutral';
+    return `<tr class="database-run-row">
+      <th scope="row" class="database-run-profile">${escHtml(run.profile_name || run.profile_id)}</th>
+      <td><time datetime="${escHtml(run.started_at || '')}" title="${escHtml(dateLabel(run,true))}">${escHtml(dateLabel(run))}</time></td>
+      <td>${escHtml(dbT('runOrigin.' + databaseRunOrigin(run)))}</td>
+      <td class="database-run-size">${escHtml(settingsFmtBytes(run.bytes))}</td>
+      <td><span class="database-run-status ${tone}">${escHtml(dbT(status))}</span></td>
+      <td><button type="button" class="btn btn-secondary database-run-toggle" data-run-details="${index}" aria-expanded="${expanded}" aria-controls="db-run-detail-${index}" aria-label="${escHtml(dbT('runDetailsFor', {profile:run.profile_name || run.profile_id, date:dateLabel(run)}))}">${escHtml(dbT(expanded ? 'runClose' : 'runDetails'))}</button></td>
+    </tr>${expanded ? `<tr class="database-run-detail" id="db-run-detail-${index}"><td colspan="6"><div>
+      <p><strong>${escHtml(dbT('runDirectory'))}</strong><code>${escHtml(run.directory)}</code></p>
+      <p>${escHtml(dateLabel(run,true))} · ${escHtml(dbT('runOrigin.' + databaseRunOrigin(run)))}${run.job_id ? ' · '+escHtml(dbT('runJobId'))+': '+escHtml(run.job_id) : ''}</p>
+      <p>${escHtml(dbT('runLocalSize'))}: ${escHtml(settingsFmtBytes(run.bytes))}${run.compression === 'gzip' ? ' · '+escHtml(dbT('originalSize',{size:settingsFmtBytes(run.uncompressed_bytes)}))+' · gzip' : ''}</p>
+      <p>${escHtml(run.archived ? dbT('archived') : dbT('notArchived'))}</p>
+      <button type="button" class="btn btn-secondary" data-cleanup="${index}">${escHtml(dbT('cleanup'))}</button>
+    </div></td></tr>` : ''}`;
+  }).join('');
+  node.innerHTML = visible.length ? `<div class="database-runs-table-wrap" tabindex="0" role="region" aria-label="${escHtml(dbT('runs'))}"><table class="database-runs-table" aria-label="${escHtml(dbT('runs'))}"><thead><tr>${['profile','runDate','runSource','runLocalSize','runStatus','runDetails'].map(key => `<th scope="col">${escHtml(dbT(key))}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="database-runs-paging"><span role="status">${escHtml(dbT('runRange',{first:first+1,last:first+visible.length,total:selected.length}))}</span>${selected.length > pageSize ? `<div><button type="button" class="btn btn-secondary" data-run-page="-1" ${first ? '' : 'disabled'}>${escHtml(dbT('runPrevious'))}</button><button type="button" class="btn btn-secondary" data-run-page="1" ${first+pageSize >= selected.length ? 'disabled' : ''}>${escHtml(dbT('runNext'))}</button></div>` : ''}</div>`
+    : `<p>${escHtml(dbT(all.length ? 'runFilterEmpty' : errors.length ? 'runsUnavailable' : 'noRuns'))}</p>`;
+  for (const error of databaseState.runErrors) {
+    const p = document.createElement('p');
+    if (error.error_code === 'database_storage_missing') {
       p.className = 'database-pending-directory';
-      p.textContent = `${item.profile_name || item.profile_id}: ${dbT('pendingDirectory', {path:item.staging_dir || ''})}`;
-      node.append(p);
+      p.textContent = `${error.profile_name || error.profile_id}: ${dbT('pendingDirectory', {path:error.staging_dir || ''})}`;
+    } else {
+      p.className = 'database-run-error';
+      p.textContent = `${error.profile_name || error.profile_id}${error.staging_dir ? ' ('+error.staging_dir+')' : ''}: ${apiErrorMessage({code:error.error_code})}`;
     }
-    for (const error of errors) { const p = document.createElement('p'); p.textContent = `${error.profile_name || error.profile_id}${error.staging_dir ? " (" + error.staging_dir + ")" : ""}: ${apiErrorMessage({code:error.error_code})}`; node.append(p); }
-    node.querySelectorAll('[data-cleanup]').forEach(button => button.addEventListener('click', () => {
-      const r=data.runs[Number(button.dataset.cleanup)]; startDatabaseAction(r.profile_id, 'cleanup', r.directory);
-    }));
-  } catch (e) { node.textContent = e.message; }
+    node.append(p);
+  }
+  filters.querySelectorAll('[data-run-filter]').forEach(button => button.addEventListener('click', () => {
+    databaseState.runFilter = button.dataset.runFilter;
+    databaseState.runPage = 0;
+    databaseState.expandedRun = '';
+    renderDatabaseRuns();
+    filters.querySelector(`[data-run-filter="${databaseState.runFilter}"]`)?.focus({preventScroll:true});
+  }));
+  node.querySelectorAll('[data-run-details]').forEach(button => button.addEventListener('click', () => {
+    const index = Number(button.dataset.runDetails);
+    const key = keyOf(visible[index]);
+    databaseState.expandedRun = databaseState.expandedRun === key ? '' : key;
+    renderDatabaseRuns();
+    node.querySelector(`[data-run-details="${index}"]`)?.focus({preventScroll:true});
+  }));
+  node.querySelectorAll('[data-run-page]').forEach(button => button.addEventListener('click', () => {
+    const delta = Number(button.dataset.runPage);
+    databaseState.runPage += delta;
+    databaseState.expandedRun = '';
+    renderDatabaseRuns();
+    const next = node.querySelector(`[data-run-page="${delta}"]:not(:disabled)`) || node.querySelector('[data-run-page]:not(:disabled)');
+    next?.focus({preventScroll:true});
+  }));
+  node.querySelectorAll('[data-cleanup]').forEach(button => button.addEventListener('click', () => {
+    const run = visible[Number(button.dataset.cleanup)];
+    startDatabaseAction(run.profile_id, 'cleanup', run.directory);
+  }));
 }
 
 /** Load wizard profile choices; retain unavailable selections instead of silently dropping them. */

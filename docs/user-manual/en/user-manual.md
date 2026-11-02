@@ -2232,6 +2232,24 @@ archive verification. **Archived and verified is not a database restore test.**
 
 ### 19.3 Local retention and interrupted operations
 
+The compact **Local backup runs** table shows newest dumps first, ten per page.
+**All**, **Job backups**, and **Manual dumps** filter their origin; older entries
+without a recognizable identity remain visible under **Unattributed**. A manually
+started backup job is still a job backup; **Manual dumps** means the profile's
+**Create test dump** action. **Details** reveals the full path, sizes, confirmed
+archive state, and local cleanup with confirmation of the exact directory.
+**Local usage** includes regular files in the run directory, including its manifest
+and any partial files. On narrow screens, the table scrolls horizontally inside
+its own area.
+
+A job includes only completed dumps and the manifest from its current run in Borg,
+not the entire storage folder with older or manual dumps. Additional selected file
+sources remain part of the job. Manual test dumps are not automatically archived
+by the next job. **Keep; clean up manually** lets local dumps accumulate. The
+alternative retention removes only that job run's exports after warning-free
+archiving and readback verification; manual test dumps remain local.
+
+
 Internal metadata in `database-operations` and `database-tests` is checked hourly,
 starting one minute after normal service startup. Confirmed terminal records are
 removed once their valid completion timestamp is older than 30 days. Running,

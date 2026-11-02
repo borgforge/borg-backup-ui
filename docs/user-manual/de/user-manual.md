@@ -2286,6 +2286,26 @@ nicht, dass die Datenbank-Wiederherstellung getestet wurde.**
 
 ### 19.3 Lokale Aufbewahrung und unterbrochene Läufe
 
+Die kompakte Tabelle **Lokale Sicherungsläufe** zeigt die neuesten Dumps zuerst,
+mit zehn Einträgen pro Seite. **Alle**, **Job-Sicherungen** und **Manuelle Dumps**
+filtern die Herkunft; unklare ältere Einträge bleiben unter **Nicht zugeordnet**
+sichtbar. Ein manuell gestarteter Backup-Job zählt ebenfalls als Job-Sicherung;
+**Manuelle Dumps** meint die Aktion **Test-Dump erstellen** im Datenbankprofil.
+**Details** öffnet den vollständigen Pfad, Größen und die bestätigte Archivierung.
+**Lokal belegt** umfasst die regulären Dateien des Laufverzeichnisses einschließlich
+Manifest und gegebenenfalls unvollständiger Dateien. Die Löschaktion bleibt dort
+mit Bestätigung des genauen Verzeichnisses verfügbar. Auf schmalen Bildschirmen
+scrollt die Tabelle horizontal innerhalb ihres Bereichs.
+
+Ein Job nimmt nur die fertigen Dumps und das Manifest seines aktuellen Laufs in
+Borg auf, nicht den gesamten Speicherordner mit alten oder manuellen Dumps.
+Zusätzlich ausgewählte normale Dateiquellen bleiben Teil des Jobs. Manuelle
+Test-Dumps werden nicht automatisch beim nächsten Job-Lauf archiviert. Bei
+**Behalten; manuell aufräumen** sammeln sich lokale Dumps an. Die alternative
+Aufbewahrung entfernt nur die Exporte des jeweiligen Job-Laufs nach fehlerfreier
+Archivierung und Rückleseprüfung; manuelle Test-Dumps bleiben lokal.
+
+
 Interne Daten in `database-operations` und `database-tests` werden stündlich geprüft,
 erstmals eine Minute nach dem normalen Dienststart. Sicher abgeschlossene Einträge
 werden entfernt, sobald ihr gültiger Abschlusszeitpunkt mehr als 30 Tage

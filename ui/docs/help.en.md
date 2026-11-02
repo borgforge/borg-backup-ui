@@ -322,6 +322,8 @@ Practical extensions: [Pre/Post scripts](../../docs/user-manual/en/user-manual.m
 
 ## Database backups
 
+Local backup runs use a compact table with origin filters and ten rows per page. Details contain the path and confirmed local cleanup action. Job archives include only completed dumps and the current run manifest, not older or manual test dumps in the same storage folder. Keeping dumps for manual cleanup lets local files accumulate.
+
 Database profiles are exported as a separate step before Docker/VM shutdown and Borg backup; no additional pre-script is required. The **Database** job-card marker reflects current profile assignments. An additionally assigned pre-script keeps its own marker. The job log distinguishes local export results from subsequent verification in the Borg archive.
 
 Configure MariaDB/MySQL/PostgreSQL profiles in Settings > Database backups and select them in job wizard step 2. Bundled scripts are plugin-managed; updates may replace direct edits. Store credentials in plugin Secrets, load databases and select them with checkboxes. Scripts separates editable own scripts, practical templates to copy, and read-only managed database helpers with syntax highlighting. Test restoration separately. See manual section 19.

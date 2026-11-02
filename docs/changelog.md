@@ -1,5 +1,10 @@
 # Changelog
 
+## Pending - Compact retained database runs (#691)
+
+- Replace large dump cards with a newest-first table, independent job/manual origin filters, ten-row pagination and expandable details. Keep cleanup bound to the displayed run after filtering, with the existing confirmation.
+- Classify existing manifest identity without rewriting it; preserve unattributed historical runs and storage errors. Explain current-run-only Borg inputs and unchanged local retention in German/English help and manuals.
+
 ## Pending - Visible database exports and job markers (#689)
 
 - Log database export start, local completion, bounded streaming progress and sanitized failure/cancellation context. Distinguish exports from later Borg archive verification without changing execution order.

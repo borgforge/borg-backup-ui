@@ -322,6 +322,8 @@ Praktische Erweiterungen: [Pre/Post scripts](../../docs/user-manual/de/user-manu
 
 ## Datenbank-Sicherungen
 
+Lokale Sicherungsläufe erscheinen als kompakte Tabelle mit Herkunftsfiltern und zehn Einträgen pro Seite. Details enthalten Pfad und bestätigte lokale Löschaktion. Job-Archive enthalten nur fertige Dumps und Manifest des aktuellen Laufs, nicht ältere oder manuelle Test-Dumps im selben Speicherordner. Bei manueller Aufbewahrung sammeln sich die lokalen Dumps an.
+
 Datenbankprofile werden als eigener Schritt vor Docker-/VM-Stopp und Borg-Backup exportiert; ein zusätzliches Pre-Skript ist nicht erforderlich. Der Marker **Datenbank** auf der Job-Karte zeigt aktuelle Profilzuweisungen. Ein zusätzlich zugewiesenes Pre-Skript behält seinen eigenen Marker. Das Job-Log unterscheidet lokale Exportergebnisse von der späteren Prüfung im Borg-Archiv.
 
 MariaDB-/MySQL-/PostgreSQL-Profile unter Einstellungen > Datenbank-Sicherungen anlegen und in Wizard-Schritt 2 auswählen. Die mitgelieferten Skripte werden vom Plugin gepflegt; Updates können direkte Änderungen überschreiben. Zugangsdaten in den Plugin-Secrets speichern, Datenbanken laden und per Checkbox auswählen. Unter Skripte sind eigene Skripte, kopierbare Vorlagen und schreibgeschützte Datenbankhelfer getrennt; Quelltexte werden mit Syntaxhervorhebung angezeigt. Wiederherstellung separat testen. Siehe Handbuch Abschnitt 19.
