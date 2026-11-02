@@ -32,6 +32,7 @@
 
 ## Pending - Docker start and stop order per job (#670)
 
+- Contributed by [JonaxScript](https://github.com/JonaxScript); attribution restored in the release notes and this history (#683).
 - Add a reorderable Order list (drag and arrow buttons) to the Docker step of the job wizard and store it as docker_control.order. Listed containers start first in that order after the backup and are stopped one by one in reverse order before it; unlisted containers stop first and start afterwards by backup.start.priority label.
 - Keep one docker stop call and the label priority groups for jobs without an order; an untouched list stores no order. Report the label priority in the runtime inventory so the list shows the default order the restart uses.
 - Show the stop and start order in the flow preview and the run log, and document the order in both manuals, the in-app help and the README.
