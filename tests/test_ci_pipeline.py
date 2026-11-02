@@ -112,7 +112,12 @@ def test_installer_checks_sha256_for_download_and_cache(tmp_path, cached, digest
     checksum = hashlib.sha256(content).hexdigest() if digest == 'valid' else '0'*64
     if digest == 'legacy':
         checksum = ''
-    manifest = release.rewrite_package_installer((ROOT/'borg-backup-ui.plg').read_text(),
+    template = (ROOT/'borg-backup-ui.plg').read_text()
+    if digest == 'legacy':
+        # The real manifest now declares SHA256. An omitted replacement preserves
+        # it intentionally, so model an actual MD5-only legacy input explicitly.
+        template = re.sub(r'EXPECTED_SHA256="[^"]*"', 'EXPECTED_SHA256=""', template)
+    manifest = release.rewrite_package_installer(template,
                                                 hashlib.md5(content).hexdigest(), checksum)
     xml = ET.fromstring(manifest)
     script = next(node.findtext('INLINE') for node in xml.findall('FILE')
@@ -172,7 +177,11 @@ def release_fixture(tmp_path):
     git('config', 'user.name', 'Fixture')
     git('config', 'user.email', 'fixture@example.invalid')
     (repo/'borg_backup_ui.py').write_text('APP_VERSION = "old"\nVALUE = 1\n')
-    (repo/'borg-backup-ui.plg').write_text((ROOT/'borg-backup-ui.plg').read_text())
+    # Keep this historical candidate newer than its fixture baseline regardless
+    # of which stable version is currently committed in the real repository.
+    manifest = re.sub(r'<!ENTITY version\s+"[^"]*">', '<!ENTITY version "2026.10.30.1200">',
+                      (ROOT/'borg-backup-ui.plg').read_text())
+    (repo/'borg-backup-ui.plg').write_text(manifest)
     (repo/'release-notes/pending').mkdir(parents=True)
     (repo/'release-notes/pending/README.md').write_text('Keep fragment instructions.\n')
     git('add', '.'); git('commit', '-m', 'Source')
@@ -271,13 +280,20 @@ def test_workflows_isolate_publication_authority_to_protected_main_jobs():
         assert set(workflow['permissions'].values()) == {'read'}, path
         assert not {'pull_request_target', 'workflow_run'} & workflow['on'].keys(), path
         assert 'secrets: inherit' not in text, path
-        for job in workflow['jobs'].values():
+        for job_id, job in workflow['jobs'].items():
             if 'secrets.' in str(job):
-                assert set(workflow['on']) == {'workflow_dispatch'}
-                assert job['environment'] in {'testing', 'stable'}
+                if path.name == 'ci.yml':
+                    assert job_id == 'github-release'
+                    assert job['environment'] == 'release-publish'
+                    assert set(job['needs']) == {'plan', 'result'}
+                    assert job['if'] == ("github.event_name == 'push' && github.ref == 'refs/heads/main' "
+                                         "&& needs.plan.outputs.mode == 'artifact'")
+                else:
+                    assert set(workflow['on']) == {'workflow_dispatch'}
+                    assert job['environment'] in {'testing', 'stable', 'release-publish'}
                 for step in job['steps']:
                     if step.get('uses', '').startswith('actions/checkout@'):
-                        assert 'ref' not in step['with']  # default dispatch main, never PR
+                        assert 'ref' not in step['with']  # guarded push/dispatch main, never PR
                 assert 'refs/heads/main' in text
             else:
                 assert 'environment' not in job
@@ -291,6 +307,11 @@ def test_workflows_isolate_publication_authority_to_protected_main_jobs():
                     assert 'github.run_attempt' in step['with']['name'], 'Reruns must not collide with earlier artifacts'
     ci_workflow = yaml.load((ROOT/'.github/workflows/ci.yml').read_text(), Loader=yaml.BaseLoader)
     assert ci_workflow['on']['push']['branches'] == ['main']
+    assert ci_workflow['concurrency']['cancel-in-progress'] == "${{ github.event_name == 'pull_request' }}"
+    publisher = yaml.load((ROOT/'.github/workflows/github-release.yml').read_text(), Loader=yaml.BaseLoader)
+    assert publisher['jobs']['publish']['if'] == "github.ref == 'refs/heads/main'"
+    assert publisher['jobs']['publish']['concurrency'] == ci_workflow['jobs']['github-release']['concurrency']
+    assert publisher['jobs']['publish']['concurrency']['cancel-in-progress'] == 'false'
     testing = yaml.load((ROOT/'.github/workflows/testing-release.yml').read_text(), Loader=yaml.BaseLoader)
     assert 'secrets.' not in str(testing['jobs']['build'])
     assert 'checks.yml' not in str(testing)  # the resolver reuses/requests CI evidence

@@ -244,7 +244,11 @@ def validate_version(version: str) -> None:
 
 
 def build(repo: Path, version: str) -> Path:
-    """Build and verify a durable local candidate; never push or upload it."""
+    """Build and verify a durable local candidate; never push or upload it.
+
+    Refresh both template checksums from the new package, so promotion cannot
+    retain the SHA256 of the previous stable package copied into the build tree.
+    """
     validate_version(version)
     attestation = verify_attestation(repo)
     root = repo / ".release-tmp" / "security" / attestation["context"]["advisory"]
@@ -263,7 +267,7 @@ def build(repo: Path, version: str) -> Path:
         package = candidate / name
         shutil.copy2(work / "releases" / name, package)
         template = rw.rewrite_package_installer(
-            (work / "source" / f"{rw.NAME}.plg").read_text(), rw.file_md5(package))
+            (work / "source" / f"{rw.NAME}.plg").read_text(), rw.file_md5(package), sha256(package))
         (candidate / "release-template.plg").write_text(template)
         (candidate / f"{rw.NAME}.plg").write_text(private_manifest(template, rw.file_md5(package), sha256(package)))
         shutil.copy2(work / "source/build-provenance.json", candidate / "build-provenance.json")
@@ -298,6 +302,8 @@ def verify_candidate(directory: Path, version: str | None = None) -> dict:
 
     This detects modification relative to locally trusted metadata, not an
     adversarially replaced entire bundle; transfer it over an authenticated path.
+    A declared template SHA256 must match the package; older MD5-only templates
+    remain supported by the shared manifest verifier.
     """
     data = json.loads((directory / "candidate.json").read_text())
     validate_version(data["version"])
@@ -338,6 +344,7 @@ def verify_candidate(directory: Path, version: str | None = None) -> dict:
     ET.fromstring(template)
     if rw.manifest_version(template_path) != data["version"] or rw.manifest_md5(template_path) != rw.file_md5(package):
         raise RuntimeError("Candidate manifest/package mismatch")
+    rw.verify_manifest_sha256(template_path, package)
     if (directory / f"{rw.NAME}.plg").read_text() != private_manifest(template, rw.file_md5(package), sha256(package)):
         raise RuntimeError("Private manifest is not the verified local-only variant")
     match = re.search(rf"###{re.escape(data['version'])}###\n(.*?)(?=\n###[^#\n]+###\n|\n\]\]>)", template, re.S)

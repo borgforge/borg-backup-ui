@@ -1,8 +1,8 @@
 # GitHub CI and release workflow
 
 This is the normal public workflow (#677). GitHub runs the authoritative full
-checks, builds test candidates, publishes the testing feed and prepares stable
-release PRs. Local development uses focused tests. Confidential advisories keep
+checks, builds test candidates, publishes the testing feed, prepares stable
+release PRs and publishes approved versions as GitHub Releases. Local development uses focused tests. Confidential advisories keep
 [their separate private workflow](security-release-workflow.md), including local
 private preflight, private candidates and explicit disclosure approval.
 
@@ -14,7 +14,8 @@ private preflight, private candidates and explicit disclosure approval.
 | Test on Unraid | Actions > **Publish testing candidate** > Run workflow; branch **main**, version `YYYY.MM.DD.HHMM`, optional PR number, target `unraid-legacy` | Resolve current main or the PR merge commit; wait for/reuse matching CI, request CI if absent; audit current dependencies; build once; verify; publish testing feed and pin candidate. |
 | Merge code | Review and merge the source PR | Main CI reuses full checks only for the identical complete Git tree and CI policy. Otherwise full checks run for the changed integration. Dependency audit runs again. |
 | Prepare stable | After successful Unraid testing and source merge: Actions > **Prepare stable release PR** > Run workflow; branch **main**, tested version, check confirmation; approve environment `stable` | Verify main CI, fresh dependency audit, candidate/source/notes/checksums; copy tested bytes into a separate release PR. No rebuild or repeated source suite. |
-| Release | Review and merge the release PR | Artifact-only CI and audit verify the release; the existing stable feed on main updates when merged. No automatic merge or GitHub Release is created. |
+| Release | Review and merge the release PR | The stable feed on main updates when merged. After main artifact-only CI and audit succeed, publish the version tag and GitHub Release with the original tested artifacts. No automatic merge. |
+| Retry or backfill GitHub Release | Actions > **Publish GitHub release** > Run workflow; branch **main**, already merged stable version | Verify the merged release PR and its main CI, then finish a matching draft or publish missing metadata/assets. No rebuild, source suite or Unraid-feed update. |
 
 Testing from a PR always includes current main. Moving main/PR refs during the
 run aborts publication; start a new workflow. CI-policy changes must first be
@@ -125,6 +126,52 @@ checks the same immutable candidate and exact bytes without source tests.
 A successful maintainer Unraid test is never inferred from CI or a source merge.
 Migration snapshots protect data; they are not an automatic plugin downgrade.
 
+## GitHub Releases
+
+After a stable release PR is merged, the main `CI` workflow's **Publish GitHub
+release** job waits for `CI result`, including artifact verification and the
+dependency audit. Only a push to main with an artifact-only delta reaches the
+`release-publish` environment; PR runs never receive its token. The protected
+lightweight tag `v<version>` points to the release PR's exact merge commit.
+
+The release description is the tested current-version changelog, including its
+contributor credits. Four assets are published:
+
+- `borg-backup-ui-<version>.txz`: the byte-identical tested package.
+- `borg-backup-ui.plg`: the original stable manifest from the release commit.
+- `provenance.json`: the package's embedded source/build/note provenance.
+- `SHA256SUMS`: checksums for those three assets.
+
+The Unraid update and package URLs remain on main. The attached manifest keeps
+those URLs; it is historical release metadata, not a separate pinned update
+channel. GitHub assets retain old packages independently of the five-package
+retention on main. GitHub also provides its usual source archives for the tag.
+
+Publishing first creates the tag and a draft, uploads missing files, downloads
+and verifies their bytes/ownership, then makes the completed draft public. Each
+write verifies the actual `borg-codex-bot` identity. A retry with identical data
+is safe, including after a successful publication; conflicting tags, metadata,
+unexpected assets or different bytes fail without overwriting or deleting them.
+An incomplete GitHub upload left in `starter` state also fails for maintainer
+inspection rather than deleting files automatically.
+
+Use **Publish GitHub release** on main to retry an interrupted publication or
+backfill `2026.11.02.1337` after this workflow is merged. It resolves the already
+merged bot-owned `codex/release-<version>` PR, verifies the artifact/audit jobs in
+the latest main CI attempt for that exact commit, and revalidates the package,
+immutable test candidate, source and tested notes. The full source suite is not
+repeated. A failed publishing job can be retried when all prerequisite jobs
+passed; failed prerequisite jobs or missing historical CI evidence block it.
+Backfill relies on that release's original audit, not a new dependency scan.
+
+Historical commits are read as data by the reviewed current main controller;
+their scripts are never executed. Main may advance during this metadata-only
+operation as long as both commits remain on main history. An older backfill does
+not replace a newer published stable version as `Latest`. Automatic/manual
+publishers share a concurrency group; active publication is not canceled by a
+new main push. Pending requests can still be superseded; retry a missed version
+manually. Ordinary source CI continues to reuse only matching full-tree proofs.
+
 ## One-time GitHub setup (maintainer)
 
 Configure these settings yourself; the implementation does not change repository
@@ -141,8 +188,11 @@ settings or credentials. Set them before the first publication run.
    permissions: **Contents: Read and write**, **Actions: Read and write**,
    **Pull requests: Read and write**, plus implicit **Metadata: Read**. The
    bot needs repository write access and organization approval if required.
-   These workflows do not edit workflow files; **Workflows: Read and write**
-   is needed separately by the development bot when pushing workflow changes.
+   These workflows do not edit workflow files. **Workflows: Read and write**
+   is needed by the development bot when pushing workflow changes, and by the
+   `release-publish` token when GitHub requires it for a historical release
+   target whose workflow files differ from current main. The same development
+   bot token can be used in the environment; no new bot account is needed.
    Do not store this publishing token as a repository-wide Actions secret.
 3. **Settings > Rules > Rulesets > Protect main:** retain PR/review,
    conversation resolution, no deletion and no force push. After this PR has
@@ -159,12 +209,26 @@ settings or credentials. Set them before the first publication run.
    checkbox allowing `GITHUB_TOKEN` to create PRs is unnecessary: PR creation
    uses the separately verified bot token. Retain artifacts for at least 90 days
    if the organization permits it; shorter retention safely reduces reuse.
+6. Create **`release-publish`** with only branch **`main`** allowed, no wait timer
+   and no required reviewer. Add **`BBUI_BOT_TOKEN`** for `borg-codex-bot`, as in
+   the other environments. Stable preparation already has its explicit test
+   confirmation/environment approval, followed by the maintainer's release PR
+   merge; metadata publication needs no second approval. No Secrets administration
+   permission is needed for the bot to consume an environment secret.
+7. Add active tag ruleset **Protect stable release tags**, matching **`v*`**.
+   Enable **Restrict updates**, **Restrict deletions** and **Block force pushes**;
+   leave **Restrict creations** off and the bypass list empty. New release tags
+   remain creatable while published tags cannot be moved or deleted by the bot.
 
 Environment protection must exist before adding the token. The publisher and
 stable jobs check out only reviewed main code; candidate compilation runs in a
 separate job without bot secrets. Do not replace this separation with
 `pull_request_target`, `workflow_run` privileged execution, inherited secrets or
 checking out candidate code in a job holding the bot token.
+
+GitHub Releases are the additional publication step described above. The guarded
+main-push job in `ci.yml` is the sole non-dispatch job that uses a bot secret;
+it cannot run for a pull request, source-only push or failed prerequisite job.
 
 GitHub may retain only the latest pending run in a concurrency group; active
 publishing runs are not canceled. Check the Actions page after several requests
@@ -199,9 +263,16 @@ Publication still requires a passing audit against current advisory data.
   candidate for the final source. Do not rebuild during promotion.
 - **Wrong/missing bot identity:** correct the environment secret/permissions;
   no fallback to the maintainer account is permitted.
+- **GitHub Release missing after merge:** inspect **Publish GitHub release** in
+  the main CI run. Fix environment/token problems, then dispatch the dedicated
+  workflow with the same version. Do not rebuild or advance the stable version
+  to repair publication metadata. Conflicting tags/assets require investigation;
+  no automatic clobber/delete or force-push is allowed.
 
 Reference: [GitHub environment protection](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments),
 [workflow events](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows),
 [artifact metadata](https://docs.github.com/en/rest/actions/artifacts).
+GitHub Release APIs: [releases](https://docs.github.com/en/rest/releases/releases),
+[release assets](https://docs.github.com/en/rest/releases/assets).
 The [#671 audit](../development/ci-cd-audit.md) is historical evidence;
 [this document](release-workflow.md) defines the current workflow.

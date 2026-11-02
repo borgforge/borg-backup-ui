@@ -343,6 +343,26 @@ Aktivierungsgrenze und ausstehende Live-Pruefungen im PR/Abschluss nennen,
 nicht durch einen lokalen Deploy umgehen. Die privaten Advisory-Regeln oben
 bleiben eine ausdrueckliche Ausnahme mit lokalem Security-Preflight.
 
+GitHub Releases (#685) ergaenzen den bestehenden Unraid-Feed auf `main`:
+
+* Nach dem Merge eines Stable-Release-PRs veroeffentlicht der main-CI-Job
+  `Publish GitHub release` erst nach erfolgreicher Artefaktpruefung und Audit.
+* Nur dieser auf main-Push/Artefaktmodus begrenzte Job oder der manuell auf
+  `main` gestartete Workflow `Publish GitHub release` verwendet das Environment
+  `release-publish`. PR-Code erhaelt dessen Bot-Token niemals.
+* Das geschuetzte Tag `v<version>` zeigt auf den gemergten Release-Commit.
+  Paket, Manifest und getestete Release Notes werden ohne Neubau uebernommen;
+  Provenance und SHA256SUMS ergaenzen die Downloads. Unraid-URLs bleiben auf main.
+* Nachtraegliche Veroeffentlichungen und Wiederholungen erfolgen ueber den
+  manuellen Workflow mit der bereits gemergten Version, niemals lokal oder
+  durch Aendern vorhandener Tags/Assets. Historische Commits werden nur als
+  Daten gelesen. Ein gleiches fertiges Release verursacht keine Schreibzugriffe.
+* `release-publish` braucht nur main, BBUI_BOT_TOKEN und keine weitere
+  Reviewer-Freigabe: Testbestaetigung, stable-Freigabe und Release-PR-Merge
+  bleiben Voraussetzung. `v*` gegen Aenderung/Loeschung schuetzen, erstmaliges
+  Erstellen erlauben, keine Bot-Bypasses einrichten. Kontentrennung gilt fuer
+  jeden Schreibzugriff; keine Repository-Einstellungen durch Agenten aendern.
+
 Feature-, Fix- und Maintenance-PRs duerfen keine Stable-Release-Artefakte
 enthalten. Das gilt insbesondere fuer:
 

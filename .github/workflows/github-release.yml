@@ -1,0 +1,32 @@
+name: Publish GitHub release
+run-name: Publish GitHub release ${{ inputs.version }}
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Already merged stable version (YYYY.MM.DD.HHMM); also resumes an interrupted publication'
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: release-publish
+    concurrency:
+      group: publish-github-release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Verify the merged stable version and publish its original artifacts
+        env:
+          GH_TOKEN: ${{ secrets.BBUI_BOT_TOKEN }}
+          BBUI_ENVIRONMENT: release-publish
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: python3 plugin/github_release.py

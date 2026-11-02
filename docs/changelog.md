@@ -1,5 +1,13 @@
 # Changelog
 
+## Pending - Publish approved stable versions as GitHub Releases (#685)
+
+- Publish a protected version tag and GitHub Release after the merged stable release passes main artifact CI and audit. Preserve the existing Unraid feed and reuse the tested package and release notes, including contributor credits, with manifest, provenance and SHA256 downloads.
+- Add a main-only retry/backfill workflow with the same protected bot environment. Verify the merged release PR, exact CI attempt, immutable candidate and downloaded assets; resume matching drafts without overwriting conflicts or marking older backfills latest. Keep active publication running across new main pushes.
+- Document GitHub settings, operation and the post-merge activation boundary. This is internal pipeline work; no plugin artifact or user release-note fragment changes.
+- Isolate existing release-test fixtures from the current stable version and SHA256-bearing manifest so source CI remains valid after a stable promotion.
+- Refresh the private candidate template's SHA256 for each new package and verify it before promotion. Preserve legacy MD5-only templates; cover stale declared checksums even when the surrounding bundle metadata is internally consistent.
+
 ## Pending - Reveal explicitly opened Job and Restore Test cards (#681)
 
 - Align expanded cards with the visible area after an explicit opening, following the repository-card behavior. Preserve keyboard focus and respect reduced motion; skip closed, removed and hidden cards before scrolling.
