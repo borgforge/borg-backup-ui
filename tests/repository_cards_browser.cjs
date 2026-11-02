@@ -211,6 +211,9 @@ const {chromium} = require('playwright');
     assert.ok(Math.abs((await card.locator('[data-pagination-position=bottom]').boundingBox()).y-pagerBefore.y)<1,'Opening browser retains pager position');
     for(const width of [1600,1024,390]){
       await page.setViewportSize({width,height:1100});
+      // Viewport emulation returns before resize/ResizeObserver layout settles.
+      // Measure after their rendering turn, preserving the strict geometry checks (#677).
+      await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
       const geometry=()=>card.locator('[data-pagination-position=bottom]').evaluate(n=>({top:n.getBoundingClientRect().top+scrollY,buttons:[...n.querySelectorAll('button')].map(b=>b.getBoundingClientRect().x)}));
       const baseline=await geometry();
       for(const variant of ['many','one','empty','loading','error','long-path']){

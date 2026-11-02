@@ -5,6 +5,7 @@
 - Make GitHub CI authoritative for full-source checks; local development uses focused tests. Reuse successful full checks only for the identical Git tree/policy and verified original run, while dependency audits remain fresh.
 - Replace public local preflight/build/promotion with GitHub dispatch clients. Separate candidate builds from protected main-only bot publishers; publish immutable candidate tags and automatically prepare approved byte-identical stable release PRs.
 - Document environment secrets, main/tag rulesets, initial activation and failure recovery. Preserve the separate confidential advisory workflow; no stable artifacts or public user release notes in this internal change.
+- Stabilize the repository-card browser test by letting resize/observer rendering settle before capturing its geometry baseline; keep the existing layout assertions unchanged.
 
 ## Pending - Compact Docker ordering help (#674)
 
