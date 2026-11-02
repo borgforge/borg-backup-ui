@@ -78,7 +78,8 @@ function renderDatabaseSettings() {
       <p class="form-help">${escHtml(dbT('storageHint'))}</p>
       <div class="form-group">${input('staging_mount','text','required placeholder="/mnt/cache"')}</div>
       <div class="form-group">${input('staging_dir','text','required placeholder="/mnt/cache/borg-database-dumps"')}</div>
-      <div class="form-group"><label class="form-label" for="db-retention">${escHtml(dbT('retention'))}</label><select class="form-select" id="db-retention" name="retention"><option value="keep">${escHtml(dbT('keep'))}</option><option value="after_archive">${escHtml(dbT('after_archive'))}</option></select></div>
+      <div class="form-group"><label class="form-label" for="db-retention">${escHtml(dbT('retention'))}</label><select class="form-select" id="db-retention" name="retention" aria-describedby="db-retention-hint"><option value="keep">${escHtml(dbT('keep'))}</option><option value="after_archive">${escHtml(dbT('after_archive'))}</option></select></div>
+      <p class="form-help" id="db-retention-hint" aria-live="polite"></p>
       <details class="database-advanced"><summary>${escHtml(dbT('limits'))}</summary>
         <div class="form-group">${input('min_free_mib','number','required min="1" max="104857600"')}</div>
         <div class="form-group">${input('timeout_seconds','number','required min="1" max="86400"')}</div>
@@ -98,7 +99,13 @@ function renderDatabaseSettings() {
     ${settingsCard(escHtml(dbT('runs')), settingsMenuIcon('backup'), `<div class="settings-body database-runs-body"><p class="form-help">${escHtml(dbT('runsHint'))}</p><p class="form-help">${escHtml(dbT('runsScope'))}</p><div class="database-runs-toolbar"><div id="db-run-filters" class="database-run-filters" role="group" aria-label="${escHtml(dbT('runFilters'))}"></div><button type="button" class="btn btn-secondary" id="db-refresh">${escHtml(dbT('refresh'))}</button></div><div id="db-runs"></div><p class="form-help">${escHtml(dbT('housekeeping'))}</p></div>`)}
   </div>`;
   document.getElementById('db-engine').value = row.engine;
-  document.getElementById('db-retention').value = row.retention;
+  const retention = document.getElementById('db-retention');
+  retention.value = row.retention;
+  const updateRetentionHint = () => {
+    document.getElementById('db-retention-hint').textContent = dbT(retention.value === 'after_archive' ? 'retentionAfterArchiveHint' : 'retentionKeepHint');
+  };
+  retention.addEventListener('change', updateRetentionHint);
+  updateRetentionHint();
   settingsState.databaseDirty = false;
   const form = document.getElementById('database-form');
   const updateDraft = () => {
@@ -368,6 +375,7 @@ function renderDatabaseRuns() {
       <p><strong>${escHtml(dbT('runDirectory'))}</strong><code>${escHtml(run.directory)}</code></p>
       <p>${escHtml(dateLabel(run,true))} · ${escHtml(dbT('runOrigin.' + databaseRunOrigin(run)))}${run.job_id ? ' · '+escHtml(dbT('runJobId'))+': '+escHtml(run.job_id) : ''}</p>
       <p>${escHtml(dbT('runLocalSize'))}: ${escHtml(settingsFmtBytes(run.bytes))}${run.compression === 'gzip' ? ' · '+escHtml(dbT('originalSize',{size:settingsFmtBytes(run.uncompressed_bytes)}))+' · gzip' : ''}</p>
+      <p>${escHtml(dbT('runRetention'))}: ${escHtml(dbT(['keep','after_archive'].includes(run.retention) ? run.retention : 'runRetentionUnknown'))}</p>
       <p>${escHtml(run.archived ? dbT('archived') : dbT('notArchived'))}</p>
       <button type="button" class="btn btn-secondary" data-cleanup="${index}">${escHtml(dbT('cleanup'))}</button>
     </div></td></tr>` : ''}`;

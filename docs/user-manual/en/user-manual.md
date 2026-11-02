@@ -2232,6 +2232,13 @@ archive verification. **This readback verification does not test importing the d
 
 ### 19.3 Local retention and interrupted operations
 
+A hint directly below **Local dumps** in the database profile explains the selected
+policy: manual cleanup allows scheduled jobs to keep increasing disk usage;
+automatic removal applies only to future job runs and does not retroactively
+remove existing or manual dumps. In run details, **Retention at creation** shows
+the policy saved in that run's manifest, independently of later profile changes.
+Missing or unrecognized values are shown as **Unknown**.
+
 The compact **Local backup runs** table shows newest dumps first, ten per page.
 **All**, **Job backups**, and **Manual dumps** filter their origin; older entries
 without a recognizable identity remain visible under **Unattributed**. A manually

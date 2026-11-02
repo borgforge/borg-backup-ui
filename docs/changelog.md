@@ -2,6 +2,8 @@
 
 ## Pending - Compact retained database runs (#691)
 
+- Explain the selected local-dump retention beside the profile setting and expose the historical manifest policy in run details. Missing/unsupported values stay unknown, independent of later profile changes; cleanup behavior is unchanged.
+
 - Use the concise Archived table status and explain full file-size/checksum readback in the details in German and English. Remove the fixed not-restore-tested detail text, which could be mistaken for the status of a separately run restore test.
 
 - Replace large dump cards with a newest-first table, independent job/manual origin filters, ten-row pagination and expandable details. Keep cleanup bound to the displayed run after filtering, with the existing confirmation.

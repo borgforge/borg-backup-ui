@@ -59,6 +59,16 @@ const {chromium} = require('playwright');
         settingsState.activeTab='databases';
       });
       await page.evaluate(()=>loadDatabaseSettings());
+      const retentionLabels=JSON.parse(fs.readFileSync(`ui/i18n/${language}.json`,'utf8')).database;
+      assert.equal(await page.locator('#db-retention-hint').textContent(),retentionLabels.retentionKeepHint);
+      if(process.env.BBUI_SCREENSHOT_DIR)await page.locator('#db-retention').locator('..').locator('..').screenshot({path:`${process.env.BBUI_SCREENSHOT_DIR}/retention-profile-${language}.png`});
+      assert.equal(await page.locator('#db-retention').getAttribute('aria-describedby'),'db-retention-hint');
+      await page.locator('#db-retention').selectOption('after_archive');
+      assert.equal(await page.locator('#db-retention-hint').textContent(),retentionLabels.retentionAfterArchiveHint);
+      assert.equal(await page.evaluate(()=>settingsState.databaseDirty),true);
+      await page.locator('#db-retention').selectOption('keep');
+      assert.equal(await page.locator('#db-retention-hint').textContent(),retentionLabels.retentionKeepHint);
+      assert.equal(await page.evaluate(()=>settingsState.databaseDirty),false);
       assert.ok((await page.locator('#db-unsupported').textContent()).includes('<img retired>'));
       assert.equal(await page.locator('#db-unsupported img').count(),0);
       assert.equal(await page.locator('#db-container').evaluate(el=>el.tagName), 'SELECT');
@@ -214,6 +224,7 @@ const {chromium} = require('playwright');
         directory:'/mnt/cache/borg-database-dumps/bbui-profile-'+i, started_at:`2026-11-${String(i+1).padStart(2,'0')}T20:14:00Z`,
         origin:i % 3 === 0 ? 'manual' : 'job', status:i === 11 ? 'failed' : i % 3 === 0 ? 'dump_completed' : 'archived',
         archived:i % 3 !== 0 && i !== 11, bytes:2800000000+i, uncompressed_bytes:5400000000,
+        retention:i % 2 ? 'after_archive' : 'keep',
         compression:'gzip', job_id:i % 3 === 0 ? '' : '11111111-1111-4111-8111-111111111111',
       }));
       mixed.push({profile_id:'db-aaaaaaaaaaaa',profile_name:'<img old>',directory:'/mnt/cache/<old>/'+'x'.repeat(180),origin:'unknown',started_at:'not-a-date',bytes:123,status:'dump_completed'});
@@ -237,6 +248,8 @@ const {chromium} = require('playwright');
       assert.equal(await page.locator('[data-run-page]').count(),0);
       await page.evaluate(()=>loadDatabaseRuns());
       assert.equal(await page.locator('[data-run-filter=job]').getAttribute('aria-pressed'),'true','Refresh retains selected origin');
+      await page.locator('[data-run-details]').first().click();
+      assert.ok((await page.locator('.database-run-detail').textContent()).includes(labels.runRetention+': '+labels.after_archive));
       await page.locator('[data-run-filter=manual]').click();
       assert.equal(await page.locator('.database-run-row').count(),5);
       const toggle=page.locator('[data-run-details]').first();
@@ -244,6 +257,8 @@ const {chromium} = require('playwright');
       assert.equal(await toggle.getAttribute('aria-expanded'),'true');
       assert.equal(await toggle.evaluate(el=>document.activeElement===el),true,'Details preserve keyboard focus');
       assert.ok((await page.locator('.database-run-detail').textContent()).includes(mixed[12].directory));
+      assert.ok((await page.locator('.database-run-detail').textContent()).includes(labels.runRetention+': '+labels.keep));
+      if(process.env.BBUI_SCREENSHOT_DIR)await page.locator('.database-run-detail').screenshot({path:`${process.env.BBUI_SCREENSHOT_DIR}/retention-detail-${language}.png`});
       await page.evaluate(()=>{settingsState.databaseDirty=false;});
       const beforeCleanup=actions;
       await page.locator('[data-cleanup]').click();
@@ -257,6 +272,7 @@ const {chromium} = require('playwright');
       assert.equal(await page.locator('.database-run-row').count(),1);
       await page.locator('[data-run-details]').click();
       assert.ok((await page.locator('.database-run-detail').textContent()).includes('/mnt/cache/<old>'));
+      assert.ok((await page.locator('.database-run-detail').textContent()).includes(labels.runRetention+': '+labels.runRetentionUnknown));
       assert.equal(await page.locator('#db-runs img, #db-runs old').count(),0);
       await page.setViewportSize({width:390,height:844});
       assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'Narrow tables scroll internally');

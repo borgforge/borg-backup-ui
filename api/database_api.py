@@ -144,7 +144,9 @@ def retained_runs(config):
     Listing never creates paths or changes owners/modes. Unavailable locations
     include their profile name and configured path for actionable UI diagnostics.
     Each row includes origin (job/manual/unknown) and a validated job_id, or an
-    empty string. Old manifests remain readable and are never rewritten.
+    empty string. Retention is the manifest policy at creation (keep/after_archive),
+    or unknown when absent/unsupported, never the current profile setting.
+    Old manifests remain readable and are never rewritten.
     """
     rows, errors = [], []
     for profile in list_profiles(config)['profiles']:
@@ -170,6 +172,7 @@ def retained_runs(config):
                                 size += entry.st_size
                         rows.append({**_run_origin(row), 'profile_id': profile['id'], 'profile_name': row.get('profile_name') or profile['name'],
                                      'compression': row.get('compression', 'none'),
+                                     'retention': row.get('retention') if row.get('retention') in ('keep', 'after_archive') else 'unknown',
                                      'uncompressed_bytes': sum(f.get('uncompressed_bytes', f.get('bytes', 0)) for f in row.get('files', [])),
                                      'directory': str(Path(profile['staging_dir']) / name), 'status': row.get('status'),
                                      'started_at': row.get('started_at'), 'archived': row.get('archived', False), 'bytes': size})

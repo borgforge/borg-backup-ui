@@ -430,3 +430,26 @@ def test_retained_origin_uses_manifest_identity_without_rewriting(config, profil
         assert manifest.read_bytes() == before
     finally:
         backup.close_results(results)
+
+
+@pytest.mark.parametrize('retention', ['keep', 'after_archive', None, 'future-policy', []])
+def test_retained_policy_comes_from_manifest_not_current_profile(config, profile, monkeypatch, retention):
+    """Historical retention remains truthful after profile edits; missing data stays unknown."""
+    fake_export(monkeypatch, profile)
+    results = backup.export_profiles(config, [profile], 'test', 'run')
+    try:
+        if retention is None:
+            results[0].pop('retention')
+        else:
+            results[0]['retention'] = retention
+        backup.write_manifest(results[0])
+        manifest = backup.result_directory(results[0]) / 'manifest.json'
+        before = manifest.read_bytes()
+        current_profile = {**profile, 'retention': 'after_archive' if retention == 'keep' else 'keep'}
+        monkeypatch.setattr(database_api, 'list_profiles', lambda _: {'profiles': [current_profile]})
+        response = database_api.retained_runs(config)
+        assert not response['errors']
+        assert response['runs'][0]['retention'] == (retention if retention in ('keep', 'after_archive') else 'unknown')
+        assert manifest.read_bytes() == before
+    finally:
+        backup.close_results(results)

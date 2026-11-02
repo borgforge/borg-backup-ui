@@ -2285,6 +2285,14 @@ dokumentieren die spätere Archivprüfung. **Diese Rückleseprüfung prüft kein
 
 ### 19.3 Lokale Aufbewahrung und unterbrochene Läufe
 
+Direkt unter **Lokale Dumps** im Datenbankprofil erklärt ein Hinweis die ausgewählte
+Aufbewahrung: Manuelles Aufräumen lässt den Speicherbedarf bei regelmäßigen Jobs
+wachsen; automatisches Entfernen gilt nur für zukünftige Job-Läufe und räumt
+vorhandene oder manuelle Dumps nicht nachträglich auf. In den Laufdetails zeigt
+**Aufbewahrung bei Erstellung** die Einstellung aus dem damaligen Manifest,
+unabhängig von späteren Profiländerungen. Fehlende oder unbekannte Angaben
+werden als **Nicht bekannt** angezeigt.
+
 Die kompakte Tabelle **Lokale Sicherungsläufe** zeigt die neuesten Dumps zuerst,
 mit zehn Einträgen pro Seite. **Alle**, **Job-Sicherungen** und **Manuelle Dumps**
 filtern die Herkunft; unklare ältere Einträge bleiben unter **Nicht zugeordnet**
