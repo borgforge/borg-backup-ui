@@ -104,6 +104,30 @@ const { chromium } = require('playwright');
     await page.waitForFunction(()=>BBUI.jobGroups.state.view==='jobs' && jobsState.selectedLocation==='usb');
     assert(await page.locator('#page-jobs .jobs-location-layout').isVisible());
   }
+  // Overdue status comes from /api/status, not the job configuration (#679).
+  for (const lang of ['de','en']) {
+    for (const status of ['success','skipped','error']) {
+      await page.evaluate(async ({lang,status}) => {
+        window.lang=lang;translate();jobsState.selectedLocation='local';
+        Object.assign(BBUI.core.state.data.backups[3], {
+          status,backup_overdue:true,backup_overdue_after:'2026-11-01T16:00:00',
+          timestamp:'2026-10-30 09:20:00',last_successful_backup:{timestamp:'2026-10-30 09:20:00'},
+        });
+        await refreshJobs();
+      }, {lang,status});
+      const job = page.locator('#job-card-3');
+      assert.equal(await job.locator('.job-workflow-details').count(),0);
+      assert(await job.locator('.jobs-redesign-operation .job-backup-overdue').isVisible());
+      assert.equal(await job.locator('.job-backup-overdue').innerText(),lang==='de'?'Überfällig':'Overdue');
+      assert.equal(await job.locator(`.jobs-redesign-operation > .badge.${status}`).count(),1,'Last outcome remains independent of overdue status');
+      if (status==='success' && process.env.BBUI_SCREENSHOT_DIR) await job.screenshot({path:`${process.env.BBUI_SCREENSHOT_DIR}/overdue-job-${lang}.png`});
+    }
+    await page.evaluate(async () => {
+      Object.assign(BBUI.core.state.data.backups[3],{status:'success',backup_overdue:false});
+      await refreshJobs();
+    });
+    assert.equal(await page.locator('#job-card-3 .job-backup-overdue').count(),0,'A refreshed status clears the overdue badge');
+  }
   await page.evaluate(()=>{
     window.lang='de';translate();
     BBUI.core.state.currentPage='dashboard';

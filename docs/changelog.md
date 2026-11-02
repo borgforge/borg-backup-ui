@@ -1,5 +1,15 @@
 # Changelog
 
+## Pending - Reveal explicitly opened Job and Restore Test cards (#681)
+
+- Align expanded cards with the visible area after an explicit opening, following the repository-card behavior. Preserve keyboard focus and respect reduced motion; skip closed, removed and hidden cards before scrolling.
+- Keep background refreshes, closing cards and Job detail tab switches from requesting a reveal. Oversized cards retain normal page scrolling.
+
+## Pending - Visible overdue jobs and unobstructed location navigation (#679, #680)
+
+- Show overdue backup metadata from the status API in collapsed job cards, independently of the last run outcome. Keep the Dashboard overdue count while leaving detailed overdue entries under Needs attention.
+- Remove inherited sticky positioning from the horizontal Jobs location selector so headings and cards no longer overlap it while scrolling.
+
 ## Pending - Hosted test publication and stable preparation (#677)
 
 - Make GitHub CI authoritative for full-source checks; local development uses focused tests. Reuse successful full checks only for the identical Git tree/policy and verified original run, while dependency audits remain fresh.
@@ -22,6 +32,7 @@
 
 ## Pending - Docker start and stop order per job (#670)
 
+- Contributed by [JonaxScript](https://github.com/JonaxScript); attribution restored in the release notes and this history (#683).
 - Add a reorderable Order list (drag and arrow buttons) to the Docker step of the job wizard and store it as docker_control.order. Listed containers start first in that order after the backup and are stopped one by one in reverse order before it; unlisted containers stop first and start afterwards by backup.start.priority label.
 - Keep one docker stop call and the label priority groups for jobs without an order; an untouched list stores no order. Report the label priority in the runtime inventory so the list shows the default order the restart uses.
 - Show the stop and start order in the flow preview and the run log, and document the order in both manuals, the in-app help and the README.

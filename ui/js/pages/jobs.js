@@ -865,6 +865,7 @@ function renderJobCard(job) {
     </div>
     <div class="jobs-redesign-cell jobs-redesign-operation">
       <span class="badge ${stateClass}"><span class="job-status-icon ${stateIcon === 'running' ? 'is-running' : ''}">${jobStepIcon(stateIcon)}</span>${escHtml(stateLabel)}</span>
+      ${renderJobBackupOverdue(job)}
       <div id="job-borg-progress-${escHtml(job.key)}">${renderJobOperation(job)}</div>
       <div id="job-backup-summary-${escHtml(job.key)}">${renderJobBackupSummary(job)}</div>
       ${job.running && job.group_name ? `<span class="jobs-redesign-detail">${escHtml(jobsT('jobGroups.startedBy', { name: job.group_name }))}</span>` : ''}
@@ -1051,9 +1052,12 @@ function onJobsGridClick(event) {
       btn.dataset.jobView === 'data' ? jobDataView.add(jobKey) : jobDataView.delete(jobKey);
     }
     renderJobsGrid(jobsState.jobs);
-    // Reconciliation retains the button; refocus without moving the viewport.
+    // Keep keyboard focus on the trigger while an explicit opening may reveal the card.
     document.getElementById(`job-card-${jobKey}`)?.querySelector(action === 'toggle-workflow'
       ? '[data-jobs-action="toggle-workflow"]' : `[data-job-view="${jobDataView.has(jobKey) ? 'data' : 'workflow'}"]`)?.focus({preventScroll:true});
+    if (action === 'toggle-workflow' && jobWorkflowOpen.has(jobKey)) {
+      scrollExpandedCardIntoView(() => jobWorkflowOpen.has(jobKey) ? document.getElementById(`job-card-${jobKey}`) : null);
+    }
     return;
   }
   if (action === 'open-wizard') return openWizard();
@@ -1924,7 +1928,21 @@ function renderJobSavedMessage(job) {
 function renderJobSavedStatus(job) {
   if (job.is_utility) return '';
   const facts = {...job, ...(job.saved_status || {})};
-  return `${job.saved_status ? '' : `<p class="job-status-empty">${escHtml(jobsT('jobs.neverRun'))}</p>`}${renderDashboardJobDetails(facts)}${facts.backup_overdue ? `<p class="job-status-empty">${escHtml(jobsT('dashboard.backupOverdue'))}</p>` : ''}`;
+  return `${job.saved_status ? '' : `<p class="job-status-empty">${escHtml(jobsT('jobs.neverRun'))}</p>`}${renderDashboardJobDetails(facts)}`;
+}
+
+/**
+ * Expose schedule lateness independently of the current or last run outcome.
+ * @param {Object} job Job configuration with overdue metadata from /api/status.
+ * @returns {string} Escaped warning badge, or empty markup when not overdue.
+ */
+function renderJobBackupOverdue(job) {
+  const facts = {...job, ...(job.saved_status || {})};
+  if (!facts.backup_overdue) return '';
+  const detail = jobsT('dashboard.backupOverdueDetails', {
+    date: dashboardAbsoluteTimestamp(facts.backup_overdue_after || facts.backup_overdue_expected_run),
+  });
+  return `<span class="badge warning job-backup-overdue" title="${escHtml(detail)}"><span class="job-status-icon">${jobStepIcon('warning')}</span>${escHtml(jobsT('dashboard.backupOverdue'))}</span>`;
 }
 
 /** Support standard keyboard navigation between the two job detail tabs. */

@@ -49,7 +49,7 @@ The main menu follows the operating workflow: **Dashboard**, **Jobs**, **Reposit
 
 ## 3. Dashboard
 
-Three cards show **Latest backup runs**, **Restore coverage** and **Active runs**. The location filter applies to these metrics, attention items, historical statistics and location totals. The first card counts the last saved outcome per job. Restore coverage compares valid evidence with all jobs; the ratio within known test plans appears separately. Missing status data never counts as success.
+Three cards show **Latest backup runs**, **Restore coverage** and **Active runs**. The location filter applies to these metrics, attention items, historical statistics and location totals. The first card counts the last saved outcome per job. Overdue backups appear there only as a count; the affected jobs and details are listed under **Needs attention**. Restore coverage compares valid evidence with all jobs; the ratio within known test plans appears separately. Missing status data never counts as success.
 
 **Needs attention** shows full failure messages, warnings, skipped or cancelled runs, overdue backups and restore evidence. **View job** opens the matching job and its status. Jobs without test plans are listed separately with a link to Restore Tests.
 
@@ -115,6 +115,8 @@ A job connects sources to exactly one existing repository. Encryption belongs to
 
 **Next run** shows the scheduled time. The last run time and duration remain separate values.
 
+Affected jobs show **Overdue** directly under **Operating status**, even when collapsed and independently of the last run outcome. The location bar scrolls with the page without overlapping job cards.
+
 Jobs appear as separate compact cards with spacing. The **Single jobs/Job groups** tabs attach directly to the workspace. The **All locations** total and each individual location count use the same subtly outlined badge. A labelled location bar below them shares the surrounding panel, without pills or a dropdown. A dedicated date column shows schedules, the latest restore test and evidence validity. The arrow next to a job opens one detail area with **Workflow** and **Data & settings**. The latter combines storage facts, policy, archive prefix, description, Borg/repository checks and restore evidence. Both views reserve the height of the larger content, so switching does not shift the list. Open details and the selected view survive refreshes.
 
 Subtle markers below the job name identify configured **VMs**, **Docker**, **Pre script** and **Post script** options. Script markers reflect current assignments, not historical run results; their tooltip names the script and the post-script execution condition.
@@ -124,6 +126,8 @@ Status and restore evidence use distinct symbols and subtle background fills wit
 **Start**, **Log** and **Cancel** have matching icons and retain their positions and labels below the centered **Actions** heading. Unavailable actions remain disabled. **Log** opens the live log during a run (marked with a live dot) and the saved log afterwards; it is disabled when no log is available. During Docker/VM recovery, **Cancel** stays disabled, with the explanation in a tooltip instead of an extra text row. Requested cancellation appears in the status badge.
 
 Collapsed cards identify failures, warnings, skipped or cancelled runs by status only. The full message appears exactly once under **Workflow**, labelled **Last saved outcome**, including during a new run. Dashboard problem links open this view directly. Long live-log lines scroll horizontally. Missing status files never imply success.
+
+Explicitly opening a card brings it into view when necessary, matching repository cards. Keyboard focus is retained and reduced motion disables the scroll animation. Automatic refreshes do not reposition the page. Content taller than the window remains normally scrollable.
 
 ### Job Wizard
 
@@ -224,6 +228,8 @@ The restore wizard walks through job, archive, selection, target, and review. In
 > [!WARNING] Do not restore production data directly over existing files without review. Use a test target first.
 
 ## 12. Restore Tests
+
+Opening a report card brings it into view when necessary, matching repository cards. Keyboard focus and reduced-motion preferences are respected; automatic refreshes do not reposition the page. Longer content remains scrollable.
 
 A cancelled restore test is an incomplete attempt, not failed verification evidence. Jobs and saved status details show the **latest test attempt as cancelled** with its date; the preceding completed test retains its outcome and original validity deadline. Cancellation neither renews evidence nor hides a preceding real failure. Without a usable preceding report, verification remains open. Existing cancellation reports are evaluated using retained report history in the same way; reports are preserved.
 

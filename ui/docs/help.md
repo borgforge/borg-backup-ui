@@ -49,7 +49,7 @@ Das Hauptmenü folgt dem Betriebsablauf: **Dashboard**, **Jobs**, **Repositories
 
 ## 3. Dashboard
 
-Drei Karten zeigen **Letzte Backup-Läufe**, **Restore-Abdeckung** und **Aktive Läufe**. Der Standortfilter gilt für diese Kennzahlen, Handlungsbedarf, historische Statistiken und die Standortübersicht. Die erste Karte zählt das letzte gespeicherte Ergebnis pro Job. Restore-Abdeckung zählt gültige Nachweise gegenüber allen Jobs; die Quote innerhalb vorhandener Testpläne steht separat daneben. Fehlende Statusdaten sind kein Erfolg.
+Drei Karten zeigen **Letzte Backup-Läufe**, **Restore-Abdeckung** und **Aktive Läufe**. Der Standortfilter gilt für diese Kennzahlen, Handlungsbedarf, historische Statistiken und die Standortübersicht. Die erste Karte zählt das letzte gespeicherte Ergebnis pro Job. Überfällige Backups erscheinen dort nur als Anzahl; die zugehörigen Jobs und Details stehen unter **Handlungsbedarf**. Restore-Abdeckung zählt gültige Nachweise gegenüber allen Jobs; die Quote innerhalb vorhandener Testpläne steht separat daneben. Fehlende Statusdaten sind kein Erfolg.
 
 **Handlungsbedarf** zeigt vollständige Fehlertexte, Warnungen, übersprungene oder abgebrochene Läufe und überfällige Backups oder Restore-Nachweise. **Job ansehen** öffnet den passenden Job samt Status. Jobs ohne Testplan werden separat mit einem Link zu Restore Tests genannt.
 
@@ -115,6 +115,8 @@ Ein Job verbindet Quellen mit genau einem vorhandenen Repository. Verschlüsselu
 
 **Nächster Lauf** zeigt den geplanten Termin. Zeitpunkt und Dauer des letzten Laufs bleiben getrennte Angaben.
 
+**Überfällig** steht bei betroffenen Jobs direkt unter **Betriebszustand**, auch bei eingeklappter Karte und unabhängig vom letzten Laufergebnis. Die Standortleiste scrollt mit der Seite und überlagert keine Jobkarten.
+
 Die Jobs stehen in einzelnen kompakten Karten mit Abstand. Die Reiter **Einzeljobs/Jobgruppen** sind direkt an den Arbeitsbereich angesetzt. Die Jobanzahl steht bei **Alle Standorte** und bei jedem einzelnen Standort in derselben dezent umrahmten Zählmarke. Darunter liegt die beschriftete Standortleiste in einem gemeinsamen Rahmen, ohne Dropdown oder Pillen; die eigene Terminspalte zeigt Zeitpläne, letzten Restore-Test und Gültigkeit des Nachweises. Der Pfeil am Job öffnet einen gemeinsamen Detailbereich mit **Ablauf** und **Daten & Einstellungen**. Letzterer fasst Speicherdaten, Richtlinie, Archivpräfix, Beschreibung, Borg-/Repository-Checks und Restore-Nachweise zusammen. Beide Ansichten reservieren die Höhe des größeren Inhalts; beim Wechsel springt die Liste nicht. Geöffnete Details und die ausgewählte Ansicht bleiben bei Aktualisierungen erhalten.
 
 Dezente Marker unter dem Jobnamen zeigen konfigurierte **VMs**, **Docker**, **Pre-Skript** und **Post-Skript**. Skriptmarker zeigen aktuelle Zuweisungen, keine früheren Laufergebnisse; der Tooltip nennt den Skriptnamen und beim Post-Skript die Ausführungsbedingung.
@@ -124,6 +126,8 @@ Status und Restore-Nachweis verwenden eindeutige Symbole und dezente Hintergrund
 **Starten**, **Log** und **Abbrechen** haben passende Symbole und behalten ihre Position und Beschriftung unter der mittig ausgerichteten Überschrift **Aktionen**. Nicht verfügbare Aktionen bleiben deaktiviert. **Log** öffnet während eines Laufs das Live-Log (mit Live-Punkt), sonst das gespeicherte Log; ohne verfügbares Log ist der Button deaktiviert. Während Docker/VMs wieder starten, bleibt **Abbrechen** deaktiviert, mit der Erklärung als Tooltip statt zusätzlicher Textzeile. Ein angeforderter Abbruch wird im Status angezeigt.
 
 Eingeklappte Karten zeigen Fehler, Warnungen, übersprungene oder abgebrochene Läufe nur als Status. Die vollständige Meldung erscheint genau einmal unter **Ablauf**, gekennzeichnet als **Letztes gespeichertes Ergebnis**. Das gilt auch während eines neuen Laufs. Problemverweise aus dem Dashboard öffnen diesen Bereich direkt. Lange Live-Log-Zeilen lassen sich horizontal scrollen. Fehlende Statusdateien werden nicht als Erfolg gewertet.
+
+Beim Aufklappen wird die Karte bei Bedarf wie bei den Repositories in den sichtbaren Bereich gerückt. Der Tastaturfokus bleibt erhalten; bei reduzierter Bewegung erfolgt dies ohne Animation. Automatische Aktualisierungen verschieben die Seite nicht. Inhalte, die höher als das Fenster sind, bleiben normal scrollbar.
 
 ### Job-Wizard
 
@@ -224,6 +228,8 @@ Der Restore-Wizard führt durch Job, Archiv, Auswahl, Ziel und Prüfung. Im Ziel
 > [!WARNING] Stellen Sie produktive Daten nicht ohne Prüfung direkt über vorhandene Dateien wieder her. Nutzen Sie zuerst ein Testziel.
 
 ## 12. Restore Tests
+
+Beim Öffnen einer Berichtskarte wird sie bei Bedarf wie bei den Repositories in den sichtbaren Bereich gerückt. Tastaturfokus und Einstellungen für reduzierte Bewegung werden beachtet; automatische Aktualisierungen verschieben die Seite nicht. Längere Inhalte bleiben scrollbar.
 
 Ein abgebrochener Restore-Test ist ein unvollständiger Testversuch und kein fehlgeschlagener Nachweis. In Jobs und im gespeicherten Status wird der **letzte Testversuch als abgebrochen** mit Datum angezeigt; der vorherige abgeschlossene Test behält seinen Status und sein ursprüngliches Gültigkeitsende. Ein Abbruch verlängert keinen Nachweis und verdeckt keinen vorherigen echten Fehler. Ohne verwertbaren vorherigen Bericht bleibt der Nachweis offen. Bereits gespeicherte Abbrüche werden anhand der vorhandenen Berichtshistorie genauso ausgewertet; die Berichte bleiben erhalten.
 

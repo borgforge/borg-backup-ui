@@ -268,6 +268,7 @@
 .rt-job-disclosure { display: grid; place-items: center; flex: 0 0 24px; width: 24px; height: 32px; padding: 0; background: transparent; border: 0; border-radius: 4px; color: var(--ui-color-accent); font-size: 22px; cursor: pointer; }
 .rt-job-disclosure[aria-expanded="true"] > span { transform: rotate(90deg); }
 .rt-job-disclosure:focus-visible { outline: 2px solid var(--ui-color-accent); outline-offset: -2px; }
+.rt-plan-card { scroll-margin-top: 16px; }
 .rt-job-report-panel { display: flex; flex-direction: column; height: min(680px, 76vh); min-height: 420px; border-top: 1px solid var(--ui-color-border); }
 .rt-job-report-panel[hidden] { display: none; }
 .rt-job-report-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; padding: 12px; border-bottom: 1px solid var(--ui-color-border); background: var(--ui-color-surface-subtle); font-size: var(--ui-font-size-sm); }

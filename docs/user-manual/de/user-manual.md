@@ -169,7 +169,7 @@ Start, Stopp und Autostart des Dienstes werden durch das Plugin verwaltet. Ergä
 
 **Abbildung 1 – Dashboard mit Beispieldaten:** (1) Aktuelle Kennzahlen, (2) Standortfilter, (3) historische Entwicklung, (4) Standortübersicht mit Wechsel zu Jobs.
 
-Vier kompakte Karten zeigen **Letzte Backup-Läufe**, **Restore-Abdeckung**, **Aktive Läufe** und **Server-Auslastung**. Der Standortfilter in der Kopfzeile gilt für die ersten drei Kennzahlen, Handlungsbedarf, historische Statistiken und die Standortübersicht. Die erste Karte zählt das letzte gespeicherte Ergebnis pro Job. Restore-Abdeckung zählt gültige Nachweise gegenüber allen Jobs; die Quote innerhalb vorhandener Testpläne steht separat daneben. Fehlende Statusdaten sind kein Erfolg.
+Vier kompakte Karten zeigen **Letzte Backup-Läufe**, **Restore-Abdeckung**, **Aktive Läufe** und **Server-Auslastung**. Der Standortfilter in der Kopfzeile gilt für die ersten drei Kennzahlen, Handlungsbedarf, historische Statistiken und die Standortübersicht. Die erste Karte zählt das letzte gespeicherte Ergebnis pro Job. Überfällige Backups erscheinen dort nur als Anzahl; die zugehörigen Jobs und Details stehen unter **Handlungsbedarf**. Restore-Abdeckung zählt gültige Nachweise gegenüber allen Jobs; die Quote innerhalb vorhandener Testpläne steht separat daneben. Fehlende Statusdaten sind kein Erfolg.
 
 Laufende Jobs werden ausschließlich in **Aktive Läufe** mit dem vorhandenen Link angezeigt; eine zusätzliche Namenszeile über Handlungsbedarf entfällt.
 
@@ -360,7 +360,9 @@ Nach Abschluss der Archiverstellung (`borg create`) werden die vom Job gestoppte
 
 Jeder Job erhält eine kompakte Karte mit Name, Betriebszustand, Terminen und Aktionen. **Alle Standorte** gruppiert nur belegte Ziele; die Standortauswahl steht platzsparend über den Karten. Verliert ein ausgewählter Standort seinen letzten Job, wechselt die Ansicht zu **Alle Standorte**.
 
-Der Gesamtstatus steht direkt unter **Betriebszustand**.
+Der Gesamtstatus steht direkt unter **Betriebszustand**. Ist ein geplanter Backup-Lauf überfällig, steht dort zusätzlich **Überfällig**, auch bei eingeklappter Karte. Das Ergebnis des letzten Laufs bleibt separat sichtbar: Ein zuletzt erfolgreiches Backup kann inzwischen überfällig sein. Die Standortauswahl scrollt mit der Seite und überlagert keine Jobkarten.
+
+Beim Aufklappen wird die Karte bei Bedarf wie bei den Repositories in den sichtbaren Bereich gerückt. Der Tastaturfokus bleibt erhalten; bei reduzierter Bewegung erfolgt dies ohne Animation. Automatische Aktualisierungen verschieben die Seite nicht. Inhalte, die höher als das Fenster sind, bleiben normal scrollbar.
 
 Der aufklappbare Bereich **Ablauf** zeigt jeden konfigurierten Schritt genau einmal in Ausführungsreihenfolge: gegebenenfalls Pre-Skript, Datenbank-Sicherungen, Docker/VMs stoppen, `borg create`, Docker/VMs starten, `borg prune`, `borg compact`, `borg check` und Post-Skript. Bei „Alle Archive behalten“ fehlt `prune`. Eine eingeplante, noch nicht fällige Prüfung bleibt mit „Nicht fällig“ sichtbar. Jede Zeile enthält Statussymbol, Ergebnis und gemessene Laufzeit; lange Ergebnisse werden umgebrochen.
 
@@ -1037,6 +1039,8 @@ der neuen Berichtshistorie. Das Löschen des aktuellen Nachweises löscht diese
 Historie nicht. Textprotokolle liegen im konfigurierten Logverzeichnis
 (`Borg-Restore-Test--<Zeitstempel>-<PID>.log`), Ablaufmeldungen im Anwendungslog
 `/var/log/borg_backup_ui.log`; sie werden nicht automatisch in den Unraid-Syslog kopiert.
+
+Beim Aufklappen wird die Karte bei Bedarf wie bei den Repositories in den sichtbaren Bereich gerückt. Der Tastaturfokus bleibt erhalten; bei reduzierter Bewegung erfolgt dies ohne Animation. Automatische Aktualisierungen verschieben die Seite nicht. Inhalte, die höher als das Fenster sind, bleiben normal scrollbar.
 
 Die aufgeklappte Jobkarte zeigt die Prüfberichte in einem Bereich mit gleichbleibender Höhe. Die Berichtsauswahl nennt Datum, Ergebnis und Testlevel; darunter ist der vollständige Bericht innerhalb des Bereichs scrollbar. Beim automatischen Aktualisieren bleiben Berichtsauswahl, aufgeklappte technische Details und Scrollposition erhalten. Auch Berichte von inzwischen entfernten Jobs bleiben über eigene schreibgeschützte Karten am zuletzt dokumentierten Standort zugänglich; dort stehen keine Planungs- oder Startaktionen zur Verfügung.
 
