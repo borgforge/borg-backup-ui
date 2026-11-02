@@ -184,8 +184,8 @@ feed, but need a new hosted candidate before using the new stable workflow.
 After setup, dispatch testing for current main with a fresh version; verify its
 summary, install on the test Unraid system and exercise backup/restore, API/UI
 and notifications. Only then use the stable workflow with explicit approval.
-At implementation time PR #676 fixes known dependency findings from #672;
-those findings must be resolved before publication can pass the audit.
+PR #676 updated Apprise and resolved the dependency findings tracked in #672.
+Publication still requires a passing audit against current advisory data.
 
 - **Missing/expired CI evidence:** request testing, or run CI on main with the
   selected exact SHA. The resolver starts at most one CI and waits up to 45 min.

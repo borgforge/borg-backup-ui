@@ -311,6 +311,7 @@
       "smtp_sender_missing": "No email sender is configured.",
       "smtp_test_sent": "Test email sent to {recipient}.",
       "apprise_notificationapi_retired": "NotificationAPI was retired in Apprise 1.13.1. Reconfigure this profile for Pingram or another provider. Its saved settings and secret are unchanged.",
+      "apprise_chime_retired": "Amazon Chime was retired in Apprise 2.1.0. Reconfigure this profile for another provider. Its saved settings and secret are unchanged.",
       "apprise_secret_unreadable": "The saved Apprise URL cannot be read. Check the permissions of this profile's secret file.",
       "apprise_url_valid": "The Apprise URL is valid.",
       "apprise_url_invalid": "The Apprise URL is invalid.",

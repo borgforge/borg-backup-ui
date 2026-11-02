@@ -17,7 +17,9 @@ if str(_RUNTIME_LIB) not in sys.path:
 
 from apprise_adapter import (  # type: ignore  # noqa: E402
     AppriseAdapterError,
+    RETIRED_CHIME_CODE,
     RETIRED_NOTIFICATIONAPI_CODE,
+    retired_chime_url,
     retired_notificationapi_url,
     send_test_notification,
     supported_providers,
@@ -227,11 +229,15 @@ def _sanitize_profile(row: dict[str, Any], config: dict[str, Any]) -> dict[str, 
 
 
 def _public_profile(row: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+    """Return secret-free metadata and retirement/access warnings without writes."""
     clean = _sanitize_profile(row, config)
     clean["url_set"] = profile_secret_path(config, clean["id"]).is_file()
     try:
-        if retired_notificationapi_url(_read_secret(config, clean["id"])):
+        secret = _read_secret(config, clean["id"])
+        if retired_notificationapi_url(secret):
             clean["warning_code"] = RETIRED_NOTIFICATIONAPI_CODE
+        elif retired_chime_url(secret):
+            clean["warning_code"] = RETIRED_CHIME_CODE
     except InventoryAccessError:
         # A single unreadable secret must not hide the remaining profiles.
         clean["warning_code"] = "apprise_secret_unreadable"
@@ -423,6 +429,11 @@ def validate_profile_payload(config: dict[str, Any], payload: dict[str, Any]) ->
 
 
 def test_profile(config: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    """Send a test using the draft or saved profile's 1-300 second deadline.
+
+    Returns sanitized delivery status; saved metadata and secrets are not
+    changed. Invalid payloads raise ValueError before attempting delivery.
+    """
     if not isinstance(payload, dict):
         raise ValueError("payload must be an object")
     pid = str(payload.get("id") or payload.get("profile_id") or "").strip()
@@ -441,6 +452,7 @@ def test_profile(config: dict[str, Any], payload: dict[str, Any]) -> dict[str, A
             url,
             title=profile_name,
             body="This is a test notification from Borg Backup UI.",
+            timeout_seconds=timeout,
         )
     except AppriseAdapterError as exc:
         return {"success": False, "message": str(exc), "message_code": "apprise_runtime_unavailable"}

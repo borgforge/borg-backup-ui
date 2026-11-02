@@ -236,8 +236,8 @@ def test_user_manuals_cover_current_stable_safety_and_runtime_guidance():
         "backup.start.priority=1",
         "Borg Server",
         "borg serve",
-        "Apprise `1.13.1`",
-        "141",
+        "Apprise `2.1.0`",
+        "158",
     )
     for manual in (manual_de, manual_en):
         for term in required_shared:
