@@ -85,6 +85,11 @@ place the TXZ at the documented persistent plugin path, and install the local
 manifest through Unraid's `plugin install`. Keep the normal plugin name and
 manifest filename so reboot does not install two different variants.
 
+Candidate creation refreshes the release template's MD5 and SHA256 from the new
+package. Candidate verification checks any declared template SHA256 before a
+release preview can be prepared; it must not retain the previous stable package's
+checksum. Older MD5-only templates remain supported.
+
 The private manifest has no update URL. It requires the local package and
 checks SHA-256, including repeat-install/boot paths. Missing or incorrect
 packages fail instead of downloading from a public URL. Existing installation,

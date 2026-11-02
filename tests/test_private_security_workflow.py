@@ -4,6 +4,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -259,6 +260,22 @@ def test_candidate_and_local_release_keep_identical_package(repo, candidate):
     assert not (output / f"release-notes/pending/{ADVISORY}.md").exists()
     assert (repo / f"release-notes/pending/{ADVISORY}.md").exists()
     assert sw.git(repo, "status", "--porcelain") == ""
+
+
+def test_candidate_rejects_stale_template_checksum_even_with_matching_bundle_hashes(candidate):
+    """An internally consistent bundle still needs a correct installer checksum."""
+    template = candidate / "release-template.plg"
+    template.write_text(re.sub(r'EXPECTED_SHA256="[^"]*"',
+                               'EXPECTED_SHA256="' + '0' * 64 + '"', template.read_text()))
+    metadata_path = candidate / "candidate.json"
+    metadata = json.loads(metadata_path.read_text())
+    metadata["files"][template.name] = sw.sha256(template)
+    sw.write_json(metadata_path, metadata)
+    checksums = {**metadata["files"], "candidate.json": sw.sha256(metadata_path)}
+    (candidate / "SHA256SUMS").write_text(
+        "".join(f"{value}  {name}\n" for name, value in sorted(checksums.items())))
+    with pytest.raises(RuntimeError, match="Package SHA256 mismatch"):
+        sw.verify_candidate(candidate)
 
 
 def test_tested_candidate_is_never_overwritten(repo, candidate, monkeypatch):

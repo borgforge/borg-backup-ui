@@ -185,7 +185,8 @@ def test_stable_promotion_preserves_complete_categorized_notes(tmp_path: Path, m
     md5 = release_workflow.file_md5(package)
     test_path = tmp_path / "test.plg"
     test_path.write_text(release_workflow.replace_changelog_block(
-        release_workflow.rewrite_package_installer(stable_path.read_text(), md5), version, notes
+        release_workflow.rewrite_package_installer(
+            stable_path.read_text(), md5, hashlib.sha256(package.read_bytes()).hexdigest()), version, notes
     ))
     provenance = {
         "version": version,
