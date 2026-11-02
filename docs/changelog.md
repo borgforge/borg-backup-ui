@@ -1,5 +1,10 @@
 # Changelog
 
+## Pending - Readable workflow run names (#687)
+
+- Show PR/main/manual context and check purpose before the exact CI source identifier. Add version, PR/main source and platform to testing runs, version/platform to stable preparation, and distinguish scheduled/manual audits.
+- Share strict current/legacy title parsing between CI waiting and dispatched-proof validation. Preserve exact-source failure detection, test reuse, workflow identifiers, the required CI result check and all publication gates.
+
 ## Pending - Publish approved stable versions as GitHub Releases (#685)
 
 - Publish a protected version tag and GitHub Release after the merged stable release passes main artifact CI and audit. Preserve the existing Unraid feed and reuse the tested package and release notes, including contributor credits, with manifest, provenance and SHA256 downloads.

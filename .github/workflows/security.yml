@@ -1,4 +1,6 @@
 name: Dependency security
+run-name: >-
+  Dependency audit | ${{ github.event_name == 'schedule' && 'Weekly schedule' || github.event_name == 'workflow_dispatch' && format('Manual on {0}', github.ref_name) || 'CI dependency check' }}
 on:
   workflow_call:
     inputs:

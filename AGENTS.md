@@ -335,6 +335,12 @@ fehlendem oder abgelaufenem Nachweis laufen neue Tests. Dependency-Audits
 werden wegen veranderlicher Advisory-Daten vor Veroeffentlichungen wiederholt.
 Keine lokalen JSON-Dateien als Ersatznachweis herstellen.
 
+Workflow-Laufnamen (#687) zeigen zuerst PR/main/Zweck bzw. Version und Plattform.
+Die vollstaendige CI-Quell-SHA bleibt als maschinenlesbarer `source=`-Teil erhalten.
+Namensaenderungen muessen zur Erkennung in `ci_evidence.run_source_sha` passen;
+historische `CI <sha>`-Nachweise bleiben lesbar. Den Pflichtcheck `CI result`
+nicht fuer reine Anzeigeaenderungen umbenennen.
+
 CI-/Policy-Aenderungen muessen vor privilegierter Veroeffentlichung nach `main`
 gemergt sein. Fuer reine interne Pipeline-Aufgaben genuegen vor dem Merge
 fokussierte Tests, Workflow-Validierung und PR-CI; der Live-Publish-Test erfolgt

@@ -1,4 +1,6 @@
 name: Publish testing candidate
+run-name: >-
+  Testing ${{ inputs.version }} | ${{ inputs.pr_number && format('PR #{0}', inputs.pr_number) || 'main' }} | ${{ inputs.platform }}
 on:
   workflow_dispatch:
     inputs:
