@@ -67,6 +67,12 @@ const {chromium}=require('playwright');
   await row.locator('[data-rt-plan-action=reports]').click();
   const panel=row.locator('.rt-job-report-panel');
   assert(await panel.isVisible());
+  await page.waitForFunction(()=>{
+   const bounds=document.getElementById('rt-job-card-0').getBoundingClientRect();
+   return bounds.top>=15 && bounds.bottom<=innerHeight-15;
+  });
+  assert.equal(await row.locator('select').evaluate(el=>el===document.activeElement),true,'Opening reports reveals the card without stealing selector focus');
+  if(process.env.BBUI_SCREENSHOT_DIR)await page.screenshot({path:`${process.env.BBUI_SCREENSHOT_DIR}/restore-revealed-${language}-${theme}.png`});
   const height=(await panel.boundingBox()).height;
   assert.equal(await row.locator('.rt-attempt-document').count(),1);
   assert.equal(await row.locator('select option').count(),2);
@@ -89,10 +95,11 @@ const {chromium}=require('playwright');
    const selector=document.getElementById('rt-report-select-0');
    selector.focus({preventScroll:true});scroll.scrollTop=400;
    const top=scroll.scrollTop;
+   const pageTop=window.scrollY;
    renderRestorePlan(BBUI.restoreTestsState.plan);
-   return {node:document.getElementById('rt-report-scroll-0').firstElementChild===report,top:scroll.scrollTop===top,focus:document.activeElement===selector,open:scroll.querySelector('.rt-technical-evidence').open};
+   return {node:document.getElementById('rt-report-scroll-0').firstElementChild===report,top:scroll.scrollTop===top,pageTop:window.scrollY===pageTop,focus:document.activeElement===selector,open:scroll.querySelector('.rt-technical-evidence').open};
   });
-  assert.deepEqual(stable,{node:true,top:true,focus:true,open:true});
+  assert.deepEqual(stable,{node:true,top:true,pageTop:true,focus:true,open:true});
   await capture(`restore-inline-proof-${language}-${theme}`);
   const selected=await row.locator('select').inputValue();
   const latest=await row.locator('select option').first().getAttribute('value');
@@ -111,6 +118,11 @@ const {chromium}=require('playwright');
   assert.equal(await page.locator('#rt-job-toggle-0').getAttribute('aria-expanded'),'false');
   await page.keyboard.press('Enter');
   assert(await panel.isVisible());
+  await page.waitForFunction(()=>{
+   const bounds=document.getElementById('rt-job-card-0').getBoundingClientRect();
+   return bounds.top>=15 && bounds.bottom<=innerHeight-15;
+  });
+  assert.equal(await row.locator('[data-rt-plan-action=toggle-reports]').evaluate(el=>el===document.activeElement),true);
   // Reports of removed jobs stay readable without run/edit actions.
   await page.evaluate(()=>{const state=BBUI.restoreTestsState;state.data.push({...state.data[1],job_key:'removed',job_name:'Former job',location:'old-target'});renderDemo();});
   await page.locator('[data-rt-sidebar-location="old-target"]').click();

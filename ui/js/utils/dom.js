@@ -7,6 +7,25 @@ window.BBUI.utils.dom = window.BBUI.utils.dom || {};
 let pageFeedbackDismissal = null;
 
 /**
+ * Align an explicitly expanded card after layout without changing keyboard focus.
+ * @param {() => HTMLElement|null} resolveCard Return the still-open card on the
+ * next frame, or null if it was closed or removed. Hidden cards are ignored.
+ * @returns {void} Scrolls only when the card is outside the viewport margins;
+ * oversized content remains scrollable and reduced-motion settings are honored.
+ */
+function scrollExpandedCardIntoView(resolveCard) {
+  requestAnimationFrame(() => {
+    const card = resolveCard();
+    if (!card?.isConnected || !card.getClientRects().length) return;
+    const bounds = card.getBoundingClientRect();
+    if (bounds.top < 16 || bounds.bottom > window.innerHeight - 16) {
+      card.scrollIntoView({block: 'start', inline: 'nearest',
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth'});
+    }
+  });
+}
+
+/**
  * Auto-dismiss non-error feedback after reading time, pausing on interaction.
  * @param {HTMLElement} el Feedback container.
  * @param {string} severity Normalized message severity.
@@ -128,6 +147,7 @@ function clearPageFeedback() {
 window.BBUI.utils.dom.showMsg = showMsg;
 window.BBUI.utils.dom.hideEl = hideEl;
 window.BBUI.utils.dom.clearPageFeedback = clearPageFeedback;
+window.BBUI.utils.dom.scrollExpandedCardIntoView = scrollExpandedCardIntoView;
 
 window.showMsg = showMsg;
 window.hideEl = hideEl;

@@ -829,6 +829,9 @@ function onRestoreTestsPlanClick(event) {
     if (restoreTestsState.expandedJobs.has(jobKey)) restoreTestsState.expandedJobs.delete(jobKey);
     else restoreTestsState.expandedJobs.add(jobKey);
     renderRestorePlan(restoreTestsState.plan);
+    if (restoreTestsState.expandedJobs.has(jobKey)) {
+      scrollExpandedCardIntoView(() => restoreTestsState.expandedJobs.has(jobKey) ? document.getElementById(`rt-job-card-${jobKey}`) : null);
+    }
     return;
   }
   if (action === 'reports') return openRTRJobReports(jobKey);
@@ -1006,7 +1009,13 @@ function rtReportIdentity(t) {
   return `${t.report_id || t.test_id || ''}:${t.job_key || ''}:${t.test_date || ''}:${hash >>> 0}`;
 }
 
-/** Open a job's inline history, including former locations and its retained evidence. */
+/**
+ * Open inline history, select retained evidence and reveal the expanded card.
+ * @param {string} jobKey Job identity, including jobs with only historical reports.
+ * @param {string} evidenceDate Optional timestamp selecting successful evidence.
+ * @returns {void} Focuses the report selector without resetting focus during reveal;
+ * unknown jobs are ignored and former report locations remain accessible.
+ */
 function openRTRJobReports(jobKey, evidenceDate = '') {
   const card = restoreTestsCards().find(job => String(job.job_key) === String(jobKey));
   if (!card) return;
@@ -1021,6 +1030,7 @@ function openRTRJobReports(jobKey, evidenceDate = '') {
   const scroll = document.getElementById(`rt-report-scroll-${jobKey}`);
   if (scroll) scroll.scrollTop = 0;
   document.getElementById(`rt-report-select-${jobKey}`)?.focus({preventScroll: true});
+  scrollExpandedCardIntoView(() => restoreTestsState.expandedJobs.has(jobKey) ? document.getElementById(`rt-job-card-${jobKey}`) : null);
 }
 
 /** Describe the recorded cumulative scope without inventing a restore or checksum comparison. */

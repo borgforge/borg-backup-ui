@@ -47,6 +47,7 @@ for (const language of ['de', 'en']) {
     const html = elements.get('summary-bar').innerHTML;
     assert.match(html, /<strong>11<\/strong><small>\/13<\/small>/);
     assert.match(html, language === 'de' ? /1 Backup überfällig/ : /1 backup overdue/);
+    assert.doesNotMatch(html, /<details|<summary|<ul|ok0/);
     assert.equal(c.dashboardAttentionItems(backups).filter(i => i.backup.key === 'ok0').length, 1);
   });
 

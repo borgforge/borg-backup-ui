@@ -141,16 +141,39 @@ const {chromium} = require('playwright');
     }
     await page.evaluate(()=>document.documentElement.dataset.theme='light');
     const open=card.locator('[data-jobs-action="toggle-workflow"]');
-    await open.click();
+    await page.setViewportSize({width:1600,height:800});
+    await page.emulateMedia({reducedMotion:'reduce'});
+    await page.evaluate(()=>window.scrollTo(0,0));
+    await page.evaluate(async()=>{
+      const trigger=document.querySelector('#job-card-vms [data-jobs-action="toggle-workflow"]');
+      trigger.click();trigger.click();
+      await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    });
+    assert.equal(await page.evaluate(()=>scrollY),0,'Closing before layout cancels the queued reveal');
+    await open.focus();
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(()=>{
+      const bounds=document.getElementById('job-card-vms').getBoundingClientRect();
+      return bounds.top>=15 && bounds.bottom<=innerHeight-15;
+    });
+    assert.equal(await open.evaluate(el=>el===document.activeElement),true,'Revealing the card preserves keyboard focus');
+    const revealedScroll=await page.evaluate(()=>scrollY);
+    assert.ok(revealedScroll>0,'Opening an off-screen detail area reveals the card');
+    await page.evaluate(async()=>{renderJobsGrid(jobsState.jobs);await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));});
+    assert.equal(await page.evaluate(()=>scrollY),revealedScroll,'Background rendering does not reposition an open card');
+    if(process.env.BBUI_SCREENSHOT_DIR)await page.screenshot({path:`${process.env.BBUI_SCREENSHOT_DIR}/jobs-revealed.png`});
+    await page.setViewportSize({width:1600,height:1100});
     assert.equal(await card.locator('tr[data-step="create"]').count(),1,'Each step renders exactly once');
     assert.ok((await card.locator('tr[data-step="create"]').textContent()).includes('194'));
     for(const width of [1600,1024,390])for(const lang of ['de','en']){
       await page.setViewportSize({width,height:1100});
       await page.evaluate(lang=>{window.lang=lang;renderJobsGrid(jobsState.jobs);},lang);
+      // Measure after responsive layout has settled, before changing the tab.
+      await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
       const before=await card.boundingBox();
       await card.locator('[data-job-view="data"]').click();
       const after=await card.boundingBox();
-      assert.ok(Math.abs(before.height-after.height)<1,`Stable panel height ${lang}/${width}`);
+      assert.ok(Math.abs(before.height-after.height)<1,`Stable panel height ${lang}/${width}: ${before.height} -> ${after.height}`);
       assert.equal(await card.locator('[role="tabpanel"][aria-hidden="true"]').getAttribute('inert'),'');
       assert.ok((await card.locator('[role="tabpanel"][id$="-data"]').textContent()).includes('194 GiB'));
       assert.ok((await card.locator('.job-settings-facts').textContent()).includes('3'));

@@ -22,7 +22,6 @@ let dashboardSystemHealth = null;
 let dashboardSelectedLocation = 'all';
 const dashboardExpandedJobs = new Set();
 let dashboardAttentionExpanded = false;
-let dashboardOverdueExpanded = false;
 const DASHBOARD_LOCATION_ORDER = ['local', 'usb', 'smb', 'storagebox'];
 
 async function fetchStatus() {
@@ -225,7 +224,7 @@ function dashboardSummaryContent(rows, value, total, centerLabel) {
 
 /**
  * Render backup outcomes from job rows rather than the API's overdue-adjusted counters.
- * @param {object[]} backups Rows for the selected location; overdue details use the same scope.
+ * @param {object[]} backups Rows for the selected location; overdue is a separate count.
  */
 function renderSummaryBar(backups) {
   const el = document.getElementById('summary-bar');
@@ -239,15 +238,9 @@ function renderSummaryBar(backups) {
     ...(summary.counts.cancelled ? [{ cls: 'cancelled', count: summary.counts.cancelled, label: dashboardT('jobs.statusCancelled') }] : []),
     ...(summary.counts.unknown ? [{ cls: 'unknown', count: summary.counts.unknown, label: dashboardT('dashboard.unknownOrNever') }] : []),
   ];
-  const focused = document.activeElement?.id === 'dashboard-overdue-toggle';
   el.innerHTML = dashboardSummaryContent(rows, summary.counts.success, summary.total, dashboardT('dashboard.successful'))
     + `<p class="dashboard-summary-context">${escHtml(dashboardSelectedLocation === 'all' ? dashboardT('dashboard.allLocations') : dashboardLocationLabel(dashboardSelectedLocation))} · ${escHtml(dashboardT('dashboard.latestOutcomes', { count: summary.total }))}</p>`
-    + (summary.overdue ? `<details class="dashboard-summary-overdue"${dashboardOverdueExpanded ? ' open' : ''}>
-      <summary id="dashboard-overdue-toggle">${escHtml(dashboardT(summary.overdue === 1 ? 'dashboard.overdueCountOne' : 'dashboard.overdueCountMany', { count: summary.overdue }))}</summary>
-      <ul>${backups.filter(backup => backup.backup_overdue).map(backup => `<li><strong>${escHtml(backup.name || backup.display_name || backup.key)}</strong><p>${escHtml(dashboardT('dashboard.backupOverdueDetails', {date: dashboardAbsoluteTimestamp(backup.backup_overdue_after || backup.backup_overdue_expected_run)}))}</p></li>`).join('')}</ul>
-    </details>` : '');
-  el.querySelector('details')?.addEventListener('toggle', event => { dashboardOverdueExpanded = event.currentTarget.open; });
-  if (focused) el.querySelector('summary')?.focus({preventScroll: true});
+    + (summary.overdue ? `<p class="dashboard-summary-overdue">${escHtml(dashboardT(summary.overdue === 1 ? 'dashboard.overdueCountOne' : 'dashboard.overdueCountMany', { count: summary.overdue }))}</p>` : '');
 }
 
 /**

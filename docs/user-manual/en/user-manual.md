@@ -161,7 +161,7 @@ Service start, stop, and autostart are managed by the plugin. Do not add a separ
 
 **Figure 1 – Dashboard with example data:** (1) Current metrics, (2) location filter, (3) historical trends, (4) location overview with links to Jobs.
 
-Four compact cards show **Latest backup runs**, **Restore coverage**, **Active runs** and **Server resources**. The location filter in the header applies to the first three metrics, attention items, historical statistics and location totals. The first card counts the last saved outcome per job. Restore coverage compares valid evidence with all jobs; the ratio within known test plans appears separately. Missing status data never counts as success.
+Four compact cards show **Latest backup runs**, **Restore coverage**, **Active runs** and **Server resources**. The location filter in the header applies to the first three metrics, attention items, historical statistics and location totals. The first card counts the last saved outcome per job. Overdue backups appear there only as a count; the affected jobs and details are listed under **Needs attention**. Restore coverage compares valid evidence with all jobs; the ratio within known test plans appears separately. Missing status data never counts as success.
 
 Running jobs appear only in **Active runs**, using the existing link; no duplicate job-name row appears above attention items.
 
@@ -352,7 +352,9 @@ Once archive creation (`borg create`) finishes, containers and VMs stopped by th
 
 Each job has a compact card with its name, operating status, dates and actions. **All locations** groups only destinations with jobs; the location selector sits above the cards. If the selected destination loses its last job, the view returns to **All locations**. Selecting one location avoids a duplicate section heading.
 
-The overall result appears directly below **Operating status**.
+The overall result appears directly below **Operating status**. If a scheduled backup run is overdue, an additional **Overdue** badge is visible there even when the card is collapsed. The last run outcome remains separate: a previously successful backup can now be overdue. The location selector scrolls with the page without overlapping job cards.
+
+Explicitly opening a card brings it into view when necessary, matching repository cards. Keyboard focus is retained and reduced motion disables the scroll animation. Automatic refreshes do not reposition the page. Content taller than the window remains normally scrollable.
 
 The expandable **Workflow** view shows each configured step exactly once, in execution order: optional Pre script, database backups, Docker/VM shutdown, `borg create`, Docker/VM recovery, `borg prune`, `borg compact`, `borg check` and Post script. With “Keep all archives”, prune is absent. A configured check that is not due remains visible with its reason. Each row contains its status symbol, result and measured duration; long results wrap.
 
@@ -1025,6 +1027,8 @@ report history is not automatically pruned. Deleting the current evidence does n
 remove that history. Text logs live in the configured log directory as
 `Borg-Restore-Test--<timestamp>-<PID>.log`. Lifecycle events go to the application
 log `/var/log/borg_backup_ui.log`, not automatically to Unraid syslog.
+
+Explicitly opening a card brings it into view when necessary, matching repository cards. Keyboard focus is retained and reduced motion disables the scroll animation. Automatic refreshes do not reposition the page. Content taller than the window remains normally scrollable.
 
 Expanded job cards show reports in a panel with a stable height. The report selector identifies each attempt by date, result and test level; the full report scrolls within the panel below it. Automatic refresh preserves the selected report, expanded technical details and scroll position. Reports for removed jobs remain accessible through read-only cards at their last recorded location, without planning or start actions.
 
