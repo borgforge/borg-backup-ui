@@ -73,8 +73,8 @@ small, separately reviewed changes once the required official contracts exist.
 
 | Platform | Channel | Current behavior | Future ownership |
 | --- | --- | --- | --- |
-| `unraid-legacy` | `testing` | Local/Actions candidate preview; existing `test-channel` feed identity | Existing legacy `.plg` and `.txz` publisher, only after authorization. |
-| `unraid-legacy` | `stable` | Preview promotes exact tested bytes; existing `main` identity | Existing separate release PR and explicit test approval. |
+| `unraid-legacy` | `testing` | Hosted verified candidate publication (#677); existing `test-channel` feed identity | Existing legacy `.plg` and `.txz` publisher, only after authorization. |
+| `unraid-legacy` | `stable` | Protected workflow prepares exact tested bytes in a release PR (#677); existing `main` identity | Existing separate release PR and explicit test approval. |
 | `unraid-8` | `testing` | Explicit error before packaging or output; no fallback | Separate SDK package identity and feed, after SDK/system validation. |
 | `unraid-8` | `stable` | Explicit error before packaging or output; no fallback | Separate protected approval and SDK release metadata. |
 
@@ -168,6 +168,10 @@ Real OS upgrade/downgrade behavior requires disposable Unraid systems.
 coupling; optimize the legacy builder; add channel/target/provenance validation,
 read-only CI and non-publishing previews. Tests cover existing legacy metadata,
 checksums, permissions, deterministic packaging, and blocked Unraid 8 selection.
+
+**Follow-up (#677):** public testing publication and stable PR preparation are
+now hosted, with isolated bot authority and immutable candidates. Generation
+boundaries are unchanged. See [the maintainer workflow](../maintainer/release-workflow.md).
 
 **After official SDK:** verify documented package format, service lifecycle,
 permissions, filesystem, host APIs, auth/web embedding and binary/runtime ABI.

@@ -83,7 +83,7 @@ def test_test_channel_deploy_validates_manifest_and_package_payload() -> None:
     workflow = (ROOT / "plugin" / "release_workflow.py").read_text(encoding="utf-8")
     build = (ROOT / "plugin" / "build.sh").read_text(encoding="utf-8")
 
-    assert 'release_workflow.py" package-provenance' in script
+    assert 'ci_release.py" dispatch-test' in script
     assert 'f"boot/config/plugins/{NAME}/borg_backup_ui.py"' in workflow
     assert 'f"boot/config/plugins/{NAME}/LICENSE"' in workflow
     assert 'f"boot/config/plugins/{NAME}/api/apprise_profiles_api.py"' in workflow
@@ -99,10 +99,9 @@ def test_test_channel_deploy_validates_manifest_and_package_payload() -> None:
     assert '"etc/rc.d/rc.borg_backup_ui"' in workflow
     assert '"plugin/borg-backup-ui-dashboard.page"' in workflow
     assert '"plugin/widget-status.php"' in workflow
-    assert "ET.parse(sys.argv[1])" in script
-    assert 'display_title = "Borg Backup UI"' in script
-    assert 'Title="{display_title}"' in script
-    assert 'launch="Settings/borg-backup-ui"' in script
+    pipeline = (ROOT / "plugin/ci_pipeline.py").read_text()
+    assert "verify_candidate" in pipeline
+    assert "Borg Backup UI" in pipeline
     assert '"${SCRIPT_DIR}/README.md"' in build
 
 
@@ -139,37 +138,50 @@ def test_test_channel_publisher_replaces_snapshot_with_exact_lease(tmp_path: Pat
         }
     )
 
+    tools = work / "tools"
+    tools.mkdir()
+    (tools / "gh").write_text("#!/bin/sh\necho borg-codex-bot\n")
+    (tools / "gh").chmod(0o755)
+    env.update({"PATH": str(tools) + os.pathsep + env["PATH"],
+                "GITHUB_ACTIONS": "true", "GITHUB_EVENT_NAME": "workflow_dispatch",
+                "GITHUB_REF": "refs/heads/main", "BBUI_ENVIRONMENT": "testing",
+                "GITHUB_WORKFLOW_REF": "borgforge/borg-backup-ui/.github/workflows/testing-release.yml@refs/heads/main",
+                "GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": f"url.{remote}.insteadOf",
+                "GIT_CONFIG_VALUE_0": "https://github.com/borgforge/borg-backup-ui.git"})
+
     manifest = work / "borg-backup-ui-test.plg"
-    first_package = work / "borg-backup-ui-1.txz"
-    manifest.write_text("version=1\n", encoding="utf-8")
+    first_package = work / "borg-backup-ui-2026.11.02.1200.txz"
+    manifest.write_text('<PLUGIN version="2026.11.02.1200"/>', encoding="utf-8")
     first_package.write_bytes(b"first package")
     subprocess.run(
         [
             str(publisher),
-            str(remote),
+            "https://github.com/borgforge/borg-backup-ui.git",
             "test-channel",
             str(manifest),
             str(first_package),
             "first snapshot",
             str(work),
+            "test-candidates/2026.11.02.1200",
         ],
         check=True,
         capture_output=True,
         env=env,
     )
 
-    manifest.write_text("version=2\n", encoding="utf-8")
-    second_package = work / "borg-backup-ui-2.txz"
+    manifest.write_text('<PLUGIN version="2026.11.02.1300"/>', encoding="utf-8")
+    second_package = work / "borg-backup-ui-2026.11.02.1300.txz"
     second_package.write_bytes(b"second package")
     subprocess.run(
         [
             str(publisher),
-            str(remote),
+            "https://github.com/borgforge/borg-backup-ui.git",
             "test-channel",
             str(manifest),
             str(second_package),
             "second snapshot",
             str(work),
+            "test-candidates/2026.11.02.1300",
         ],
         check=True,
         capture_output=True,
@@ -189,8 +201,25 @@ def test_test_channel_publisher_replaces_snapshot_with_exact_lease(tmp_path: Pat
         text=True,
     ).stdout.strip()
 
-    assert files == ["borg-backup-ui-test.plg", "releases/borg-backup-ui-2.txz"]
+    assert files == ["borg-backup-ui-test.plg", "releases/borg-backup-ui-2026.11.02.1300.txz"]
     assert history_count == "1"
+
+    def remote_git(*args):
+        return subprocess.check_output(["git", f"--git-dir={remote}", *args], text=True).strip()
+    assert remote_git("rev-parse", "test-channel") == remote_git("rev-parse", "refs/tags/test-candidates/2026.11.02.1300")
+    assert remote_git("show", "refs/tags/test-candidates/2026.11.02.1200:releases/borg-backup-ui-2026.11.02.1200.txz") == "first package"
+    command = [str(publisher), "https://github.com/borgforge/borg-backup-ui.git", "test-channel",
+               str(manifest), str(second_package), "retry snapshot", str(work), "test-candidates/2026.11.02.1300"]
+    previous = remote_git("rev-parse", "test-channel")
+    subprocess.run(command, env=env, check=True, capture_output=True)
+    assert remote_git("rev-parse", "test-channel") == previous
+    second_package.write_bytes(b"changed bytes")
+    assert subprocess.run(command, env=env, capture_output=True).returncode != 0
+    assert remote_git("rev-parse", "test-channel") == previous
+    command[4] = str(first_package)
+    command[-1] = "test-candidates/2026.11.02.1200"
+    assert subprocess.run(command, env=env, capture_output=True).returncode != 0
+    assert remote_git("rev-parse", "test-channel") == previous
 
 
 def test_test_channel_publisher_uses_exact_force_with_lease() -> None:

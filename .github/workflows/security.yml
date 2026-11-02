@@ -1,16 +1,18 @@
 name: Dependency security
 on:
-  pull_request:
-  push:
-    branches: [main]
+  workflow_call:
+    inputs:
+      source_sha:
+        required: false
+        type: string
   schedule:
     - cron: '23 5 * * 1'
   workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: security-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: audit-${{ github.run_id }}
+  cancel-in-progress: false
 jobs:
   audit:
     runs-on: ubuntu-24.04
@@ -18,6 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.source_sha || github.sha }}
           persist-credentials: false
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:

@@ -1,5 +1,9 @@
 # CI/CD audit and implementation (#671)
 
+Historical baseline and measurements. The public workflow was subsequently
+changed by #677; use [the current maintainer workflow](../maintainer/release-workflow.md)
+for hosted publication, immutable candidates and GitHub setup.
+
 Audit date: 2026-10-31. Baseline: `bfc1c90` (stable 2026.10.30.1734).
 The scope is build tooling, read-only CI and local release previews. No release,
 tag, channel reference, repository setting or production data is changed.

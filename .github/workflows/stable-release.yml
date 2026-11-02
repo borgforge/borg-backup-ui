@@ -1,11 +1,16 @@
-name: Stable preview (no publication)
+name: Prepare stable release PR
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Already tested version: YYYY.MM.DD.HHMM'
+        description: 'Immutable candidate version successfully tested on Unraid'
         required: true
         type: string
+      confirm_tested:
+        description: 'I confirm the selected version passed my Unraid test'
+        required: true
+        type: boolean
+        default: false
       platform:
         type: choice
         description: 'Unraid 8 is not implemented'
@@ -13,32 +18,32 @@ on:
         default: unraid-legacy
 permissions:
   contents: read
+  actions: read
 concurrency:
-  group: stable-preview-${{ inputs.platform }}
+  group: prepare-stable
   cancel-in-progress: false
 jobs:
-  preview:
-    if: github.ref == 'refs/heads/main'
+  audit:
+    if: github.ref == 'refs/heads/main' && inputs.confirm_tested
+    uses: ./.github/workflows/security.yml
+    with:
+      source_sha: ${{ github.sha }}
+  prepare:
+    needs: audit
+    environment: stable
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
       PLATFORM: ${{ inputs.platform }}
       VERSION: ${{ inputs.version }}
+      CONFIRM_TESTED: ${{ inputs.confirm_tested }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        with:
-          python-version: '3.12'
-      - name: Verify and prepare exact tested bytes (no rebuild)
-        run: |
-          python plugin/ci_pipeline.py stable-preview --platform "$PLATFORM" --version "$VERSION" --output .release-tmp/stable-preview
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: stable-preview-${{ inputs.platform }}-${{ github.run_id }}
-          path: .release-tmp/stable-preview/artifacts/*
-          compression-level: 0
-          retention-days: 14
-          if-no-files-found: error
+      - name: Prepare approved tested bytes and create release PR
+        env:
+          GH_TOKEN: ${{ secrets.BBUI_BOT_TOKEN }}
+          BBUI_ENVIRONMENT: stable
+        run: python3 plugin/ci_release.py stable

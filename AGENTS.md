@@ -214,8 +214,9 @@ Erwartete Regeln:
 * Required Status Checks erst aktivieren, wenn GitHub Actions/CI definiert sind
 
 Der Branch `test-channel` ist ein Sonderbranch und wird nicht durch dieselben
-Regeln wie `main` geschuetzt. Er wird ausschliesslich ueber
-`./plugin/deploy-test.sh <version>` aktualisiert.
+Regeln wie `main` geschuetzt. Er wird ausschliesslich durch den geschuetzten GitHub-Workflow
+`Publish testing candidate` aktualisiert. `./plugin/deploy-test.sh <version>`
+ist nur dessen Dispatch-Client.
 
 `test-channel` ist ein kurzlebiger Snapshot-Branch. Das Deploy-Skript darf nur
 fuer diesen Branch einen neuen Root-Commit mit exakt einem Manifest und einem
@@ -312,19 +313,35 @@ docs/maintainer/release-workflow.md
 
 lesen und befolgen.
 
-Wenn Plugin-Code geaendert wurde:
+Oeffentlicher CI/CD-Ablauf (#677):
 
-1. Technische Historie bei Bedarf in `docs/changelog.md` pflegen
-2. Fokussierte Tests ausfuehren
-3. Finalen Stand committen und pushen
-4. `./plugin/mr-preflight.sh` genau einmal fuer diesen finalen Commit ausfuehren
-5. Eine Test-Channel-Version mit `./plugin/deploy-test.sh <version>` erstellen
-6. Test-Channel-Manifest und Paket verifizieren
+1. Issue verwenden, Aenderung und gegebenenfalls Release-Note-Fragment pflegen.
+2. Lokal nur fokussierte Tests waehrend der Entwicklung ausfuehren.
+3. Finalen Stand committen, pushen und PR erstellen/aktualisieren.
+4. GitHub-CI fuer den PR abwarten. Keine vollstaendige lokale Testsuite vor
+   derselben CI-Pruefung wiederholen. `./plugin/mr-preflight.sh` liest optional
+   den GitHub-Pruefnachweis; es erzeugt keine lokale Release-Attestierung mehr.
+5. Fuer testbare nutzerrelevante Aenderungen den Workflow
+   `Publish testing candidate` auf `main` mit PR-Nummer und Version starten,
+   alternativ `./plugin/deploy-test.sh <version>`. Der Workflow wartet auf CI
+   bzw. fordert fehlende CI an, baut, verifiziert und veroeffentlicht automatisch.
+6. Erfolgreichen Publish-Job, Workflow-Zusammenfassung, Manifest und Paket
+   verifizieren. Ein erfolgreicher Dispatch allein ist keine Testversion.
 
-`mr-preflight.sh` erzeugt nach erfolgreichem Lauf eine commitgebundene lokale
-Attestierung unter `.git/`. `deploy-test.sh` akzeptiert nur den unveraenderten,
-gepushten und attestierten Commit und fuehrt die vollstaendigen Tests nicht
-erneut aus.
+GitHub ist die Autoritaet fuer die vollstaendigen Pruefungen. Wiederverwendung
+ist nur bei identischem vollstaendigem Git-Baum, CI-Policy, Umgebung und
+verifizierten erfolgreichen GitHub-Jobs erlaubt. Bei geaenderter Integration,
+fehlendem oder abgelaufenem Nachweis laufen neue Tests. Dependency-Audits
+werden wegen veranderlicher Advisory-Daten vor Veroeffentlichungen wiederholt.
+Keine lokalen JSON-Dateien als Ersatznachweis herstellen.
+
+CI-/Policy-Aenderungen muessen vor privilegierter Veroeffentlichung nach `main`
+gemergt sein. Fuer reine interne Pipeline-Aufgaben genuegen vor dem Merge
+fokussierte Tests, Workflow-Validierung und PR-CI; der Live-Publish-Test erfolgt
+nach Merge und Maintainer-Einrichtung der geschuetzten Environments. Diese
+Aktivierungsgrenze und ausstehende Live-Pruefungen im PR/Abschluss nennen,
+nicht durch einen lokalen Deploy umgehen. Die privaten Advisory-Regeln oben
+bleiben eine ausdrueckliche Ausnahme mit lokalem Security-Preflight.
 
 Feature-, Fix- und Maintenance-PRs duerfen keine Stable-Release-Artefakte
 enthalten. Das gilt insbesondere fuer:
@@ -360,13 +377,16 @@ Stable-Releases werden immer in einem separaten Release-PR vorbereitet. Nach
 Freigabe wird dafuer verwendet:
 
 ```bash
-./plugin/promote-release.sh <version>
+./plugin/promote-release.sh <version> --confirm-tested
 ```
 
-Das Skript erstellt bzw. aktualisiert einen Branch `codex/release-<version>`
-aus `origin/main`, kopiert das getestete Paket aus `test-channel` und erstellt
-einen eigenen Pull Request gegen `main`. Feature-/Fix-PRs werden dadurch nicht
-mit Stable-Artefakten vermischt.
+Das Skript startet `Prepare stable release PR` auf `main`. Erst nach
+expliziter Testbestaetigung und Freigabe im geschuetzten Environment `stable`
+erstellt der Workflow den Branch `codex/release-<version>` aus aktuellem
+`origin/main`. Er kopiert das getestete Paket aus dem unveraenderlichen Tag
+`test-candidates/<version>` und erstellt einen eigenen Pull Request gegen
+`main`. Der aktuelle Inhalt des rotierenden `test-channel` bestimmt nicht
+mehr den Stable-Kandidaten. Merge bleibt eine Maintainer-Aktion.
 
 Das getestete Paket wird byte-identisch uebernommen und nicht neu gebaut. Der
 Release-PR verwendet `./plugin/release-preflight.sh`; dieser prueft nur
@@ -481,11 +501,20 @@ Er enthaelt ausschliesslich:
 * borg-backup-ui-test.plg
 * genau ein zugehoeriges Release-Paket
 
-Deploys ausschliesslich ueber:
+Deploys ausschliesslich ueber den GitHub-Workflow `Publish testing candidate`
+auf `main`, optional gestartet durch:
 
 ```bash
 ./plugin/deploy-test.sh <version>
 ```
+
+Nur der privilegierte Publisher aus geprueftem `main` darf den Snapshot per
+`publish-test-snapshot.sh` veroeffentlichen. Der Paketbau hat keine Bot-Secrets.
+Jede Version wird zusaetzlich unter `test-candidates/<version>` unveraenderlich
+gepinnt. Diese Tags weder ueberschreiben noch loeschen; Versionskonflikte
+abbrechen. GitHub-Environments `testing` und `stable`, Bot-Secret und Rulesets
+richtet der Maintainer gemaess `docs/maintainer/release-workflow.md` ein.
+Repository-Einstellungen nicht automatisch aendern.
 
 Nach jedem Deploy pruefen:
 

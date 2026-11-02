@@ -14,7 +14,6 @@ import sys
 import tarfile
 import tempfile
 import xml.etree.ElementTree as ET
-from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -263,67 +262,6 @@ def verify_implementation_delta(repo: Path, base_ref: str) -> None:
     violations = implementation_delta_violations(repo, base_ref)
     if violations:
         raise RuntimeError("; ".join(violations))
-
-
-def attestation_path(repo: Path) -> Path:
-    return git_path(repo, "borg-backup-ui/preflight.json")
-
-
-def write_attestation(repo: Path, base_ref: str) -> dict[str, object]:
-    require_clean(repo)
-    head = str(run_git(repo, "rev-parse", "HEAD")).strip()
-    base_sha = str(run_git(repo, "rev-parse", base_ref)).strip()
-    branch = str(run_git(repo, "branch", "--show-current")).strip()
-    payload: dict[str, object] = {
-        "schema_version": 1,
-        "result": "passed",
-        "head_sha": head,
-        "base_ref": base_ref,
-        "base_sha": base_sha,
-        "branch": branch,
-        "source_digest": source_digest(repo, head),
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
-    path = attestation_path(repo)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            json.dump(payload, handle, indent=2, sort_keys=True)
-            handle.write("\n")
-        os.replace(tmp_name, path)
-    finally:
-        if os.path.exists(tmp_name):
-            os.unlink(tmp_name)
-    return payload
-
-
-def verify_attestation(repo: Path) -> dict[str, object]:
-    require_clean(repo)
-    path = attestation_path(repo)
-    if not path.is_file():
-        raise RuntimeError("No preflight attestation found; run ./plugin/mr-preflight.sh")
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    head = str(run_git(repo, "rev-parse", "HEAD")).strip()
-    branch = str(run_git(repo, "branch", "--show-current")).strip()
-    base_ref = str(payload.get("base_ref", ""))
-    if not base_ref:
-        raise RuntimeError("Preflight attestation has no base reference; rerun mr-preflight")
-    expected = {
-        "result": "passed",
-        "head_sha": head,
-        "branch": branch,
-        "base_sha": str(run_git(repo, "rev-parse", base_ref)).strip(),
-        "source_digest": source_digest(repo, head),
-    }
-    mismatches = [
-        key for key, value in expected.items() if str(payload.get(key, "")) != str(value)
-    ]
-    if mismatches:
-        raise RuntimeError(
-            "Preflight attestation is stale (" + ", ".join(mismatches) + "); rerun mr-preflight"
-        )
-    return payload
 
 
 def pending_fragments(root: Path) -> list[Path]:
@@ -1130,16 +1068,6 @@ def command_source_digest(args: argparse.Namespace) -> None:
     print(source_digest(Path(args.repo).resolve(), args.revision))
 
 
-def command_write_attestation(args: argparse.Namespace) -> None:
-    payload = write_attestation(Path(args.repo).resolve(), args.base_ref)
-    print(json.dumps(payload, sort_keys=True))
-
-
-def command_verify_attestation(args: argparse.Namespace) -> None:
-    payload = verify_attestation(Path(args.repo).resolve())
-    print(json.dumps(payload, sort_keys=True))
-
-
 def command_prepare_build_tree(args: argparse.Namespace) -> None:
     payload = prepare_build_tree(
         Path(args.root).resolve(),
@@ -1205,15 +1133,6 @@ def parser() -> argparse.ArgumentParser:
     item.add_argument("--repo", default=".")
     item.add_argument("--revision", default="HEAD")
     item.set_defaults(func=command_source_digest)
-
-    item = subparsers.add_parser("write-attestation")
-    item.add_argument("--repo", default=".")
-    item.add_argument("--base-ref", required=True)
-    item.set_defaults(func=command_write_attestation)
-
-    item = subparsers.add_parser("verify-attestation")
-    item.add_argument("--repo", default=".")
-    item.set_defaults(func=command_verify_attestation)
 
     item = subparsers.add_parser("prepare-build-tree")
     item.add_argument("--root", required=True)
