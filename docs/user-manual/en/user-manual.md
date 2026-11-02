@@ -2228,7 +2228,7 @@ Older test archives use the original staging path without its leading slash. The
 from the new archive and checks its bytes. Excluded/missing/corrupt output fails
 verification; completed local files remain. The manifest inside the archive
 records export-time status; the local result and job workflow record subsequent
-archive verification. **Archived and verified is not a database restore test.**
+archive verification. **This readback verification does not test importing the dump into a database.**
 
 ### 19.3 Local retention and interrupted operations
 
@@ -2236,8 +2236,10 @@ The compact **Local backup runs** table shows newest dumps first, ten per page.
 **All**, **Job backups**, and **Manual dumps** filter their origin; older entries
 without a recognizable identity remain visible under **Unattributed**. A manually
 started backup job is still a job backup; **Manual dumps** means the profile's
-**Create test dump** action. **Details** reveals the full path, sizes, confirmed
-archive state, and local cleanup with confirmation of the exact directory.
+**Create test dump** action. The **Archived** table status confirms archiving.
+**Details** reveals the full path and sizes and explains the full readback comparison
+using file size and checksum. Separate restore tests remain in their own view.
+Local cleanup requires confirmation of the exact directory.
 **Local usage** includes regular files in the run directory, including its manifest
 and any partial files. On narrow screens, the table scrolls horizontally inside
 its own area.

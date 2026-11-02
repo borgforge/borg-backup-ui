@@ -2,6 +2,8 @@
 
 ## Pending - Compact retained database runs (#691)
 
+- Use the concise Archived table status and explain full file-size/checksum readback in the details in German and English. Remove the fixed not-restore-tested detail text, which could be mistaken for the status of a separately run restore test.
+
 - Replace large dump cards with a newest-first table, independent job/manual origin filters, ten-row pagination and expandable details. Keep cleanup bound to the displayed run after filtering, with the existing confirmation.
 - Classify existing manifest identity without rewriting it; preserve unattributed historical runs and storage errors. Explain current-run-only Borg inputs and unchanged local retention in German/English help and manuals.
 

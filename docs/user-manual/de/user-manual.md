@@ -2281,8 +2281,7 @@ ohne führenden Schrägstrich. Der Job liest jede Pflichtdatei aus dem neuen Arc
 zurück und vergleicht ihre Bytes. Fehlende, ausgeschlossene oder abweichende
 Dateien führen zum Fehler; lokale Exporte bleiben erhalten. Das Manifest im
 Archiv beschreibt den Exportzeitpunkt; das lokale Ergebnis und der Jobablauf
-dokumentieren die spätere Archivprüfung. **Archiviert und geprüft bedeutet
-nicht, dass die Datenbank-Wiederherstellung getestet wurde.**
+dokumentieren die spätere Archivprüfung. **Diese Rückleseprüfung prüft keinen Import des Dumps in eine Testdatenbank.**
 
 ### 19.3 Lokale Aufbewahrung und unterbrochene Läufe
 
@@ -2291,7 +2290,10 @@ mit zehn Einträgen pro Seite. **Alle**, **Job-Sicherungen** und **Manuelle Dump
 filtern die Herkunft; unklare ältere Einträge bleiben unter **Nicht zugeordnet**
 sichtbar. Ein manuell gestarteter Backup-Job zählt ebenfalls als Job-Sicherung;
 **Manuelle Dumps** meint die Aktion **Test-Dump erstellen** im Datenbankprofil.
-**Details** öffnet den vollständigen Pfad, Größen und die bestätigte Archivierung.
+Der Tabellenstatus **Archiviert** bestätigt die Archivierung. **Details** öffnet
+den vollständigen Pfad und Größen und erklärt den vollständigen Rücklesevergleich
+anhand von Dateigröße und Prüfsumme. Separate Restore-Tests werden in ihrer
+eigenen Ansicht geführt.
 **Lokal belegt** umfasst die regulären Dateien des Laufverzeichnisses einschließlich
 Manifest und gegebenenfalls unvollständiger Dateien. Die Löschaktion bleibt dort
 mit Bestätigung des genauen Verzeichnisses verfügbar. Auf schmalen Bildschirmen
