@@ -127,10 +127,13 @@ def verify_ci_release(repo: Path, base: str, compare_test: bool) -> None:
         if hashlib.sha256(original).hexdigest() != expected:
             raise ValueError(f'Consumed note fragment differs from tested content: {name}')
     if compare_test:
-        subprocess.run(['git', 'fetch', '--no-tags', '--depth=1', 'origin', 'test-channel'], cwd=repo, check=True)
+        version = release.manifest_version(repo/'borg-backup-ui.plg')
+        from build_targets import validate_version
+        validate_version(version)
+        subprocess.run(['git', 'fetch', '--no-tags', '--depth=1', 'origin',
+                        'refs/tags/test-candidates/' + version], cwd=repo, check=True)
         snapshot = str(release.run_git(repo, 'rev-parse', 'FETCH_HEAD')).strip()
         manifest = ET.fromstring(release.run_git(repo, 'show', f'{snapshot}:borg-backup-ui-test.plg', text=False))
-        version = release.manifest_version(repo/'borg-backup-ui.plg')
         if manifest.attrib.get('version') != version:
             raise ValueError('Release version differs from the test snapshot')
         package = repo/'releases'/f'borg-backup-ui-{version}.txz'

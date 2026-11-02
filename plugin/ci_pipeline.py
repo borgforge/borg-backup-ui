@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Prepare and verify local CI artifacts; never publish, push or install (#671).
 
-These previews are not release attestations. Existing release entrypoints remain
-responsible for pushed-commit checks, user approval and public/private guards.
+These artifacts do not authorize publication. The trusted hosted controller
+verifies GitHub CI, source identity and approval; private guards still apply.
 """
 from __future__ import annotations
 
@@ -37,10 +37,16 @@ def local_output(repo: Path, output: Path) -> Path:
 
 
 def testing_manifest(text: str, version: str) -> str:
-    """Render the existing testing channel identity without modifying its feed."""
+    """Render testing URLs and the established Unraid display/launch metadata."""
     spec = target('unraid-legacy', 'testing')
     text = re.sub(r'<!ENTITY pluginURL\s+"[^"]*">', f'<!ENTITY pluginURL "{spec["plugin_url"]}">', text)
     text = re.sub(r'<!ENTITY pkgurl\s+"[^"]*">', f'<!ENTITY pkgurl "{spec["package_url"].format(version=version)}">', text)
+    for key, value in {'Title': 'Borg Backup UI', 'launch': 'Settings/borg-backup-ui'}.items():
+        pattern = rf'(<PLUGIN\b[^>]*?)\b{key}="[^"]*"'
+        if re.search(pattern, text, re.DOTALL):
+            text = re.sub(pattern, lambda m: m.group(1) + f'{key}="{value}"', text, count=1, flags=re.DOTALL)
+        else:
+            text = text.replace('<PLUGIN ', f'<PLUGIN {key}="{value}" ', 1)
     return re.sub(r'description="[^"]*"', 'description="TEST CHANNEL - Web UI for Borg Backup. Install this only on test systems."', text, count=1)
 
 
@@ -99,8 +105,8 @@ def write_result(output: Path, manifest: Path, package: Path, result: dict) -> N
 def prepare(repo: Path, output: Path, version: str, platform: str) -> None:
     """Build the exact clean HEAD through the shared builder, without publication.
 
-    Intended after CI checks or local preflight. This does not issue the local
-    release attestation or bypass the deploy entrypoint's separate requirements.
+    Used by the read-only build job after GitHub CI, or for a local preview.
+    Produces no publication authority; the trusted publisher verifies CI again.
     """
     target(platform, 'testing')
     validate_version(version)
@@ -124,7 +130,7 @@ def stable_preview(repo: Path, output: Path, version: str, platform: str) -> Non
     """Prepare stable metadata from an exact test snapshot without rebuilding.
 
     Requires HEAD == origin/main and matching tested source/notes. Fetching refs
-    is read-only; callers must fetch main/test-channel before invoking this.
+    is read-only; callers must fetch main and the candidate tag beforehand.
     The exported source tree is disposable, and no Git refs are changed here.
     """
     target(platform, 'stable')
@@ -133,7 +139,7 @@ def stable_preview(repo: Path, output: Path, version: str, platform: str) -> Non
     head = str(release.run_git(repo, 'rev-parse', 'HEAD')).strip()
     if head != str(release.run_git(repo, 'rev-parse', 'origin/main')).strip():
         raise ValueError('Stable preview requires the exact origin/main commit')
-    snapshot = str(release.run_git(repo, 'rev-parse', 'origin/test-channel')).strip()
+    snapshot = str(release.run_git(repo, 'rev-parse', 'refs/tags/test-candidates/' + version)).strip()
     output = local_output(repo, output)
     package = output / f'borg-backup-ui-{version}.txz'
     manifest = output / 'borg-backup-ui-test.plg'

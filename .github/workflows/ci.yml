@@ -1,37 +1,51 @@
 name: CI
+run-name: CI ${{ inputs.source_sha || github.sha }}
 on:
   pull_request:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      source_sha:
+        description: 'Optional exact source commit requested by the testing workflow'
+        type: string
 permissions:
   contents: read
+  actions: read
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ inputs.source_sha || github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
   plan:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     outputs:
-      mode: ${{ steps.delta.outputs.mode }}
-      base: ${{ steps.delta.outputs.base }}
+      mode: ${{ steps.plan.outputs.mode }}
+      base: ${{ steps.plan.outputs.base }}
+      sha: ${{ steps.plan.outputs.sha }}
+      tests_run_id: ${{ steps.plan.outputs.tests_run_id }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 2
           persist-credentials: false
-      - id: delta
+      - id: plan
         env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: |
-          mode="$(python3 plugin/ci_checks.py classify --base "$BASE")"
-          echo "mode=$mode" >> "$GITHUB_OUTPUT"
-          echo "base=$BASE" >> "$GITHUB_OUTPUT"
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: python3 plugin/ci_evidence.py plan
   checks:
     needs: plan
-    if: needs.plan.outputs.mode == 'source'
+    if: needs.plan.outputs.mode == 'source' && needs.plan.outputs.tests_run_id == ''
     uses: ./.github/workflows/checks.yml
+    with:
+      source_sha: ${{ needs.plan.outputs.sha }}
+  audit:
+    needs: plan
+    uses: ./.github/workflows/security.yml
+    with:
+      source_sha: ${{ needs.plan.outputs.sha }}
   release-artifacts:
     needs: plan
     if: needs.plan.outputs.mode == 'artifact'
@@ -51,20 +65,44 @@ jobs:
           python3 plugin/ci_checks.py verify-release --base "$BASE" "${args[@]}"
   result:
     name: CI result
-    needs: [plan, checks, release-artifacts]
+    needs: [plan, checks, audit, release-artifacts]
     if: always()
     runs-on: ubuntu-24.04
-    timeout-minutes: 2
+    timeout-minutes: 10
     steps:
       - env:
           PLAN_RESULT: ${{ needs.plan.result }}
           MODE: ${{ needs.plan.outputs.mode }}
+          REUSED_TESTS: ${{ needs.plan.outputs.tests_run_id }}
           SOURCE_RESULT: ${{ needs.checks.result }}
+          AUDIT_RESULT: ${{ needs.audit.result }}
           ARTIFACT_RESULT: ${{ needs.release-artifacts.result }}
         run: |
           test "$PLAN_RESULT" = success
+          test "$AUDIT_RESULT" = success
           case "$MODE" in
-            source) test "$SOURCE_RESULT" = success ;;
+            source)
+              if [ -n "$REUSED_TESTS" ]; then
+                test "$SOURCE_RESULT" = skipped
+                echo "Full checks reused from GitHub run $REUSED_TESTS" >> "$GITHUB_STEP_SUMMARY"
+              else test "$SOURCE_RESULT" = success; fi ;;
             artifact) test "$ARTIFACT_RESULT" = success ;;
             *) exit 1 ;;
           esac
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: needs.plan.outputs.mode == 'source'
+        with:
+          persist-credentials: false
+      - name: Record exact checked tree and original full test run
+        if: needs.plan.outputs.mode == 'source'
+        env:
+          SOURCE_SHA: ${{ needs.plan.outputs.sha }}
+          TESTS_RUN_ID: ${{ needs.plan.outputs.tests_run_id }}
+        run: python3 plugin/ci_evidence.py record
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: needs.plan.outputs.mode == 'source'
+        with:
+          name: ci-proof-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .release-tmp/ci/ci-proof.json
+          retention-days: 90
+          if-no-files-found: error

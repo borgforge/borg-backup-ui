@@ -247,33 +247,51 @@ def test_release_pr_must_match_immutable_test_snapshot_bytes(tmp_path):
     tested_package = snapshot/'releases'/package.name
     tested_package.write_bytes(package.read_bytes())
     snapshot_git('add', '.'); snapshot_git('commit', '-m', 'Test snapshot')
-    snapshot_git('push', str(remote), 'test-channel')
+    snapshot_git('tag', 'test-candidates/2026.10.31.1600')
+    snapshot_git('push', str(remote), 'test-channel', 'refs/tags/test-candidates/2026.10.31.1600')
     git('remote', 'add', 'origin', str(remote))
     checks.verify_ci_release(repo, base, True)
     tested_package.write_bytes(b'different package bytes')
     snapshot_git('add', '.'); snapshot_git('commit', '-m', 'Changed test snapshot')
     snapshot_git('push', str(remote), 'test-channel')
-    with pytest.raises(ValueError, match='exact tested bytes'):
+    # A later rotating feed must not change the stable candidate's identity.
+    checks.verify_ci_release(repo, base, True)
+    (repo/'releases'/package.name).write_bytes(b'tampered stable bytes')
+    git('add', '.'); git('commit', '-m', 'Corrupted stable bytes')
+    with pytest.raises(RuntimeError, match='MD5'):
         checks.verify_ci_release(repo, base, True)
 
 
-def test_public_workflows_have_no_publication_authority():
-    """Reject privilege regressions and mutable third-party actions in all workflows."""
+def test_workflows_isolate_publication_authority_to_protected_main_jobs():
+    """Keep PR/build jobs read-only and bot secrets inside protected main jobs."""
     for path in (ROOT / '.github/workflows').glob('*.yml'):
         text = path.read_text()
         workflow = yaml.load(text, Loader=yaml.BaseLoader)
-        assert workflow['permissions'] == {'contents': 'read'}, path
+        assert workflow['permissions'].get('contents') == 'read', path
+        assert set(workflow['permissions'].values()) == {'read'}, path
         assert not {'pull_request_target', 'workflow_run'} & workflow['on'].keys(), path
-        assert 'secrets.' not in text and 'secrets: inherit' not in text, path
-        assert not re.search(r'\bgit push\b|\bgh release\b|\./plugin/(deploy-test|promote-release)', text), path
+        assert 'secrets: inherit' not in text, path
         for job in workflow['jobs'].values():
-            assert 'environment' not in job  # Activation needs a separate reviewed change.
+            if 'secrets.' in str(job):
+                assert set(workflow['on']) == {'workflow_dispatch'}
+                assert job['environment'] in {'testing', 'stable'}
+                for step in job['steps']:
+                    if step.get('uses', '').startswith('actions/checkout@'):
+                        assert 'ref' not in step['with']  # default dispatch main, never PR
+                assert 'refs/heads/main' in text
+            else:
+                assert 'environment' not in job
             for step in job.get('steps', []):
                 action = step.get('uses', '')
                 if action:
                     assert re.fullmatch(r'actions/[\w-]+@[0-9a-f]{40}', action), action
                 if action.startswith('actions/checkout@'):
                     assert step['with']['persist-credentials'] == 'false'
+                if action.startswith('actions/upload-artifact@'):
+                    assert 'github.run_attempt' in step['with']['name'], 'Reruns must not collide with earlier artifacts'
     ci_workflow = yaml.load((ROOT/'.github/workflows/ci.yml').read_text(), Loader=yaml.BaseLoader)
     assert ci_workflow['on']['push']['branches'] == ['main']
-    assert 'push' not in yaml.load((ROOT/'.github/workflows/testing-release.yml').read_text(), Loader=yaml.BaseLoader)['on']
+    testing = yaml.load((ROOT/'.github/workflows/testing-release.yml').read_text(), Loader=yaml.BaseLoader)
+    assert 'secrets.' not in str(testing['jobs']['build'])
+    assert 'checks.yml' not in str(testing)  # the resolver reuses/requests CI evidence
+    assert 'push' not in testing['on']

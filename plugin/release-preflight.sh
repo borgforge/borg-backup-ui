@@ -24,12 +24,8 @@ case "$branch" in
     ;;
 esac
 
-echo "==> Hole origin/main und origin/test-channel"
-if [[ -n "$SECURITY_CANDIDATE" ]]; then
-  git -C "$REPO_DIR" fetch origin main >/dev/null 2>&1
-else
-  git -C "$REPO_DIR" fetch origin main test-channel >/dev/null 2>&1
-fi
+echo "==> Hole origin/main"
+git -C "$REPO_DIR" fetch --prune origin main >/dev/null 2>&1
 
 echo "==> Pruefe sauberen Arbeitsbaum"
 if [[ -n "$(git -C "$REPO_DIR" status --porcelain=v1 --untracked-files=all)" ]]; then
@@ -89,7 +85,9 @@ if [[ -n "$SECURITY_CANDIDATE" ]]; then
   python3 "$SCRIPT_DIR/security_workflow.py" verify --candidate "$SECURITY_CANDIDATE" --version "$version" >/dev/null
   test_manifest="$(cat "$SECURITY_CANDIDATE/release-template.plg")"
 else
-  test_manifest="$(git -C "$REPO_DIR" show origin/test-channel:borg-backup-ui-test.plg)"
+  git -C "$REPO_DIR" fetch --no-tags origin "refs/tags/test-candidates/${version}"
+  test_snapshot="$(git -C "$REPO_DIR" rev-parse FETCH_HEAD)"
+  test_manifest="$(git -C "$REPO_DIR" show "${test_snapshot}:borg-backup-ui-test.plg")"
 fi
 test_version="$(sed -n 's/.*<!ENTITY version   "\([^"]*\)">.*/\1/p' <<<"$test_manifest" | head -n1)"
 if [[ -z "$version" || "$version" != "$test_version" ]]; then
@@ -103,7 +101,7 @@ trap 'rm -f "$test_package"' EXIT
 if [[ -n "$SECURITY_CANDIDATE" ]]; then
   cp "$SECURITY_CANDIDATE/borg-backup-ui-${version}.txz" "$test_package"
 else
-  git -C "$REPO_DIR" show "origin/test-channel:releases/borg-backup-ui-${version}.txz" >"$test_package"
+  git -C "$REPO_DIR" show "${test_snapshot}:releases/borg-backup-ui-${version}.txz" >"$test_package"
 fi
 stable_sha="$(sha256sum "$package" | awk '{print $1}')"
 test_sha="$(sha256sum "$test_package" | awk '{print $1}')"

@@ -1,5 +1,12 @@
 # Changelog
 
+## Pending - Hosted test publication and stable preparation (#677)
+
+- Make GitHub CI authoritative for full-source checks; local development uses focused tests. Reuse successful full checks only for the identical Git tree/policy and verified original run, while dependency audits remain fresh.
+- Replace public local preflight/build/promotion with GitHub dispatch clients. Separate candidate builds from protected main-only bot publishers; publish immutable candidate tags and automatically prepare approved byte-identical stable release PRs.
+- Document environment secrets, main/tag rulesets, initial activation and failure recovery. Preserve the separate confidential advisory workflow; no stable artifacts or public user release notes in this internal change.
+- Stabilize the repository-card browser test by letting resize/observer rendering settle before capturing its geometry baseline; keep the existing layout assertions unchanged.
+
 ## Pending - Apprise 2.1 and notification dependency fixes (#672)
 
 - Upgrade the hash-pinned vendor runtime from Apprise 1.13.1 to 2.1.0, certifi to 2026.10.23, OAuthlib to 4.0.1 and urllib3 to 2.8.0. The updated lock resolves the six distinct upstream advisories reported by the dependency audit without suppressions; this does not establish exploitability of every advisory in this application's client usage.

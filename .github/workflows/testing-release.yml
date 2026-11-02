@@ -1,48 +1,69 @@
-name: Testing candidate (no publication)
+name: Publish testing candidate
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Candidate version: YYYY.MM.DD.HHMM'
+        description: 'New candidate version: YYYY.MM.DD.HHMM'
         required: true
         type: string
+      pr_number:
+        description: 'Open PR number; leave empty to test current main'
+        type: string
       platform:
-        description: 'Unraid 8 is reserved and fails closed until SDK validation'
+        description: 'Unraid 8 remains blocked until SDK validation'
         type: choice
         options: [unraid-legacy, unraid-8]
         default: unraid-legacy
 permissions:
   contents: read
+  actions: read
 concurrency:
-  group: candidate-${{ inputs.platform }}-${{ inputs.version }}
+  group: publish-testing
   cancel-in-progress: false
 jobs:
-  target:
+  resolve:
+    if: github.ref == 'refs/heads/main'
+    environment: testing
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 50
+    outputs:
+      sha: ${{ steps.select.outputs.sha }}
+      base: ${{ steps.select.outputs.base }}
+      head: ${{ steps.select.outputs.head }}
+      pr: ${{ steps.select.outputs.pr }}
+      ci_run: ${{ steps.select.outputs.ci_run }}
+      existing: ${{ steps.select.outputs.existing }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - env:
+      - id: select
+        env:
+          GH_TOKEN: ${{ secrets.BBUI_BOT_TOKEN }}
+          BBUI_ENVIRONMENT: testing
           PLATFORM: ${{ inputs.platform }}
           VERSION: ${{ inputs.version }}
-        run: PYTHONPATH=plugin python3 -c 'import os; from build_targets import target,validate_version; target(os.environ["PLATFORM"],"testing"); validate_version(os.environ["VERSION"])'
-  checks:
-    needs: target
-    uses: ./.github/workflows/checks.yml
+          PR_NUMBER: ${{ inputs.pr_number }}
+        run: python3 plugin/ci_release.py resolve
+  audit:
+    needs: resolve
+    uses: ./.github/workflows/security.yml
+    with:
+      source_sha: ${{ needs.resolve.outputs.sha }}
   build:
-    needs: checks
+    needs: [resolve, audit]
+    if: needs.resolve.outputs.existing == 'false'
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 25
     env:
-      TMPDIR: ${{ github.workspace }}/.release-tmp/ci/tmp
+      TMPDIR: ${{ github.workspace }}/.release-tmp/tmp
       PIP_CACHE_DIR: ${{ github.workspace }}/.release-tmp/pip-cache
       PLATFORM: ${{ inputs.platform }}
       VERSION: ${{ inputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.resolve.outputs.sha }}
           fetch-depth: 0
           persist-credentials: false
       - run: mkdir -p "$TMPDIR" "$PIP_CACHE_DIR"
@@ -53,16 +74,46 @@ jobs:
         with:
           path: .release-tmp/pip-cache
           key: wheels-v1-${{ runner.os }}-${{ runner.arch }}-py312-${{ hashFiles('plugin/apprise-requirements.lock') }}
-      - name: Prepare candidate only
+      - name: Build verified source without publication credentials
         run: |
           umask 0022
-          python plugin/ci_pipeline.py prepare --platform "$PLATFORM" --version "$VERSION" --output .release-tmp/candidate
+          python3 plugin/ci_pipeline.py prepare --platform "$PLATFORM" --version "$VERSION" --output .release-tmp/candidate
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: candidate-${{ inputs.platform }}-${{ github.run_id }}
-          path: |
-            .release-tmp/candidate/artifacts/*
-            .release-tmp/candidate/metrics.jsonl
+          name: candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .release-tmp/candidate/artifacts/*
           compression-level: 0
           retention-days: 14
           if-no-files-found: error
+  publish:
+    needs: [resolve, audit, build]
+    if: >-
+      always() && needs.resolve.result == 'success' && needs.audit.result == 'success' &&
+      (needs.build.result == 'success' ||
+      (needs.resolve.outputs.existing == 'true' && needs.build.result == 'skipped'))
+    environment: testing
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      PLATFORM: ${{ inputs.platform }}
+      VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Download data from this attempt without bot credentials
+        if: needs.resolve.outputs.existing == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 plugin/ci_release.py download
+      - name: Verify and publish with reviewed main code
+        env:
+          GH_TOKEN: ${{ secrets.BBUI_BOT_TOKEN }}
+          BBUI_ENVIRONMENT: testing
+          SHA: ${{ needs.resolve.outputs.sha }}
+          BASE: ${{ needs.resolve.outputs.base }}
+          HEAD: ${{ needs.resolve.outputs.head }}
+          PR: ${{ needs.resolve.outputs.pr }}
+          CI_RUN: ${{ needs.resolve.outputs.ci_run }}
+          EXISTING: ${{ needs.resolve.outputs.existing }}
+        run: python3 plugin/ci_release.py publish

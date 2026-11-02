@@ -13,11 +13,13 @@ RELEASE_BRANCH="${RELEASE_BRANCH:-codex/release-${VERSION}}"
 TMP_ROOT="${REPO_DIR}/.release-tmp"
 SECURITY_CANDIDATE=""
 PUBLISH_SECURITY=""
+CONFIRM_TESTED=""
 shift || true
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --security-candidate) SECURITY_CANDIDATE="${2:?Missing candidate}"; shift 2;;
     --publish-security) PUBLISH_SECURITY="${2:?Missing advisory}"; shift 2;;
+    --confirm-tested) CONFIRM_TESTED="--confirm-tested"; shift;;
     *) echo "Unknown argument: $1" >&2; exit 2;;
   esac
 done
@@ -32,6 +34,9 @@ if [[ -n "$SECURITY_CANDIDATE" ]]; then
 else
   [[ -z "$PUBLISH_SECURITY" ]] || { echo 'Private candidate required' >&2; exit 2; }
   python3 "$SCRIPT_DIR/security_workflow.py" guard-public
+  args=()
+  if [[ -n "$CONFIRM_TESTED" ]]; then args+=("$CONFIRM_TESTED"); fi
+  exec python3 "$SCRIPT_DIR/ci_release.py" dispatch-stable --version "$VERSION" "${args[@]}"
 fi
 
 

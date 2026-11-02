@@ -93,23 +93,6 @@ def test_source_digest_tracks_project_license_as_package_input(tmp_path: Path) -
     assert release_workflow.source_digest(repo, "HEAD") != initial
 
 
-def test_attestation_rejects_dirty_and_stale_source(tmp_path: Path) -> None:
-    repo = init_repo(tmp_path)
-    release_workflow.write_attestation(repo, "HEAD")
-    release_workflow.verify_attestation(repo)
-
-    (repo / "ui" / "index.html").write_text("<html>dirty</html>\n", encoding="utf-8")
-    with pytest.raises(RuntimeError, match="Working tree is not clean"):
-        release_workflow.verify_attestation(repo)
-
-    git(repo, "restore", "ui/index.html")
-    (repo / "ui" / "index.html").write_text("<html>new commit</html>\n", encoding="utf-8")
-    git(repo, "add", "ui/index.html")
-    git(repo, "commit", "-m", "New source")
-    with pytest.raises(RuntimeError, match="stale"):
-        release_workflow.verify_attestation(repo)
-
-
 def test_implementation_delta_rejects_stable_artifacts_and_version_bump(
     tmp_path: Path,
 ) -> None:
@@ -379,27 +362,15 @@ def test_release_workflow_cli_reads_inline_installer_md5(tmp_path: Path) -> None
     assert result.stdout.strip() == "abcdef0123456789abcdef0123456789"
 
 
-def test_source_preflight_is_fail_fast_and_runs_pytest_once() -> None:
-    script = (ROOT / "plugin" / "mr-preflight.sh").read_text(encoding="utf-8")
-
-    assert script.count("pytest -q") == 1
-    assert script.index("verify-implementation-delta") < script.index("pytest -q")
-    assert script.index("status --porcelain") < script.index("pytest -q")
-    assert script.index("ls-remote --heads") < script.index("pytest -q")
-    assert script.index("write-attestation") > script.index("pytest -q")
-
-
-def test_test_deploy_requires_attestation_and_exact_commit() -> None:
-    script = (ROOT / "plugin" / "deploy-test.sh").read_text(encoding="utf-8")
-
-    assert "verify-attestation" in script
-    assert "rewrite-package-installer" in script
-    assert "build-candidate.sh" in script
-    shared = (ROOT / "plugin/build-candidate.sh").read_text()
-    assert 'git -C "$1" archive "$2" --' in shared
-    assert '\' -- "$REPO_DIR" "$SOURCE_COMMIT" "$STAGE_DIR"' in shared
-    assert 'REMOTE_SHA" != "$SOURCE_COMMIT' in script
-    assert "pytest -q" not in script
+def test_public_entrypoints_delegate_without_local_full_tests() -> None:
+    for name, command in (("mr-preflight.sh", "preflight"), ("deploy-test.sh", "dispatch-test")):
+        script = (ROOT / "plugin" / name).read_text()
+        assert 'security_workflow.py" guard-public' in script
+        assert f'ci_release.py" {command}' in script
+        assert "pytest -q" not in script
+        assert "write-attestation" not in script
+        assert "build-candidate.sh" not in script
+    assert 'security_workflow.py" preflight' in (ROOT / "plugin/mr-preflight.sh").read_text()
 
 
 def test_stable_promotion_reuses_exact_package_from_clean_current_main() -> None:
