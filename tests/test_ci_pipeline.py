@@ -287,6 +287,8 @@ def test_workflows_isolate_publication_authority_to_protected_main_jobs():
                     assert re.fullmatch(r'actions/[\w-]+@[0-9a-f]{40}', action), action
                 if action.startswith('actions/checkout@'):
                     assert step['with']['persist-credentials'] == 'false'
+                if action.startswith('actions/upload-artifact@'):
+                    assert 'github.run_attempt' in step['with']['name'], 'Reruns must not collide with earlier artifacts'
     ci_workflow = yaml.load((ROOT/'.github/workflows/ci.yml').read_text(), Loader=yaml.BaseLoader)
     assert ci_workflow['on']['push']['branches'] == ['main']
     testing = yaml.load((ROOT/'.github/workflows/testing-release.yml').read_text(), Loader=yaml.BaseLoader)

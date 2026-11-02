@@ -189,7 +189,9 @@ those findings must be resolved before publication can pass the audit.
 
 - **Missing/expired CI evidence:** request testing, or run CI on main with the
   selected exact SHA. The resolver starts at most one CI and waits up to 45 min.
-- **Failed CI:** fix the change or rerun the failed CI, then retry testing.
+- **Failed CI:** fix the change or use **Re-run all jobs**, then retry testing.
+  Evidence belongs to a complete run attempt; mixing successful jobs across
+  partial reruns is not a reusable proof.
 - **PR mergeability pending:** GitHub is still calculating; retry resolution.
 - **Version conflict/source moved/main changed:** use a new version/run from the
   current integration. Do not edit a candidate tag or rewrite a proof.
