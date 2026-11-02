@@ -201,9 +201,13 @@ const {chromium} = require('playwright');
       await page.setViewportSize({width,height:1100});
       await page.evaluate(language=>{window.lang=language;updateBorgProgressDisplays({running:live});},language);
       assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`Metrics fit ${width}/${language}`);
-      const bar=await page.locator('#job-card-running progress').boundingBox();
-      const metrics=await page.locator('#job-card-running .borg-progress-metrics').boundingBox();
-      assert.ok(metrics.y>=bar.y+bar.height,`Metrics appear below bar ${width}/${language}`);
+      // Read both positions in one frame: responsive scroll anchoring can move
+      // the viewport between separate browser calls after a card was revealed.
+      const geometry=await runningCard.evaluate(node=>({
+        barBottom:node.querySelector('progress').getBoundingClientRect().bottom,
+        metricsTop:node.querySelector('.borg-progress-metrics').getBoundingClientRect().top
+      }));
+      assert.ok(geometry.metricsTop>=geometry.barBottom,`Metrics appear below bar ${width}/${language}: ${JSON.stringify(geometry)}`);
       assert.doesNotMatch(await page.locator('#job-card-running .job-live-metrics').textContent(),/Letzte Borg-Rückmeldung|Last Borg update/);
 
       if(process.env.BBUI_SCREENSHOT_DIR)await page.locator('#job-card-running').screenshot({animations:'disabled',path:`${process.env.BBUI_SCREENSHOT_DIR}/live-metrics-${language}-${width}.png`});
