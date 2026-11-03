@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.11.02.1337">
+<!ENTITY version   "2026.11.03.1237">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -20,6 +20,19 @@
 
 <CHANGES>
 <![CDATA[
+###2026.11.03.1237###
+### Bug Fixes
+
+- Fix automatic removal of verified database dumps on Btrfs pools. Preserve the archived status of all verified database profiles if local cleanup fails, and log cleanup start, completion and failure separately. Older and manual dumps remain unchanged. (#694)
+
+### Improvements
+
+- Show configured database backups with a Database marker on job cards. Add export start, progress and outcome messages to the job log, separate from Borg archive verification. Clarify that database exports run automatically before Docker/VM shutdown and Borg backup, without an additional pre-script. (#689)
+- Compare local database dumps in a compact table with separate job/manual filters, newest-first ordering, pagination and expandable paths and cleanup actions. Clarify that a job archives only its current dumps and manifest, while older and manual dumps remain governed by local retention. (#691)
+- Use the clear Archived status for local database dumps and explain file-size/checksum verification in the details without implying that a separate restore test was not performed. (#691)
+- Explain manual versus automatic local-dump retention beside the profile setting and show the policy recorded at creation in each run's details, in German and English. (#691)
+- Match Browse & Restore and Restore History width to Jobs. Reports and Browse & Restore now start with Choose job and load job-specific data only after an explicit selection, in German and English. (#692)
+
 ###2026.11.02.1337###
 ### Migration and compatibility
 
@@ -65,40 +78,6 @@
 - Show the file count of the newest archive. Clarify "Refresh statistics" and place its fetch timestamp beside the figures, including when automatic refresh is off. (#660)
 - Give archive names more horizontal space and keep them on one line. Full names remain available on hover and after opening an archive. (#660)
 
-###2026.10.30.0912###
-### Bug Fixes
-
-- **Dashboard:** Removed the duplicate running-job row above attention items. Running jobs remain accessible through the existing Active runs links. (#637)
-- Skip the whole backup when an Unassigned Devices source under /mnt/disks or /mnt/remotes is not mounted, including leftover empty mount directories. Validate after Pre scripts and before database exports, service stops, and Borg operations (#639).
-- Show temporarily unmounted sources as availability warnings in System Health. Missing paths on mounted sources and inspection failures remain errors; existing history is preserved (#639).
-- Add spacing below the Jobs view tabs so the job group pane no longer touches their border (#643).
-
-### Improvements
-
-- **Compact job cards:** Separate cards use aligned status, schedule and restore-test columns, with one expandable detail area for workflow results and combined data/settings. Switching detail views keeps the same height. (#619)
-    - Workspace-attached view tabs and a framed location bar with consistently subtle outlined job counts replace the sidebar; full outcome messages appear only in expanded Workflow details.
-    - Start, Log and Cancel keep fixed positions; protected recovery phases disable Cancel without replacing it with a message. Action icons sit beneath the aligned Actions heading. Status badges use distinct symbols and subtle borderless fills, and restore dates align in a dedicated value column.
-    - Subtle VM, Docker, Pre-script and Post-script markers identify configured options; script tooltips show the assignment and post-run condition.
-    - Running jobs clearly distinguish the current action, step elapsed time and total runtime while preserving live counters, detailed results and saved outcomes.
-- **Repository cards:** Manage all registered repositories, including unassigned repositories, in separate expandable cards with exact storage-target filters, Jobs-style typography, four aligned fact columns, and all linked jobs. (#621)
-    - Overview, Archives, Maintenance, and Management share a stable detail height. Archive lists use five entries per page and disclose the existing loaded-list limit. Fixed archive/browser panes and scrolling file contents keep navigation buttons in place across folder changes.
-    - Maintenance keeps Start buttons in place and shows check scope, timestamps, duration, deleted archive names, and Borg-reported reclaimed space for Compact. Missing historical amounts remain distinct from zero.
-    - Existing archive deletion, retention confirmation, lifecycle blockers, and encrypted key recovery remain available.
-    - Group cards by storage target, reuse matching job/type icons, show missing key exports immediately, and use a left-hand disclosure like Jobs.
-    - Remove repository search and generic reachability badges. Show storage target/transport, explicit "Jobs: ..." links, archive counts, used space, and the cached-data timestamp. Only active work and concrete action warnings/errors add status notices; offline targets controlled by pre/post scripts remain normal.
-    - Retain masked execution details for successful maintenance runs, request verbose Compact output, recognize `0 B`, and hide technical archive IDs in the list.
-- **Dashboard:** Use lighter solid status colors consistently across backup charts and restore coverage. Needs attention uses a neutral card surface and warning triangles while retaining full error details. Server resource colors remain unchanged. (#623)
-- **Restore Tests:** Match Jobs with separate compact cards, location dividers, top navigation and subtly outlined location counts. Status indicators use icons and muted fills without bold text or borders. (#625)
-- **Restore test reports:** Expand reports directly inside each job card instead of switching tabs. Select earlier attempts in a stable-height panel; automatic refresh preserves selection, expanded details and scroll position. Historical reports, including those for removed jobs, remain accessible. Existing planning and run/cancel actions are retained. (#625)
-- **History:** Move location navigation above the full-width chronological table and match Jobs typography and subtle status icons. Skipped runs remain yellow. Original columns, detail expansion, log access, filters and pagination are retained. Locations appear only when jobs are configured there; removing the last job from the selected location returns the view to All locations. (#627)
-- **Reports:** Select a location and its backup job in a shared tab panel above the full-width analysis. Job icons, names, archive prefixes and search remain available, and the last selected job per location is remembered during the session. All existing metrics, growth values, trend charts, monthly results, restore details and on-demand repository information are retained. (#629)
-- **Browse & Restore:** Shared location and job tabs replace the secondary sidebar. Four visible steps guide archive selection, browsing, destination settings and review. Job changes confirm before resetting an existing selection; navigation stays in place for long content. Existing restore options, downloads, prechecks, execution monitoring and Restore History remain available. (#631)
-- **Browse & Restore:** The wizard fills the available window height and keeps Back, Next/Review, confirmation and Start in a persistent bottom action bar, including long restore plans. Short and narrow windows use an expandable location/job summary. Existing restore operations and Restore History remain available. (#633)
-- **Reports:** Reduced vertical spacing and made monthly status history scrollable with a fixed table heading. All months, metrics, trends and on-demand repository information remain available. (#635)
-- Reports and Browse & Restore now use a compact job summary and a searchable job-switch dialog with location filters. The last valid selection is remembered in the browser; existing reports, restore confirmation and Restore History remain available (#642).
-- **Live backup metrics:** Show Borg's rolling processing speed below the progress bar in the existing job view, without the last-update timestamp. An automatic background source scan adds approximate source size, progress and remaining archive-creation time for locally accessible sources, including mounted USB, SMB and SSH filesystems. Stale rates and unavailable estimates remain unknown. No per-job activation is required. The progress display appears immediately when Borg starts, without the previous 60-second delay. (#646)
-- **Borg command logging:** Backup logs now record the actual Borg invocation with a matching process exit code and unique ID. Manual repository maintenance keeps the same evidence in its execution details. Credentials are masked, argument boundaries are preserved, and existing support exports include the available log evidence. (#648)
-
 ]]>
 </CHANGES>
 
@@ -124,8 +103,8 @@ PLUGIN_DIR="/boot/config/plugins/${NAME}"
 PACKAGE_FILE="${PLUGIN_DIR}/${NAME}-${VERSION}.txz"
 PACKAGE_TMP="${PACKAGE_FILE}.tmp"
 PACKAGE_URL="&pkgurl;"
-EXPECTED_MD5="f5a94c260b7d0355e09440e3ac0ffac4"
-EXPECTED_SHA256="ac3898a9607b15bceccb0c7da1925838c7a31d2ecbef7abf441175e1d342ff59"
+EXPECTED_MD5="0f8e7b1c7f003f0cd17115bff7f38d64"
+EXPECTED_SHA256="e703b076eabc5d8718018b17f6cd6455153a38dd7091330ac86b820a6f3d1666"
 INSTALLED_MD5_FILE="${PLUGIN_DIR}/.installed-package-md5"
 VENDOR_DIR="${PLUGIN_DIR}/runtime/vendor"
 VENDOR_BUNDLE_DIR="${PLUGIN_DIR}/runtime/vendor-bundles"
