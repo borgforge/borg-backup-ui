@@ -1,7 +1,7 @@
 // ══════════════════════════════════════════════════════════════════════════════
 
 window.BBUI = window.BBUI || {};
-window.BBUI.reportState = window.BBUI.reportState || { data: null, job: null, jobs: [], borgInfo: null, borgInfoLoaded: false, location: null, selectedJobs: {}, loadRequest: 0 };
+window.BBUI.reportState = window.BBUI.reportState || { data: null, job: null, jobs: [], borgInfo: null, borgInfoLoaded: false, location: null, loadRequest: 0 };
 const reportState = window.BBUI.reportState;
 
 function reportsT(key, params = {}) {
@@ -10,15 +10,15 @@ function reportsT(key, params = {}) {
 // BERICHTE PAGE
 // ══════════════════════════════════════════════════════════════════════════════
 
-/** Load report-capable jobs and populate the shared location/job picker; retain a valid selection. */
+/** Load report-capable jobs without selecting one; only an explicit choice loads report data. */
 async function berichtInit() {
   const sel = document.getElementById('bericht-job-sel');
   if (!sel) return;
-  const previousKey = sel.value || window.BBUI.components?.jobPicker?.recalled('reports') || '';
   const initRequest = reportState.initRequest = (reportState.initRequest || 0) + 1;
   reportState.loadRequest = (reportState.loadRequest || 0) + 1;
   reportState.data = null;
   reportState.job = null;
+  reportState.location = null;
   reportState.borgInfo = null;
   reportState.borgInfoLoaded = false;
   _berichtUpdateSelection(null);
@@ -53,11 +53,6 @@ async function berichtInit() {
       opt.textContent = job.display_name;
       sel.appendChild(opt);
     }
-    const previous = reportState.jobs.find((job) => String(job.key) === previousKey);
-    if (previous) reportState.location = _berichtJobLocation(previous);
-    const available = _berichtLocations();
-    if (!available.includes(reportState.location)) reportState.location = available[0] || null;
-    _berichtSelectLocationJob(previousKey);
     _berichtRenderNavigation();
     await berichtLoad();
   } catch (e) {
@@ -76,9 +71,6 @@ async function berichtLoad() {
   reportState.job = reportState.jobs.find((job) => String(job.key) === jobKey) || null;
   if (reportState.job) {
     reportState.location = _berichtJobLocation(reportState.job);
-    reportState.selectedJobs ||= {};
-    reportState.selectedJobs[reportState.location] = jobKey;
-    window.BBUI.components?.jobPicker?.remember('reports', reportState.job);
   }
   _berichtRenderNavigation();
   _berichtUpdateSelection(reportState.job);
@@ -141,28 +133,13 @@ function _berichtJobLocation(job) {
   return String(job.location || 'local').toLowerCase();
 }
 
-/** Return occupied report locations in the established Jobs order. */
-function _berichtLocations() {
-  const order = ['local', 'usb', 'smb', 'storagebox'];
-  const rank = (location) => order.includes(location) ? order.indexOf(location) : order.length;
-  return [...new Set(reportState.jobs.map(_berichtJobLocation))]
-    .sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
-}
-
-/** Select the requested, remembered or first report job within the active location. */
-function _berichtSelectLocationJob(preferredKey = '') {
-  const jobs = reportState.jobs.filter((job) => _berichtJobLocation(job) === reportState.location);
-  const remembered = reportState.selectedJobs?.[reportState.location];
-  const selected = jobs.find((job) => String(job.key) === preferredKey)
-    || jobs.find((job) => String(job.key) === remembered) || jobs[0];
-  document.getElementById('bericht-job-sel').value = selected ? String(selected.key) : '';
-}
-
 /** Update the compact context and bind the shared picker without changing analysis. */
 function _berichtRenderNavigation() {
   const button = document.getElementById('report-source-toggle');
   if (!button) return;
   button.disabled = !reportState.jobs.length;
+  button.dataset.i18n = reportState.job ? 'jobPicker.change' : 'jobPicker.choose';
+  button.textContent = window.BBUI.components.i18n.t(button.dataset.i18n);
   button.onclick = () => window.BBUI.components.jobPicker.open({
     jobs: reportState.jobs, selected: document.getElementById('bericht-job-sel').value,
     icon: _berichtJobIcon, locationLabel: _berichtLocationLabel, trigger: button,
@@ -177,7 +154,7 @@ function _berichtUpdateSelection(job) {
   const title = document.getElementById('report-selection-title');
   const subtitle = document.getElementById('report-selection-subtitle');
   if (title) {
-    title.textContent = job?.name || job?.display_name || reportsT('noJobSelected');
+    title.textContent = job?.name || job?.display_name || window.BBUI.components.i18n.t('jobPicker.choose');
     title.title = title.textContent;
   }
   const icon = document.getElementById('report-selection-icon');

@@ -39,7 +39,7 @@
     modal.id = 'job-picker-dialog';
     modal.className = 'job-picker-dialog';
     modal.setAttribute('aria-labelledby', 'job-picker-title');
-    modal.innerHTML = `<header><h2 id="job-picker-title">${escHtml(t('change'))}</h2><button type="button" class="btn btn-secondary" data-picker-close aria-label="${escHtml(t('close'))}">×</button></header>
+    modal.innerHTML = `<header><h2 id="job-picker-title">${escHtml(t(selected ? 'change' : 'choose'))}</h2><button type="button" class="btn btn-secondary" data-picker-close aria-label="${escHtml(t('close'))}">×</button></header>
       <nav class="job-picker-locations" aria-label="${escHtml(t('locations'))}"></nav>
       <label class="job-picker-search" for="job-picker-search">${escHtml(t('search'))}<input id="job-picker-search" type="search" autocomplete="off"></label>
       <div class="job-picker-results"></div><footer><span id="job-picker-count" role="status"></span><button type="button" class="btn btn-secondary" data-picker-close>${escHtml(t('cancel'))}</button></footer>`;

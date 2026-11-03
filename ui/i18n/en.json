@@ -1,5 +1,6 @@
 {
   "jobPicker": {
+    "choose": "Choose job",
     "change": "Switch job",
     "close": "Close",
     "cancel": "Cancel",

@@ -1,5 +1,6 @@
 {
   "jobPicker": {
+    "choose": "Job wählen",
     "change": "Job wechseln",
     "close": "Schließen",
     "cancel": "Abbrechen",

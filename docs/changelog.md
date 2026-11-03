@@ -1,5 +1,10 @@
 # Changelog
 
+## Pending - Consistent restore width and explicit job selection (#692)
+
+- Restore the Jobs-width limit and horizontal alignment for Browse & Restore while preserving the viewport-height wizard, internal scroll areas and visible action bar. Restore History retains page scrolling within the same width.
+- Start Reports and Restore without a job on page entry; ignore previous browser preferences and do not request report/archive data until selection. Show Choose job before selection and Switch job afterwards in both languages. Retain job-switch confirmation and stale-response protection.
+
 ## Pending - Compact retained database runs (#691)
 
 - Explain the selected local-dump retention beside the profile setting and expose the historical manifest policy in run details. Missing/unsupported values stay unknown, independent of later profile changes; cleanup behavior is unchanged.

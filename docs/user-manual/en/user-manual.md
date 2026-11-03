@@ -733,7 +733,7 @@ Reports help analyze trends:
 ### 6.2 Areas and Functions
 
 - **Compact job selection:** The selected job icon, name and actual location appear at the top. **Switch job** opens a dialog with location filters, counts and jobs including archive prefixes. Empty locations are omitted.
-- **Dialog search:** Filters jobs by name, archive prefix or identifier. Changing location clears the search without changing the active job. Selecting a job applies the change; Escape or Cancel closes without changes. The last selection is stored per page in this browser when browser storage is available. Removed jobs fall back to a valid selection.
+- **Dialog search:** Filters jobs by name, archive prefix or identifier. Changing location clears the search without changing the active job. Selecting a job applies the change; Escape or Cancel closes without changes. No job is preselected on page entry, even if an earlier selection was saved in the browser. Reports load only after an explicit job selection.
 - **Metrics:** Show aggregated values for the selected period.
 - **Trend tables and charts:** Show development over time.
 - **Monthly status history:** Keeps all months in a bounded scroll region with a fixed table heading. Use Tab and the arrow/Page keys to scroll with the keyboard. Switching jobs returns to the latest month. On smaller screens, the page still scrolls normally.
@@ -743,7 +743,7 @@ Reports help analyze trends:
 ### 6.3 Typical Actions
 
 1. Open **Reports**.
-2. Open **Switch job**, filter by location if needed, then select the job. The first report-capable job loads initially; a saved, still-valid selection takes precedence.
+2. Open **Choose job**, filter by location if needed, then select the job. The button then reads **Switch job**. Select a job again when reopening the page.
 3. Review runtimes, sizes, and trends.
 4. Load Borg repository information if repository details are needed.
 5. Compare suspicious values with **History** and logs.
@@ -782,9 +782,9 @@ The page has two tabs:
 
 ### 7.3 Restore Wizard
 
-The compact selection bar shows the configured icon, job name and actual location. **Switch job** opens the searchable dialog with location filters; only locations with backup jobs are offered. The last valid selection is stored for this page in this browser when browser storage is available. Changing location filters the offered jobs; selecting a job changes the restore source. Switching jobs asks for confirmation before resetting an existing archive, file and destination selection. Selection is locked during an active restore operation.
+The compact selection bar shows the configured icon, job name and actual location. **Switch job** opens the searchable dialog with location filters; only locations with backup jobs are offered. On page entry, **Choose job** appears with no preselection. Archives load only after an explicit job selection; earlier browser preferences are not automatically restored. Changing location filters the offered jobs; selecting a job changes the restore source. Switching jobs asks for confirmation before resetting an existing archive, file and destination selection. Selection is locked during an active restore operation.
 
-The wizard below contains four steps. The workspace fills the available window height; long content scrolls within it. Back, Next or Review, and the final review confirmation and start action remain visible in the bottom action bar. The compact source summary applies at every window size. The job dialog fits within the window; long job lists scroll inside it. The separate Restore History remains available and retains normal page scrolling.
+The page width and horizontal alignment match Jobs, including Restore History. The wizard below contains four steps. The workspace fills the available window height; long content scrolls within it. Back, Next or Review, and the final review confirmation and start action remain visible in the bottom action bar. The compact source summary applies at every window size. The job dialog fits within the window; long job lists scroll inside it. The separate Restore History remains available and retains normal page scrolling.
 
 #### Step 1: Select Archive
 
