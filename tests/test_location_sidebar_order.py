@@ -13,8 +13,8 @@ def test_all_location_sidebars_use_the_shared_fixed_order() -> None:
     sources = {
         "ui/js/pages/dashboard.js": "DASHBOARD_LOCATION_ORDER",
         "ui/js/pages/history.js": "HISTORY_LOCATIONS",
-        "ui/js/pages/reports.js": "const order",
         "ui/js/pages/restore-tests.js": "const order",
+        # Reports and Restore delegate their location filters to this shared picker.
         "ui/js/components/job-picker.js": "const order",
         "ui/js/pages/storage.js": "STORAGE_LOCATION_ORDER",
     }
