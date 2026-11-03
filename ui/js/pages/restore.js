@@ -190,7 +190,11 @@ function renderRestoreJobNavigation() {
     ? `${restoreJobIcon(selected)}<div><strong title="${escHtml(selected.name || selected.display_name || selected.key)}">${escHtml(selected.name || selected.display_name || selected.key)}</strong><small>${escHtml(restoreLocationLabel(selected.location || 'local'))}</small></div>`
     : escHtml(restoreT('chooseJob'));
   const button = document.getElementById('restore-source-toggle');
-  if (button) button.disabled = restoreState.assistBusy || !(restoreState.jobs || []).length;
+  if (button) {
+    button.disabled = restoreState.assistBusy || !(restoreState.jobs || []).length;
+    button.dataset.i18n = selected ? 'jobPicker.change' : 'jobPicker.choose';
+    button.textContent = window.BBUI.components.i18n.t(button.dataset.i18n);
+  }
 }
 
 /** Confirm before discarding a restore draft, then reset it and load the new job's archives.
@@ -268,7 +272,7 @@ function renderRestoreArchiveList() {
     const active = String(archive.name) === String(restoreState.archive);
     const date = archive.start ? String(archive.start).substring(0, 19).replace('T', ' ') : '';
     return `<button type="button" class="restore-archive-row ${active ? 'is-selected' : ''}" data-restore-archive="${escHtml(archive.name)}"><span class="restore-archive-radio">${active ? '●' : '○'}</span><span><strong>${escHtml(archive.name)}</strong><small>${escHtml(date)}</small></span><span class="ui-badge">${escHtml(restoreT('available'))}</span></button>`;
-  }).join('') || `<div class="restore-sidebar-empty">${escHtml(restoreT('noArchives'))}</div>`;
+  }).join('') || `<div class="restore-sidebar-empty">${escHtml(restoreT(restoreState.job ? 'noArchives' : 'selectJobFirst'))}</div>`;
 }
 
 function restoreArchiveFilterPopover(filters) {
@@ -961,8 +965,8 @@ function restoreClearArchives() {
   _restoreRenderSelectionSummary();
 }
 
+/** Load available jobs with an empty source on page entry; fetch archives only after explicit selection. */
 async function restoreInit() {
-  const selectedJob = restoreState.job || window.BBUI.components?.jobPicker?.recalled('restore') || '';
   const request = ++restoreState.sourceRequest;
   restoreState.job = '';
   restoreState.jobs = [];
@@ -1022,15 +1026,8 @@ async function restoreInit() {
         restoreState.jobs = (checkData.jobs || []).filter(job => !job.is_utility).map((job) => ({ ...job, location: job.location || 'local' }));
       }
     }
-    const selected = restoreState.jobs.find(job => String(job.key) === String(selectedJob)) || restoreState.jobs[0];
-    if (selected) {
-      sel.value = selected.key;
-      restoreState.job = selected.key;
-      restoreState.location = String(selected.location || 'local').toLowerCase();
-    }
     renderRestoreJobNavigation();
     renderRestoreSourceContext();
-    if (restoreState.job) await restoreLoadArchives();
   } catch (e) {
     if (request !== restoreState.sourceRequest) return;
     _restoreMsg(restoreT('loadJobsError', { message: e.message }), true);
@@ -1089,7 +1086,6 @@ async function restoreLoadArchives() {
   }
   restoreRenderArchiveFilterControls();
   restoreState.job = jobKey;
-  window.BBUI.components?.jobPicker?.remember('restore', restoreState.jobs.find(job => String(job.key) === String(jobKey)));
   restoreClearArchives();
   _restoreMsg('');
 

@@ -181,7 +181,8 @@ def test_database_only_sources_require_explicit_opt_in():
 from test_runtime_before_maintenance import run_backup
 
 @pytest.mark.parametrize('outcome', ['ok','failed','cancelled','archive_failed','warning','cleanup'])
-def test_runner_database_step_precedes_container_stop(run_backup, monkeypatch, tmp_path, outcome):
+def test_runner_database_step_precedes_container_stop(run_backup, monkeypatch, tmp_path, outcome, caplog):
+    caplog.set_level("INFO")
     import wizard_runner
     state=run_backup
     original=wizard_runner._load_env_from_job
@@ -208,6 +209,8 @@ def test_runner_database_step_precedes_container_stop(run_backup, monkeypatch, t
     monkeypatch.setattr(backup,'verify_archive',verify)
     monkeypatch.setattr(backup,'cleanup_run',lambda *a,**kw:state.actions.append('cleanup'))
     code=state.run()
+    assert 'Database backup phase started' in caplog.text
+    assert ('exported files verified in the Borg archive' in caplog.text) == (outcome in ('ok', 'warning', 'cleanup'))
     assert state.actions[0]=='database'
     if outcome in ('failed','cancelled'):
         assert 'create' not in state.actions and 'stop_docker' not in state.actions
@@ -216,6 +219,63 @@ def test_runner_database_step_precedes_container_stop(run_backup, monkeypatch, t
         assert state.actions.index('database') < state.actions.index('stop_docker') < state.actions.index('create') < state.actions.index('verify')
         assert code==(2 if outcome=='archive_failed' else 1 if outcome=='warning' else 0)
     assert ('cleanup' in state.actions)==(outcome=='cleanup')
+
+
+@pytest.mark.parametrize('failure', ['cleanup', 'manifest', None])
+def test_runner_persists_all_archive_proofs_before_cleanup(run_backup, monkeypatch, tmp_path, failure, caplog):
+    """A first-profile cleanup failure must not hide the second archive proof."""
+    import wizard_runner
+    caplog.set_level('INFO')
+    state = run_backup
+    original = wizard_runner._load_env_from_job
+    selected = [{'id': 'db-' + letter * 12, 'retention': 'after_archive'} for letter in 'ab']
+    results = []
+    for profile in selected:
+        directory = tmp_path / profile['id']
+        directory.mkdir()
+        result = {'directory': str(directory), 'files': [], 'profile_id': profile['id'], 'status': 'dump_completed'}
+        backup.write_manifest(result)
+        results.append(result)
+    def load(*args):
+        env, meta = original(*args)
+        meta.update(database_profile_ids=[p['id'] for p in selected], _database_profiles=selected)
+        return env, meta
+    monkeypatch.setattr(wizard_runner, '_load_env_from_job', load)
+    monkeypatch.setattr(backup, 'validate_sources', lambda *args: None)
+    monkeypatch.setattr(backup, 'reconcile_operations', lambda *args: None)
+    monkeypatch.setattr(backup, 'export_profiles', lambda *args, **kwargs: results)
+    def verify(repo, archive, rows, cancelled):
+        for row in rows:
+            row.update(status='archived', archived=True, archive=archive)
+    monkeypatch.setattr(backup, 'verify_archive', verify)
+    write_manifest = backup.write_manifest
+    def persist(row):
+        if failure == 'manifest' and row is results[1]:
+            raise OSError('manifest write failed')
+        write_manifest(row)
+    monkeypatch.setattr(backup, 'write_manifest', persist)
+    def cleanup(*args, **kwargs):
+        state.actions.append('cleanup')
+        if failure == 'cleanup':
+            raise OSError('cleanup failed')
+    monkeypatch.setattr(backup, 'cleanup_run', cleanup)
+    if failure:
+        with pytest.raises(OSError, match=failure + '.*failed'):
+            state.run()
+        assert 'prune' not in state.actions
+    else:
+        assert state.run() == 0
+    persisted = [json.loads((Path(row['directory']) / 'manifest.json').read_text()) for row in results]
+    if failure == 'manifest':
+        assert 'cleanup' not in state.actions
+    else:
+        assert all(row['status'] == 'archived' and row['archived'] for row in persisted)
+        assert state.actions.count('cleanup') == (1 if failure else 2)
+    if failure == 'cleanup':
+        assert 'automatic local cleanup failed' in caplog.text
+        assert 'automatic local cleanup completed' not in caplog.text
+    elif failure is None:
+        assert caplog.text.count('automatic local cleanup completed') == 2
 
 
 @pytest.mark.parametrize("managed", [False, True])

@@ -1,5 +1,29 @@
 # Changelog
 
+## Pending - Automatic database dump cleanup on Btrfs (#694)
+
+- Enumerate the pinned dump directory through a fresh descriptor so files created after opening the run are included on Btrfs. Preserve unknown-file, link and path-replacement safeguards.
+- Persist all verified archive manifests before any automatic cleanup. Log each profile's cleanup start, completion and failure; a cleanup failure still fails the job and skips maintenance without hiding later profiles' archive proofs.
+
+## Pending - Consistent restore width and explicit job selection (#692)
+
+- Restore the Jobs-width limit and horizontal alignment for Browse & Restore while preserving the viewport-height wizard, internal scroll areas and visible action bar. Restore History retains page scrolling within the same width.
+- Start Reports and Restore without a job on page entry; ignore previous browser preferences and do not request report/archive data until selection. Show Choose job before selection and Switch job afterwards in both languages. Retain job-switch confirmation and stale-response protection.
+
+## Pending - Compact retained database runs (#691)
+
+- Explain the selected local-dump retention beside the profile setting and expose the historical manifest policy in run details. Missing/unsupported values stay unknown, independent of later profile changes; cleanup behavior is unchanged.
+
+- Use the concise Archived table status and explain full file-size/checksum readback in the details in German and English. Remove the fixed not-restore-tested detail text, which could be mistaken for the status of a separately run restore test.
+
+- Replace large dump cards with a newest-first table, independent job/manual origin filters, ten-row pagination and expandable details. Keep cleanup bound to the displayed run after filtering, with the existing confirmation.
+- Classify existing manifest identity without rewriting it; preserve unattributed historical runs and storage errors. Explain current-run-only Borg inputs and unchanged local retention in German/English help and manuals.
+
+## Pending - Visible database exports and job markers (#689)
+
+- Log database export start, local completion, bounded streaming progress and sanitized failure/cancellation context. Distinguish exports from later Borg archive verification without changing execution order.
+- Expose current database-profile assignments on job cards with an independent localized Database badge; preserve real pre/post-script markers. Clarify automatic exports before Docker/VM shutdown and Borg backup in both wizard languages, help and manuals.
+
 ## Pending - Readable workflow run names (#687)
 
 - Show PR/main/manual context and check purpose before the exact CI source identifier. Add version, PR/main source and platform to testing runs, version/platform to stable preparation, and distinguish scheduled/manual audits.

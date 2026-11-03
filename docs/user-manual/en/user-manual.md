@@ -242,7 +242,7 @@ Jobs define which data is backed up and where it is stored. A job contains:
 
 Jobs appear as separate compact cards with spacing. The **Single jobs/Job groups** tabs attach directly to the workspace. The **All locations** total and each individual location count use the same subtly outlined badge. A labelled location bar below them shares the surrounding panel, without pills or a dropdown. A dedicated date column shows schedules, the latest restore test and evidence validity. The arrow next to a job opens one detail area with **Workflow** and **Data & settings**. The latter combines storage facts, policy, archive prefix, description, Borg/repository checks and restore evidence. Both views reserve the height of the larger content, so switching does not shift the list. Open details and the selected view survive refreshes.
 
-Subtle markers below the job name identify configured **VMs**, **Docker**, **Pre script** and **Post script** options. Script markers reflect current assignments, not historical run results; their tooltip names the script and the post-script execution condition.
+Subtle markers below the job name identify configured **VMs**, **Docker**, **Database**, **Pre script** and **Post script** options. Script markers reflect current assignments, not historical run results; their tooltip names the script and the post-script execution condition.
 
 Status and restore evidence use distinct symbols and subtle background fills with normal-weight text and no outline. Last test and validity dates have separate labels and vertically aligned values.
 
@@ -733,7 +733,7 @@ Reports help analyze trends:
 ### 6.2 Areas and Functions
 
 - **Compact job selection:** The selected job icon, name and actual location appear at the top. **Switch job** opens a dialog with location filters, counts and jobs including archive prefixes. Empty locations are omitted.
-- **Dialog search:** Filters jobs by name, archive prefix or identifier. Changing location clears the search without changing the active job. Selecting a job applies the change; Escape or Cancel closes without changes. The last selection is stored per page in this browser when browser storage is available. Removed jobs fall back to a valid selection.
+- **Dialog search:** Filters jobs by name, archive prefix or identifier. Changing location clears the search without changing the active job. Selecting a job applies the change; Escape or Cancel closes without changes. No job is preselected on page entry, even if an earlier selection was saved in the browser. Reports load only after an explicit job selection.
 - **Metrics:** Show aggregated values for the selected period.
 - **Trend tables and charts:** Show development over time.
 - **Monthly status history:** Keeps all months in a bounded scroll region with a fixed table heading. Use Tab and the arrow/Page keys to scroll with the keyboard. Switching jobs returns to the latest month. On smaller screens, the page still scrolls normally.
@@ -743,7 +743,7 @@ Reports help analyze trends:
 ### 6.3 Typical Actions
 
 1. Open **Reports**.
-2. Open **Switch job**, filter by location if needed, then select the job. The first report-capable job loads initially; a saved, still-valid selection takes precedence.
+2. Open **Choose job**, filter by location if needed, then select the job. The button then reads **Switch job**. Select a job again when reopening the page.
 3. Review runtimes, sizes, and trends.
 4. Load Borg repository information if repository details are needed.
 5. Compare suspicious values with **History** and logs.
@@ -782,9 +782,9 @@ The page has two tabs:
 
 ### 7.3 Restore Wizard
 
-The compact selection bar shows the configured icon, job name and actual location. **Switch job** opens the searchable dialog with location filters; only locations with backup jobs are offered. The last valid selection is stored for this page in this browser when browser storage is available. Changing location filters the offered jobs; selecting a job changes the restore source. Switching jobs asks for confirmation before resetting an existing archive, file and destination selection. Selection is locked during an active restore operation.
+The compact selection bar shows the configured icon, job name and actual location. **Switch job** opens the searchable dialog with location filters; only locations with backup jobs are offered. On page entry, **Choose job** appears with no preselection. Archives load only after an explicit job selection; earlier browser preferences are not automatically restored. Changing location filters the offered jobs; selecting a job changes the restore source. Switching jobs asks for confirmation before resetting an existing archive, file and destination selection. Selection is locked during an active restore operation.
 
-The wizard below contains four steps. The workspace fills the available window height; long content scrolls within it. Back, Next or Review, and the final review confirmation and start action remain visible in the bottom action bar. The compact source summary applies at every window size. The job dialog fits within the window; long job lists scroll inside it. The separate Restore History remains available and retains normal page scrolling.
+The page width and horizontal alignment match Jobs, including Restore History. The wizard below contains four steps. The workspace fills the available window height; long content scrolls within it. Back, Next or Review, and the final review confirmation and start action remain visible in the bottom action bar. The compact source summary applies at every window size. The job dialog fits within the window; long job lists scroll inside it. The separate Restore History remains available and retains normal page scrolling.
 
 #### Step 1: Select Archive
 
@@ -2176,6 +2176,18 @@ scripts appear as separate steps.
    profile's staging directory must not overlap ordinary source directories.
    The job automatically adds only its current completed exports and manifest.
 
+The **Database** marker on the job card reflects current database-profile assignments,
+including database-only jobs and jobs without Docker shutdown. Export is a separate
+workflow step and needs no additional pre-script. An actually assigned pre-script
+has its own independent marker.
+
+The job log reports export start, local completion, and failure/cancellation with
+profile and database names. While export data is flowing, progress is logged at
+most every 30 seconds per profile. No periodic progress message is emitted without
+new data. Local export and subsequent readback verification in the Borg archive
+are reported separately; a completed dump alone does not confirm a Borg backup.
+Credentials and dump contents are not logged.
+
 Order: resource locks, existing Pre hook, existing mounts/prerequisites,
 **database backup**, existing Docker/VM stop policies, Borg create, workload
 recovery, required-artifact readback, repository maintenance, Post hook and final
@@ -2216,9 +2228,36 @@ Older test archives use the original staging path without its leading slash. The
 from the new archive and checks its bytes. Excluded/missing/corrupt output fails
 verification; completed local files remain. The manifest inside the archive
 records export-time status; the local result and job workflow record subsequent
-archive verification. **Archived and verified is not a database restore test.**
+archive verification. **This readback verification does not test importing the dump into a database.**
 
 ### 19.3 Local retention and interrupted operations
+
+A hint directly below **Local dumps** in the database profile explains the selected
+policy: manual cleanup allows scheduled jobs to keep increasing disk usage;
+automatic removal applies only to future job runs and does not retroactively
+remove existing or manual dumps. In run details, **Retention at creation** shows
+the policy saved in that run's manifest, independently of later profile changes.
+Missing or unrecognized values are shown as **Unknown**.
+
+The compact **Local backup runs** table shows newest dumps first, ten per page.
+**All**, **Job backups**, and **Manual dumps** filter their origin; older entries
+without a recognizable identity remain visible under **Unattributed**. A manually
+started backup job is still a job backup; **Manual dumps** means the profile's
+**Create test dump** action. The **Archived** table status confirms archiving.
+**Details** reveals the full path and sizes and explains the full readback comparison
+using file size and checksum. Separate restore tests remain in their own view.
+Local cleanup requires confirmation of the exact directory.
+**Local usage** includes regular files in the run directory, including its manifest
+and any partial files. On narrow screens, the table scrolls horizontally inside
+its own area.
+
+A job includes only completed dumps and the manifest from its current run in Borg,
+not the entire storage folder with older or manual dumps. Additional selected file
+sources remain part of the job. Manual test dumps are not automatically archived
+by the next job. **Keep; clean up manually** lets local dumps accumulate. The
+alternative retention removes only that job run's exports after warning-free
+archiving and readback verification; manual test dumps remain local.
+
 
 Internal metadata in `database-operations` and `database-tests` is checked hourly,
 starting one minute after normal service startup. Confirmed terminal records are

@@ -250,7 +250,7 @@ Jobs definieren, welche Daten wohin gesichert werden. Ein Job enthält:
 
 Die Jobs stehen in einzelnen kompakten Karten mit Abstand. Die Reiter **Einzeljobs/Jobgruppen** sind direkt an den Arbeitsbereich angesetzt. Die Jobanzahl steht bei **Alle Standorte** und bei jedem einzelnen Standort in derselben dezent umrahmten Zählmarke. Darunter liegt die beschriftete Standortleiste in einem gemeinsamen Rahmen, ohne Dropdown oder Pillen; die eigene Terminspalte zeigt Zeitpläne, letzten Restore-Test und Gültigkeit des Nachweises. Der Pfeil am Job öffnet einen gemeinsamen Detailbereich mit **Ablauf** und **Daten & Einstellungen**. Letzterer fasst Speicherdaten, Richtlinie, Archivpräfix, Beschreibung, Borg-/Repository-Checks und Restore-Nachweise zusammen. Beide Ansichten reservieren die Höhe des größeren Inhalts; beim Wechsel springt die Liste nicht. Geöffnete Details und die ausgewählte Ansicht bleiben bei Aktualisierungen erhalten.
 
-Dezente Marker unter dem Jobnamen zeigen konfigurierte **VMs**, **Docker**, **Pre-Skript** und **Post-Skript**. Skriptmarker zeigen aktuelle Zuweisungen, keine früheren Laufergebnisse; der Tooltip nennt den Skriptnamen und beim Post-Skript die Ausführungsbedingung.
+Dezente Marker unter dem Jobnamen zeigen konfigurierte **VMs**, **Docker**, **Datenbank**, **Pre-Skript** und **Post-Skript**. Skriptmarker zeigen aktuelle Zuweisungen, keine früheren Laufergebnisse; der Tooltip nennt den Skriptnamen und beim Post-Skript die Ausführungsbedingung.
 
 Status und Restore-Nachweis verwenden eindeutige Symbole und dezente Hintergrundfarben ohne Umrandung und ohne Fettschrift. Letzter Test und Gültigkeitsende stehen mit getrennten Beschriftungen und bündigen Datumswerten untereinander.
 
@@ -741,7 +741,7 @@ Berichte helfen bei der Auswertung von Trends:
 ### 6.2 Bereiche und Funktionen
 
 - **Kompakte Jobauswahl:** Oben stehen Symbol, Name und tatsächlicher Standort des gewählten Jobs. **Job wechseln** öffnet einen Dialog mit Standortfiltern, Jobanzahl und Jobliste inklusive Archivpräfix. Leere Standorte werden ausgeblendet.
-- **Suche im Dialog:** Filtert Jobs nach Name, Archivpräfix oder Kennung. Ein Standortwechsel im Dialog setzt die Suche zurück, ändert aber noch nicht den aktiven Job. Erst die Jobauswahl übernimmt den Wechsel; Escape oder Abbrechen schließt ohne Änderung. Die letzte Auswahl wird je Seite in diesem Browser gespeichert, sofern der Browser dies erlaubt. Entfernte Jobs werden durch eine gültige Auswahl ersetzt.
+- **Suche im Dialog:** Filtert Jobs nach Name, Archivpräfix oder Kennung. Ein Standortwechsel im Dialog setzt die Suche zurück, ändert aber noch nicht den aktiven Job. Erst die Jobauswahl übernimmt den Wechsel; Escape oder Abbrechen schließt ohne Änderung. Beim Öffnen der Seite ist kein Job vorausgewählt, auch wenn früher eine Auswahl im Browser gespeichert wurde. Berichte werden erst nach ausdrücklicher Jobauswahl geladen.
 - **Kennzahlen:** Zeigen zusammengefasste Werte für den gewählten Zeitraum.
 - **Trendtabellen und Diagramme:** Zeigen Entwicklungen über Zeit.
 - **Monatlicher Status-Verlauf:** Zeigt alle Monate in einem begrenzten Scrollbereich mit feststehender Tabellenüberschrift. Der Bereich ist auch per Tab und Pfeil-/Bildtasten bedienbar. Beim Jobwechsel beginnt er wieder beim neuesten Monat. Auf kleinen Bildschirmen kann die Seite weiterhin normal gescrollt werden.
@@ -751,7 +751,7 @@ Berichte helfen bei der Auswertung von Trends:
 ### 6.3 Typische Aktionen
 
 1. Öffnen Sie **Berichte**.
-2. Öffnen Sie **Job wechseln**, wählen Sie bei Bedarf einen Standort und dann den Job. Beim ersten Öffnen wird der erste auswertbare Job geladen; eine gespeicherte, weiterhin gültige Auswahl hat Vorrang.
+2. Öffnen Sie **Job wählen**, wählen Sie bei Bedarf einen Standort und dann den Job. Danach heißt die Schaltfläche **Job wechseln**. Beim erneuten Öffnen der Seite wählen Sie den Job erneut.
 3. Prüfen Sie Laufzeiten, Größen und Trends.
 4. Laden Sie Borg-Repository-Informationen, wenn Sie Details zum Repository benötigen.
 5. Vergleichen Sie auffällige Werte mit **History** und den Logs.
@@ -790,9 +790,9 @@ Die Seite hat zwei Reiter:
 
 ### 7.3 Restore-Wizard
 
-Die kompakte Auswahlzeile zeigt das konfigurierte Symbol, den Jobnamen und seinen tatsächlichen Standort. **Job wechseln** öffnet den Dialog mit Suche und Standortfiltern; nur Standorte mit Backup-Jobs werden angeboten. Die letzte gültige Jobauswahl wird für diese Seite in diesem Browser gespeichert, sofern der Browser dies erlaubt. Ein Standortwechsel filtert die angebotenen Jobs; erst die Jobauswahl wechselt die Restore-Quelle. Eine vorhandene Archiv-, Datei- und Zielauswahl wird beim Jobwechsel nach Bestätigung zurückgesetzt. Während einer laufenden Restore-Aktion ist die Auswahl gesperrt.
+Die kompakte Auswahlzeile zeigt das konfigurierte Symbol, den Jobnamen und seinen tatsächlichen Standort. **Job wechseln** öffnet den Dialog mit Suche und Standortfiltern; nur Standorte mit Backup-Jobs werden angeboten. Beim Öffnen der Seite erscheint **Job wählen** ohne Vorauswahl. Archive werden erst nach ausdrücklicher Jobauswahl geladen; eine frühere Browserauswahl wird nicht automatisch übernommen. Ein Standortwechsel filtert die angebotenen Jobs; erst die Jobauswahl wechselt die Restore-Quelle. Eine vorhandene Archiv-, Datei- und Zielauswahl wird beim Jobwechsel nach Bestätigung zurückgesetzt. Während einer laufenden Restore-Aktion ist die Auswahl gesperrt.
 
-Darunter führt der Assistent durch vier Schritte. Der Arbeitsbereich nutzt die verfügbare Fensterhöhe; lange Inhalte scrollen innerhalb dieses Bereichs. Zurück, Weiter bzw. Zur Prüfung sowie im letzten Schritt Prüfbestätigung und Startaktion bleiben in der unteren Aktionsleiste sichtbar. Die kompakte Quellauswahl gilt für jede Fenstergröße. Der Jobdialog begrenzt seine Höhe auf das Fenster; lange Joblisten scrollen innerhalb des Dialogs. Die separate Restore History bleibt verfügbar und scrollt weiterhin als normale Seite.
+Die Seitenbreite und seitliche Ausrichtung entsprechen der Jobs-Seite, auch in der Restore History. Darunter führt der Assistent durch vier Schritte. Der Arbeitsbereich nutzt die verfügbare Fensterhöhe; lange Inhalte scrollen innerhalb dieses Bereichs. Zurück, Weiter bzw. Zur Prüfung sowie im letzten Schritt Prüfbestätigung und Startaktion bleiben in der unteren Aktionsleiste sichtbar. Die kompakte Quellauswahl gilt für jede Fenstergröße. Der Jobdialog begrenzt seine Höhe auf das Fenster; lange Joblisten scrollen innerhalb des Dialogs. Die separate Restore History bleibt verfügbar und scrollt weiterhin als normale Seite.
 
 #### Schritt 1: Archiv auswählen
 
@@ -2224,6 +2224,18 @@ den Laufdetails erhalten. Zugeordnete Pre-/Post-Skripte erscheinen separat.
    Dump-Verzeichnis darf sich nicht mit normalen Quellen überschneiden. Nur die
    fertigen Exporte des aktuellen Laufs und ihr Manifest werden automatisch hinzugefügt.
 
+Der Marker **Datenbank** auf der Job-Karte zeigt aktuell zugewiesene Datenbankprofile,
+auch ohne Docker-Stopp und bei reinen Datenbank-Jobs. Der Export ist ein eigener
+Ablaufschritt und benötigt kein zusätzliches Pre-Skript. Ein tatsächlich zugewiesenes
+Pre-Skript erhält daneben seinen eigenen Marker.
+
+Das Job-Log meldet Beginn, lokalen Abschluss und Fehler/Abbruch der Exporte mit
+Profil- und Datenbanknamen. Bei fließenden Exportdaten erscheinen höchstens alle
+30 Sekunden Fortschrittswerte je Profil. Ohne neue Daten gibt es keine regelmäßige
+Fortschrittsmeldung. Lokaler Export und spätere Rückleseprüfung im Borg-Archiv
+werden getrennt gemeldet; ein fertiger Dump allein bestätigt noch kein Borg-Backup.
+Zugangsdaten und Dump-Inhalte werden dabei nicht protokolliert.
+
 Reihenfolge: Sperren, vorhandenes Pre-Skript, Mounts/Voraussetzungen,
 **Datenbank-Sicherung**, bisherige Docker-/VM-Stopps, Borg create, Wiederherstellung
 der Dienste, Rückleseprüfung der Pflichtdateien, Repositorywartung, Post-Skript
@@ -2269,10 +2281,40 @@ ohne führenden Schrägstrich. Der Job liest jede Pflichtdatei aus dem neuen Arc
 zurück und vergleicht ihre Bytes. Fehlende, ausgeschlossene oder abweichende
 Dateien führen zum Fehler; lokale Exporte bleiben erhalten. Das Manifest im
 Archiv beschreibt den Exportzeitpunkt; das lokale Ergebnis und der Jobablauf
-dokumentieren die spätere Archivprüfung. **Archiviert und geprüft bedeutet
-nicht, dass die Datenbank-Wiederherstellung getestet wurde.**
+dokumentieren die spätere Archivprüfung. **Diese Rückleseprüfung prüft keinen Import des Dumps in eine Testdatenbank.**
 
 ### 19.3 Lokale Aufbewahrung und unterbrochene Läufe
+
+Direkt unter **Lokale Dumps** im Datenbankprofil erklärt ein Hinweis die ausgewählte
+Aufbewahrung: Manuelles Aufräumen lässt den Speicherbedarf bei regelmäßigen Jobs
+wachsen; automatisches Entfernen gilt nur für zukünftige Job-Läufe und räumt
+vorhandene oder manuelle Dumps nicht nachträglich auf. In den Laufdetails zeigt
+**Aufbewahrung bei Erstellung** die Einstellung aus dem damaligen Manifest,
+unabhängig von späteren Profiländerungen. Fehlende oder unbekannte Angaben
+werden als **Nicht bekannt** angezeigt.
+
+Die kompakte Tabelle **Lokale Sicherungsläufe** zeigt die neuesten Dumps zuerst,
+mit zehn Einträgen pro Seite. **Alle**, **Job-Sicherungen** und **Manuelle Dumps**
+filtern die Herkunft; unklare ältere Einträge bleiben unter **Nicht zugeordnet**
+sichtbar. Ein manuell gestarteter Backup-Job zählt ebenfalls als Job-Sicherung;
+**Manuelle Dumps** meint die Aktion **Test-Dump erstellen** im Datenbankprofil.
+Der Tabellenstatus **Archiviert** bestätigt die Archivierung. **Details** öffnet
+den vollständigen Pfad und Größen und erklärt den vollständigen Rücklesevergleich
+anhand von Dateigröße und Prüfsumme. Separate Restore-Tests werden in ihrer
+eigenen Ansicht geführt.
+**Lokal belegt** umfasst die regulären Dateien des Laufverzeichnisses einschließlich
+Manifest und gegebenenfalls unvollständiger Dateien. Die Löschaktion bleibt dort
+mit Bestätigung des genauen Verzeichnisses verfügbar. Auf schmalen Bildschirmen
+scrollt die Tabelle horizontal innerhalb ihres Bereichs.
+
+Ein Job nimmt nur die fertigen Dumps und das Manifest seines aktuellen Laufs in
+Borg auf, nicht den gesamten Speicherordner mit alten oder manuellen Dumps.
+Zusätzlich ausgewählte normale Dateiquellen bleiben Teil des Jobs. Manuelle
+Test-Dumps werden nicht automatisch beim nächsten Job-Lauf archiviert. Bei
+**Behalten; manuell aufräumen** sammeln sich lokale Dumps an. Die alternative
+Aufbewahrung entfernt nur die Exporte des jeweiligen Job-Laufs nach fehlerfreier
+Archivierung und Rückleseprüfung; manuelle Test-Dumps bleiben lokal.
+
 
 Interne Daten in `database-operations` und `database-tests` werden stündlich geprüft,
 erstmals eine Minute nach dem normalen Dienststart. Sicher abgeschlossene Einträge

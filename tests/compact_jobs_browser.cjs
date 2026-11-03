@@ -59,6 +59,34 @@ const {chromium} = require('playwright');
     assert.equal(await card.locator('[data-job-feature="post"]').count(),0,'Removed assignment disappears on refresh');
     await page.evaluate(()=>{BBUI.jobGroups.state.hooks.vms.post='Notify';renderJobsGrid(jobsState.jobs);});
 
+    // Database assignments are independent of Docker control, hooks and past runs (#689).
+    for (const language of ['de', 'en']) {
+      await page.evaluate(language => {
+        lang = language;
+        jobsState.jobs.find(j => j.key === 'vms').has_database = true;
+        jobsState.jobs.find(j => j.key === 'new').has_database = true;
+        jobsState.jobs.find(j => j.key === 'running').last_job_steps = [{id:'database_backup',status:'success'}];
+        renderJobsGrid(jobsState.jobs);
+      }, language);
+      const badge = card.locator('[data-job-feature="database"]');
+      assert.equal((await badge.textContent()).trim(), language === 'de' ? 'Datenbank' : 'Database');
+      assert.ok((await badge.getAttribute('title')).includes(language === 'de' ? 'Kein zusätzliches Pre-Skript' : 'No additional pre-script'));
+      assert.equal(await card.locator('[data-job-feature="pre"]').count(), 1, 'Combined configuration keeps its real pre-script');
+      assert.equal(await card.locator('[data-job-feature="post"]').count(), 1);
+      assert.equal(await page.locator('#job-card-new [data-job-feature="database"]').count(), 1, 'Database-only job needs no Docker control');
+      assert.equal(await page.locator('#job-card-new [data-job-feature="pre"]').count(), 0, 'Database export is not a pre-script');
+      assert.equal(await page.locator('#job-card-running [data-job-feature="database"]').count(), 0, 'Past exports cannot create a badge');
+      assert.equal(await page.locator('#job-card-app [data-job-feature="database"]').count(), 0);
+      assert.ok((await card.boundingBox()).height < 165, 'Combined feature markers preserve compact card height');
+      assert.ok(await page.evaluate(() => BBUI.components.i18n.t('database.wizardHint').includes('Borg')));
+    }
+    await page.evaluate(() => {
+      lang = 'de';
+      jobsState.jobs.forEach(j => { j.has_database = false; });
+      renderJobsGrid(jobsState.jobs);
+    });
+    assert.equal(await page.locator('[data-job-feature="database"]').count(), 0, 'Removing the last profile assignment removes its badge');
+
     assert.equal(await page.locator('#jobs-location-list .location-nav-copy strong').evaluateAll(nodes=>nodes.every(node=>node.scrollWidth<=node.clientWidth)),true);
     assert.equal(await card.locator('.job-workflow-details').count(),0,'Closed rows omit detailed steps');
     assert.ok((await card.boundingBox()).height<165,'Completed job must be compact');

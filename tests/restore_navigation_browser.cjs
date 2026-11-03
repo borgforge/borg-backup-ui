@@ -64,7 +64,17 @@ const {chromium} = require('playwright');
  const capture=async name=>{if(process.env.BBUI_SCREENSHOT_DIR){fs.mkdirSync(process.env.BBUI_SCREENSHOT_DIR,{recursive:true});await page.screenshot({path:`${process.env.BBUI_SCREENSHOT_DIR}/${name}.png`,fullPage:true});}};
  for(const language of ['de','en'])for(const theme of ['light','dark']){
   await page.setViewportSize({width:1600,height:1100});
-  await page.evaluate(async({language,theme})=>{localStorage.clear();lang=language;translate();document.documentElement.dataset.theme=theme;BBUI.restoreState.job='';BBUI.restoreState.view='wizard';await restoreInit();},{language,theme});
+  await page.evaluate(async({language,theme})=>{localStorage.setItem('bbui.jobPicker.restore',JSON.stringify({key:'usb-app'}));calls=[];lang=language;translate();document.documentElement.dataset.theme=theme;BBUI.restoreState.job='';BBUI.restoreState.view='wizard';await restoreInit();},{language,theme});
+  assert.equal(await page.evaluate(()=>BBUI.restoreState.job),'');
+  assert.equal(await page.locator('#restore-job-sel').inputValue(),'');
+  assert.equal(await page.locator('.restore-sidebar-empty').innerText(),language==='de'?'Bitte zuerst einen Job auswählen.':'Select a job first.');
+  assert.equal(await page.locator('#restore-source-toggle').innerText(),language==='de'?'Job wählen':'Choose job');
+  assert.equal(await page.evaluate(()=>calls.some(url=>url.startsWith('/api/restore/archives'))),false);
+  await capture(`restore-choose-job-${language}-${theme}`);
+  await page.locator('#restore-source-toggle').click();
+  assert.equal(await page.locator('[data-picker-job][aria-pressed=true]').count(),0);
+  await page.locator('[data-picker-job=local-app]').click();
+  await page.waitForFunction(()=>BBUI.restoreState.archives.length===1&&!BBUI.restoreState.changingJob);
   await page.locator('#restore-source-toggle').click();
   assert.deepEqual(await page.locator('[data-picker-location]').evaluateAll(es=>es.map(e=>e.dataset.pickerLocation)),['local','usb','storagebox']);
   assert.equal(await page.locator('#restore-stepper button').count(),4);
@@ -111,12 +121,30 @@ const {chromium} = require('playwright');
   await page.waitForFunction(()=>BBUI.restoreState.job==='usb-app'&&!BBUI.restoreState.changingJob);
   assert.equal(await page.evaluate(()=>BBUI.restoreState.step),2);
   assert.equal(await page.evaluate(()=>BBUI.restoreState.archive),'');
-  await page.evaluate(async()=>{BBUI.restoreState.job='';await restoreInit();});
-  assert.equal(await page.evaluate(()=>BBUI.restoreState.job),'usb-app');
+  await page.evaluate(async()=>{await restoreInit();});
+  assert.equal(await page.evaluate(()=>BBUI.restoreState.job),'');
+  assert.equal(await page.locator('[data-restore-archive]').count(),0);
+  await page.locator('#restore-source-toggle').click();
+  await page.locator('[data-picker-location=usb]').click();
+  await page.locator('[data-picker-job=usb-app]').click();
+  await page.waitForFunction(()=>BBUI.restoreState.job==='usb-app'&&!BBUI.restoreState.changingJob);
   assert.equal(await page.locator('#restore-target-path').inputValue(),'/mnt/user/');
   assert.equal(await page.locator('#restore-conflict-mode').inputValue(),'skip');
   assert.equal(await page.locator('#restore-preserve-owner').isChecked(),false);
   assert.equal(await page.locator('#restore-dry-run').isChecked(),true);
+  await page.setViewportSize({width:3440,height:1440});
+  const jobsBounds=await page.evaluate(()=>{
+    const jobs=document.getElementById('page-jobs');jobs.style.display='block';
+    const page=jobs.getBoundingClientRect(),header=jobs.querySelector('.page-header').getBoundingClientRect();
+    jobs.style.display='';return {width:page.width,left:header.left,right:header.right};
+  });
+  for(const view of ['wizard','history']) {
+    await page.evaluate(view=>restoreSwitchView(view),view);
+    const bounds=await page.locator('#page-restore').evaluate(el=>{const page=el.getBoundingClientRect(),header=el.querySelector('.page-header').getBoundingClientRect();return {width:page.width,left:header.left,right:header.right};});
+    assert.deepEqual(bounds,jobsBounds,`${view} should match Jobs width and horizontal alignment`);
+    await capture(`restore-width-${view}-${language}-${theme}`);
+  }
+  await page.setViewportSize({width:1600,height:1100});
   await page.locator('#restore-view-history-btn').click();
   assert.equal(await page.locator('.main-content').evaluate(e=>getComputedStyle(e).maxHeight),'none','History keeps ordinary page scrolling');
   await page.locator('[data-restore-history-action=detail]').click();
@@ -137,7 +165,7 @@ const {chromium} = require('playwright');
  // Long plans must never push the existing confirmation/start controls off screen (#633).
  for(const language of ['de','en']) {
   await page.evaluate(async language=>{
-   lang=language;translate();restoreSwitchView('wizard');await restoreInit();
+   lang=language;translate();restoreSwitchView('wizard');await restoreInit();await restoreSelectJob('usb-app');
    document.getElementById('restore-archive-sel').value=BBUI.restoreState.archives[0].name;
    await restoreBrowse('');restoreSetStep(3);
    for(let i=0;i<40;i++)restorePrepare('folder-'+i,'folder-'+i,'d');
@@ -194,7 +222,7 @@ const {chromium} = require('playwright');
  assert.equal(await page.locator('#restore-start-btn').isDisabled(),true,'Failed precheck keeps Start disabled');
  // Exercise the existing explicit start confirmation, actual payload and completion path.
  await page.setViewportSize({width:1600,height:1100});
- await page.evaluate(async()=>{await restoreInit();document.getElementById('restore-dry-run').checked=true;document.getElementById('restore-archive-sel').value=BBUI.restoreState.archives[0].name;await restoreBrowse('');restoreSetStep(3);});
+ await page.evaluate(async()=>{await restoreInit();await restoreSelectJob('usb-app');document.getElementById('restore-dry-run').checked=true;document.getElementById('restore-archive-sel').value=BBUI.restoreState.archives[0].name;await restoreBrowse('');restoreSetStep(3);});
  await page.locator('input[data-restore-action=select][data-path=folder]').check();await page.locator('#restore-step-next-btn').click();
  await page.locator('#restore-target-path').fill('/mnt/user/restore');await page.locator('#restore-conflict-mode').selectOption('overwrite');await page.locator('#restore-preserve-owner').check();
  await page.locator('#restore-step-next-btn').click();await page.waitForFunction(()=>BBUI.restoreState.precheck?.ok&&!BBUI.restoreState.assistBusy);
@@ -209,7 +237,7 @@ const {chromium} = require('playwright');
  await page.evaluate(async()=>{runResult='done';_stopRestorePolling();await _pollRestoreState('run-1');});
  assert.equal(await page.evaluate(()=>BBUI.restoreState.completed),true);
  assert.equal(await page.locator('#restore-step-badge-5 > span').innerText(),'✓');
- await page.locator('#restore-step-back-btn').click();await page.waitForFunction(()=>BBUI.restoreState.step===2&&BBUI.restoreState.archives.length===1);
+ await page.locator('#restore-step-back-btn').click();await page.waitForFunction(()=>BBUI.restoreState.step===2&&BBUI.restoreState.jobs.length>0&&!BBUI.restoreState.job&&BBUI.restoreState.archives.length===0);
  assert.equal(await page.locator('#restore-step-back-btn').isDisabled(),true);
  assert.deepEqual(errors,[]);
  console.log('Restore navigation, selection, precheck, start, completion and history passed in DE/EN light/dark and mobile.');

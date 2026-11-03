@@ -1298,10 +1298,43 @@
 .script-library-details dt { font-weight:600; color:var(--ui-color-text); margin-bottom:var(--ui-space-1); }
 .script-library-details dd { margin:0; line-height:1.65; color:var(--ui-color-text); }
 .script-library-ownership { color:var(--ui-color-text-muted); font-size:var(--ui-font-size-sm); }
-.database-run { display:grid; gap:var(--ui-space-2); padding:var(--ui-space-4); margin-top:var(--ui-space-3); background:var(--ui-color-surface); border:1px solid var(--ui-color-border); border-left:3px solid var(--ui-color-accent); border-radius:var(--ui-radius-sm); }
-.database-run header, .database-run-meta { display:flex; gap:var(--ui-space-3); align-items:center; flex-wrap:wrap; }
-.database-run code { overflow-wrap:anywhere; }
-.database-run .btn { justify-self:start; }
+/* Retained database dumps: compact comparison rows and optional details (#691). */
+.database-runs-body, #db-runs { min-width:0; }
+.database-runs-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin:8px 0 12px; }
+.database-runs-toolbar > .btn { flex:0 0 auto; width:auto; }
+.database-run-filters { display:flex; gap:16px; flex-wrap:wrap; }
+.database-run-filters button { background:transparent; color:var(--ui-color-text-muted); border:0; border-bottom:2px solid transparent; padding:8px 0; font:inherit; cursor:pointer; }
+.database-run-filters button[aria-pressed=true] { color:var(--ui-color-text); border-bottom-color:var(--ui-color-accent); }
+.database-run-filters button span { margin-left:4px; font-size:12px; }
+.database-run-filters button:focus-visible { outline:2px solid var(--ui-color-accent); outline-offset:3px; }
+.database-runs-table-wrap { max-width:100%; overflow-x:auto; border:1px solid var(--ui-color-border); border-radius:var(--ui-radius-sm); }
+.database-runs-table { width:100%; min-width:740px; border-collapse:collapse; table-layout:fixed; font-size:13px; }
+.database-runs-table th, .database-runs-table td { padding:9px 12px; text-align:left; vertical-align:middle; border-bottom:1px solid var(--ui-color-border); overflow-wrap:anywhere; }
+.database-runs-table thead th { background:var(--ui-color-surface-subtle); color:var(--ui-color-text-muted); font-weight:500; }
+.database-runs-table thead th:nth-child(1) { width:23%; }
+.database-runs-table thead th:nth-child(2) { width:22%; }
+.database-runs-table thead th:nth-child(3) { width:14%; }
+.database-runs-table thead th:nth-child(4) { width:11%; }
+.database-runs-table thead th:nth-child(5) { width:19%; }
+.database-runs-table thead th:nth-child(6) { width:11%; }
+.database-runs-table tbody tr:last-child > * { border-bottom:0; }
+.database-run-row:hover { background:var(--ui-color-surface-subtle); }
+.database-run-profile { font-weight:600; }
+.database-run-size { font-variant-numeric:tabular-nums; white-space:nowrap; }
+.database-runs-table .database-run-toggle { padding:4px 8px; min-height:28px; width:auto; font-size:12px; }
+.database-run-status { font-size:12px; }
+.database-run-status.success { color:var(--ui-state-success-fg); }
+.database-run-status.warning { color:var(--ui-state-warning-fg); }
+.database-run-detail { background:var(--ui-color-surface-subtle); }
+.database-run-detail td > div { display:grid; gap:8px; padding:4px 0; }
+.database-run-detail p { margin:0; }
+.database-run-detail code { display:block; margin-top:4px; white-space:normal; overflow-wrap:anywhere; }
+.database-run-detail .btn { justify-self:start; width:auto; }
+.database-runs-paging { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; padding-top:8px; font-size:12px; color:var(--ui-color-text-muted); }
+.database-runs-paging > div { display:flex; gap:8px; }
+.database-runs-paging .btn { width:auto; padding:4px 10px; }
+.database-run-error { color:var(--ui-state-warning-fg); overflow-wrap:anywhere; }
+@media (max-width:700px) { .database-run-filters { gap:12px; font-size:13px; } }
 
 /* Profile save guidance stays alongside the edited values and actions. */
 .profile-workflow-hint {

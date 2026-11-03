@@ -301,9 +301,10 @@
 }
 .main-content:has(#page-restore.active #restore-view-wizard-btn.is-active) > .mobile-header,
 .main-content:has(#page-restore.active #restore-view-wizard-btn.is-active) > .startup-maintenance-banner { flex-shrink: 0; }
-#page-restore { max-width: none; }
+/* Keep the Jobs page width while retaining the viewport-height wizard (#692). */
+#page-restore { width: 100%; }
 #page-restore.active:has(#restore-view-wizard-btn.is-active) {
-  display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 16px 24px 12px;
+  display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 16px 32px 12px;
 }
 #page-restore > .page-header { gap: 12px; flex-wrap: wrap; margin-bottom: 12px; flex-shrink: 0; }
 #page-restore > .page-header .restore-view-tabs { margin: 0; }

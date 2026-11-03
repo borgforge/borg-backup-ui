@@ -775,7 +775,11 @@ def main() -> int:
     database_results = []
 
     def execute_backup(job):
-        """Execute the backup body; the context manager always completes cleanup."""
+        """Run backup and maintenance, persisting all DB proofs before local cleanup.
+
+        Cleanup failures propagate and skip maintenance; runtime recovery remains
+        the enclosing job context's responsibility.
+        """
         nonlocal exclusion_temp, database_results
         set_phase("preparing")
         borg_config.exclude_if_present = meta.get("exclude_if_present", [])
@@ -809,6 +813,7 @@ def main() -> int:
         if meta.get("_database_profiles"):
             from database_backup import export_profiles, validate_sources, borg_artifact_paths
             validate_sources(meta["_database_profiles"], job_config.backup_paths)
+            logging.info("Database backup phase started: %d profile(s); exports run before Docker/VM shutdown and Borg backup", len(meta["_database_profiles"]))
             set_phase("database_backup")
             with workflow.track("database_backup"):
                 database_results = export_profiles(
@@ -874,12 +879,22 @@ def main() -> int:
         if database_results:
             from database_backup import verify_archive, cleanup_run, write_manifest
             try:
+                logging.info("Database backup: verifying exported files in the Borg archive")
                 verify_archive(borg_config.repo, database_archive, database_results, control.is_cancel_requested)
+                logging.info("Database backup: exported files verified in the Borg archive (not a database restore test)")
                 workflow.update("database_backup", details={"results": database_results})
-                for result, profile in zip(database_results, meta["_database_profiles"]):
+                # Persist every archive proof before a cleanup can abort the job.
+                for result in database_results:
                     write_manifest(result)
+                for result, profile in zip(database_results, meta["_database_profiles"]):
                     if create_exit == 0 and profile['retention'] == 'after_archive':
-                        cleanup_run(result, profile, verified=True)
+                        logging.info("Database backup: automatic local cleanup started for profile %s", profile['id'])
+                        try:
+                            cleanup_run(result, profile, verified=True)
+                        except Exception:
+                            logging.error("Database backup: automatic local cleanup failed for profile %s; archive readback succeeded", profile['id'])
+                            raise
+                        logging.info("Database backup: automatic local cleanup completed for profile %s", profile['id'])
             except Exception:
                 workflow.update("database_backup", status="error")
                 raise

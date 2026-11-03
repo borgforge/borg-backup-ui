@@ -10,6 +10,7 @@ import errno
 import gzip
 import hashlib
 import json
+import logging
 import os
 import re
 import selectors
@@ -24,6 +25,7 @@ from contextlib import contextmanager
 
 from database_profiles import DatabaseError, data_root, read_password, profile_slug, SUPPORTED_ENGINES
 from inventory_store import atomic_write_json
+from security_utils import mask_secrets
 
 SCRIPTS = Path(__file__).resolve().parents[1] / 'runtime' / 'scripts'
 # The supervisor remains outside the client's process group. Its terminal marker is
@@ -577,6 +579,43 @@ class _DumpProgressWriter:
         return self.compressed.tell()
 
 
+def _export_log_label(value):
+    """Mask common secret formats and escape controls in a bounded log label."""
+    return json.dumps(mask_secrets(str(value))[:160], ensure_ascii=True)
+
+
+@contextmanager
+def _profile_export_log(profile, check_only):
+    """Log profile export boundaries and safe failure context, then re-raise errors.
+
+    The yielded context tracks the active database. Connection-only checks stay
+    silent; exception messages, credentials and client output are never logged.
+    """
+    context = {'profile': _export_log_label(profile.get('name', '')),
+               'database': '-', 'started': time.monotonic()}
+    if not check_only:
+        logging.info('Database profile export started: profile=%s', context['profile'])
+    try:
+        yield context
+    except BaseException as exc:
+        if not check_only:
+            safe_reasons = {'cancelled', 'timeout', 'credentials', 'nontransactional',
+                            'tools_missing', 'export_failed', 'unresolved_export',
+                            'container_unavailable', 'container_changed', 'version_mismatch',
+                            'storage_mount', 'storage_path', 'storage_missing', 'storage_permissions',
+                            'storage_filesystem', 'no_space', 'profile_unavailable',
+                            'dump_exists', 'empty_dump', 'invalid_dump'}
+            reason = exc.reason if isinstance(exc, DatabaseError) and exc.reason in safe_reasons else 'export_failed'
+            logging.warning('Database profile export %s: profile=%s; database=%s; reason=%s; elapsed=%.1fs',
+                            'cancelled' if reason == 'cancelled' else 'failed', context['profile'],
+                            context['database'], reason, time.monotonic() - context['started'])
+        raise
+    else:
+        if not check_only:
+            logging.info('Database profile export completed locally: profile=%s; elapsed=%.1fs; not yet verified in a Borg archive',
+                         context['profile'], time.monotonic() - context['started'])
+
+
 def export_profiles(config, profiles, job_id, run_id, cancelled=lambda: False, progress=None, check_only=False, results=None, live_progress=None):
     """Export into held Unraid dump directories; retain completed files on failure.
 
@@ -586,95 +625,114 @@ def export_profiles(config, profiles, job_id, run_id, cancelled=lambda: False, p
     original byte counts and compressed sizes/hashes; failed partial files remain.
     live_progress receives throttled, content-free phase/byte updates; progress
     retains its per-completed-file manifest contract.
+    Logs export start, local completion and safe failure context per profile/database;
+    streaming progress is logged at most every 30 seconds per profile. Connection-only
+    checks do not emit export logs. A completed export is not an archive verification.
     Returns JSON-serializable DumpResult manifests. Call close_results after the
     final archive/cleanup operation; pass results to retain partial manifests and
     explicitly close handles even when this function raises.
     """
     results = results if results is not None else []
     for profile in profiles:
-        if profile.get('engine') not in SUPPORTED_ENGINES:
-            raise DatabaseError('profile_unavailable')
-        if cancelled():
-            raise DatabaseError('cancelled')
-        started_at = utc_now()
-        name = run_directory_name(profile['name'], started_at)
-        with open_staging(profile) as fd:
+        with _profile_export_log(profile, check_only) as log_context:
+            if profile.get('engine') not in SUPPORTED_ENGINES:
+                raise DatabaseError('profile_unavailable')
+            if cancelled():
+                raise DatabaseError('cancelled')
+            last_log_update = time.monotonic()
+            started_at = utc_now()
+            name = run_directory_name(profile['name'], started_at)
+            with open_staging(profile) as fd:
+                try:
+                    os.mkdir(name, mode=0o755, dir_fd=fd)
+                except FileExistsError:
+                    raise DatabaseError('dump_exists') from None
+                manifest = DumpResult(fd, name)
+            directory = manifest.path
+            manifest.update({'format_version': 1, 'helper_version': 1, 'job_id': job_id, 'run_id': run_id,
+                        'profile_id': profile['id'], 'profile_name': profile['name'], 'engine': profile['engine'], 'started_at': started_at,
+                        'compression': 'gzip',
+                        'status': 'running', 'archived': False, 'restore_tested': False, 'files': [],
+                        'retention': profile['retention'], 'directory': str(Path(profile['staging_dir']) / name),
+                        'archive_directory': name,
+                        'scope': {'databases': profile['databases'], 'globals': profile['include_globals'],
+                                  'credentials': False, 'application_files_consistent': False},
+                        'restore': restore_hint(profile['engine'])})
+            results.append(manifest)
             try:
-                os.mkdir(name, mode=0o755, dir_fd=fd)
-            except FileExistsError:
-                raise DatabaseError('dump_exists') from None
-            manifest = DumpResult(fd, name)
-        directory = manifest.path
-        manifest.update({'format_version': 1, 'helper_version': 1, 'job_id': job_id, 'run_id': run_id,
-                    'profile_id': profile['id'], 'profile_name': profile['name'], 'engine': profile['engine'], 'started_at': started_at,
-                    'compression': 'gzip',
-                    'status': 'running', 'archived': False, 'restore_tested': False, 'files': [],
-                    'retention': profile['retention'], 'directory': str(Path(profile['staging_dir']) / name),
-                    'archive_directory': name,
-                    'scope': {'databases': profile['databases'], 'globals': profile['include_globals'],
-                              'credentials': False, 'application_files_consistent': False},
-                    'restore': restore_hint(profile['engine'])})
-        results.append(manifest)
-        try:
-            write_manifest(manifest)
-            cid = container_identity(profile)
-            manifest['container_id'] = cid
-            for database_index, database in enumerate(profile['databases'], 1):
-                def report_live(phase, processed=0, stored=0):
-                    """Publish totals across completed files plus the active stream."""
-                    if live_progress:
-                        live_progress({'phase':phase, 'database':database, 'database_index':database_index,
-                            'databases_total':len(profile['databases']),
-                            'processed_bytes':sum(f['uncompressed_bytes'] for f in manifest['files']) + processed,
-                            'written_bytes':sum(f['bytes'] for f in manifest['files']) + stored})
-                report_live('checking')
-                started = time.monotonic()
-                versions = _probe(config, profile, cid, database, cancelled, directory)
-                if check_only:
-                    manifest.setdefault('checks', []).append({'database': database, **versions})
-                    continue
-                space = os.statvfs(directory)
-                if space.f_bavail * space.f_frsize < profile['min_free_mib'] * 1024 * 1024:
-                    raise DatabaseError('no_space')
-                actions = ['dump']
-                if profile['include_globals'] and database == profile['databases'][0]:
-                    actions.append('globals')
-                for action in actions:
-                    name = ('globals.sql' if action == 'globals' else database + dump_suffix(profile['engine'])) + '.gz'
-                    partial = directory / (name + '.partial')
-                    report_live('globals' if action == 'globals' else 'exporting')
-                    with partial.open('xb') as handle:
-                        os.fchmod(handle.fileno(), 0o644)
-                        with gzip.GzipFile(filename='', mode='wb', fileobj=handle, compresslevel=6, mtime=0) as compressed:
-                            sink = _DumpProgressWriter(compressed, handle, lambda count, stored: report_live('globals' if action == 'globals' else 'exporting', count, stored)) if live_progress else compressed
-                            _operation(config, profile, cid, action, database, sink, cancelled)
-                            uncompressed_bytes = compressed.tell()
-                        handle.flush()
-                        os.fsync(handle.fileno())
-                    if not uncompressed_bytes:
-                        raise DatabaseError('empty_dump')
-                    if profile['engine'] == 'postgresql' and action == 'dump':
-                        magic = b'PGDMP'
-                        with gzip.open(partial, 'rb') as handle:
-                            if handle.read(len(magic)) != magic:
-                                raise DatabaseError('invalid_dump')
-                    report_live('finalizing', uncompressed_bytes, partial.stat().st_size)
-                    final = directory / name
-                    partial.rename(final)
-                    manifest['files'].append({'name': name, 'database': database, 'kind': action, **versions,
-                                              'bytes': final.stat().st_size, 'uncompressed_bytes': uncompressed_bytes, 'compression': 'gzip', 'sha256': _hash(final, cancelled),
-                                              'duration_seconds': round(time.monotonic() - started, 3), 'status': 'dump_completed'})
-                    write_manifest(manifest)
-                    report_live('completed')
-                    if progress:
-                        progress(manifest)
-            manifest['status'] = 'checked' if check_only else 'dump_completed'
-        except BaseException:
-            manifest['status'] = 'failed'
-            raise
-        finally:
-            manifest['finished_at'] = utc_now()
-            write_manifest(manifest)
+                write_manifest(manifest)
+                cid = container_identity(profile)
+                manifest['container_id'] = cid
+                for database_index, database in enumerate(profile['databases'], 1):
+                    log_context['database'] = _export_log_label(database)
+                    if not check_only:
+                        logging.info('Database export started: profile=%s; database=%s (%d/%d)',
+                                     log_context['profile'], log_context['database'], database_index, len(profile['databases']))
+                    def report_live(phase, processed=0, stored=0):
+                        """Publish live totals and throttle content-free streaming log updates."""
+                        nonlocal last_log_update
+                        now = time.monotonic()
+                        if not check_only and phase in ('exporting', 'globals') and now - last_log_update >= 30:
+                            last_log_update = now
+                            logging.info('Database export running: profile=%s; database=%s; phase=%s; elapsed=%.1fs; current export=%d bytes; compressed=%d bytes',
+                                         log_context['profile'], log_context['database'], phase,
+                                         now - log_context['started'], processed, stored)
+                        if live_progress:
+                            live_progress({'phase':phase, 'database':database, 'database_index':database_index,
+                                'databases_total':len(profile['databases']),
+                                'processed_bytes':sum(f['uncompressed_bytes'] for f in manifest['files']) + processed,
+                                'written_bytes':sum(f['bytes'] for f in manifest['files']) + stored})
+                    report_live('checking')
+                    started = time.monotonic()
+                    versions = _probe(config, profile, cid, database, cancelled, directory)
+                    if check_only:
+                        manifest.setdefault('checks', []).append({'database': database, **versions})
+                        continue
+                    space = os.statvfs(directory)
+                    if space.f_bavail * space.f_frsize < profile['min_free_mib'] * 1024 * 1024:
+                        raise DatabaseError('no_space')
+                    actions = ['dump']
+                    if profile['include_globals'] and database == profile['databases'][0]:
+                        actions.append('globals')
+                    for action in actions:
+                        name = ('globals.sql' if action == 'globals' else database + dump_suffix(profile['engine'])) + '.gz'
+                        partial = directory / (name + '.partial')
+                        report_live('globals' if action == 'globals' else 'exporting')
+                        with partial.open('xb') as handle:
+                            os.fchmod(handle.fileno(), 0o644)
+                            with gzip.GzipFile(filename='', mode='wb', fileobj=handle, compresslevel=6, mtime=0) as compressed:
+                                sink = _DumpProgressWriter(compressed, handle, lambda count, stored: report_live('globals' if action == 'globals' else 'exporting', count, stored))
+                                _operation(config, profile, cid, action, database, sink, cancelled)
+                                uncompressed_bytes = compressed.tell()
+                            handle.flush()
+                            os.fsync(handle.fileno())
+                        if not uncompressed_bytes:
+                            raise DatabaseError('empty_dump')
+                        if profile['engine'] == 'postgresql' and action == 'dump':
+                            magic = b'PGDMP'
+                            with gzip.open(partial, 'rb') as handle:
+                                if handle.read(len(magic)) != magic:
+                                    raise DatabaseError('invalid_dump')
+                        report_live('finalizing', uncompressed_bytes, partial.stat().st_size)
+                        final = directory / name
+                        partial.rename(final)
+                        manifest['files'].append({'name': name, 'database': database, 'kind': action, **versions,
+                                                  'bytes': final.stat().st_size, 'uncompressed_bytes': uncompressed_bytes, 'compression': 'gzip', 'sha256': _hash(final, cancelled),
+                                                  'duration_seconds': round(time.monotonic() - started, 3), 'status': 'dump_completed'})
+                        write_manifest(manifest)
+                        logging.info('Database export completed locally: profile=%s; database=%s; kind=%s; duration=%.1fs; exported=%d bytes; compressed=%d bytes; not yet verified in a Borg archive',
+                                     log_context['profile'], log_context['database'], action,
+                                     time.monotonic() - started, uncompressed_bytes, final.stat().st_size)
+                        report_live('completed')
+                        if progress:
+                            progress(manifest)
+                manifest['status'] = 'checked' if check_only else 'dump_completed'
+            except BaseException:
+                manifest['status'] = 'failed'
+                raise
+            finally:
+                manifest['finished_at'] = utc_now()
+                write_manifest(manifest)
     return results
 
 
@@ -784,6 +842,8 @@ def cleanup_run(directory, profile, *, verified=False, interrupted=False):
 
     Existing Unraid ownership/modes are accepted. A replaced run, links, unknown
     files or incompatible manifest block cleanup. No recursive deletion occurs.
+    Enumeration opens a fresh view of the pinned directory, including files
+    created after export opened it. Filesystem errors may leave a partial cleanup.
     interrupted permits a running manifest only after exporter reconciliation
     under docker-control; verified requires an archived manifest.
     """
@@ -825,7 +885,13 @@ def _cleanup_run(root_fd, run_name, run_fd, profile, *, verified, interrupted):
     if manifest.get('scope', {}).get('globals'):
         name = 'globals.sql.gz' if manifest.get('compression') == 'gzip' else 'globals.sql'
         allowed.update((name, name + '.partial'))
-    children = os.listdir(run_fd)
+    # Btrfs can retain the entry boundary from when the empty run was opened.
+    # A new open (not dup) refreshes enumeration without trusting its pathname.
+    scan_fd = os.open('.', DIRECTORY_FLAGS, dir_fd=run_fd)
+    try:
+        children = os.listdir(scan_fd)
+    finally:
+        os.close(scan_fd)
     for child in children:
         info = os.stat(child, dir_fd=run_fd, follow_symlinks=False)
         if child not in allowed or not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:

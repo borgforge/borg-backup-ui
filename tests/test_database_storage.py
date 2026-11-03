@@ -130,6 +130,37 @@ def test_path_replacement_during_export_cannot_redirect_io(config, profile, pool
         with pytest.raises(OSError): os.fstat(fd)
 
 
+@pytest.mark.parametrize('stale_view', ['btrfs', 'consumed_cursor'])
+@pytest.mark.parametrize('unexpected_file', [False, True])
+def test_cleanup_refreshes_directory_view(config, profile, pool, monkeypatch, stale_view, unexpected_file):
+    """Files created after opening the run must be validated before any deletion."""
+    fake_export(monkeypatch, profile)
+    results = backup.export_profiles(config, [profile], 'job', 'run')
+    result = results[0]
+    directory = Path(result['directory'])
+    result.update(status='archived', archived=True)
+    backup.write_manifest(result)
+    if unexpected_file:
+        (directory / 'keep-me.txt').write_text('unrelated data')
+    before = {p.name: p.read_bytes() for p in directory.iterdir()}
+    if stale_view == 'btrfs':
+        # Btrfs captures the entry boundary when the empty run is opened.
+        listdir = os.listdir
+        monkeypatch.setattr(backup.os, 'listdir', lambda fd: [] if fd == result._run_fd else listdir(fd))
+    else:
+        os.lseek(result._run_fd, 2**63 - 1, os.SEEK_SET)
+    try:
+        if unexpected_file:
+            with pytest.raises(DatabaseError, match='cleanup_blocked'):
+                backup.cleanup_run(result, profile, verified=True)
+            assert {p.name: p.read_bytes() for p in directory.iterdir()} == before
+        else:
+            backup.cleanup_run(result, profile, verified=True)
+            assert not directory.exists()
+    finally:
+        backup.close_results(results)
+
+
 def test_retained_listing_reports_precise_storage_error(config, profile, pool, monkeypatch):
     monkeypatch.setattr(database_api, 'list_profiles', lambda config: {'profiles':[profile]})
     Path(profile['staging_dir']).rmdir()
@@ -399,3 +430,57 @@ def test_live_operation_progress_is_in_memory_until_completion(config, profile, 
         time.sleep(.01)
     assert final['status']=='completed' and final['progress']['database']=='digikam'
     assert state['id'] not in database_api._live_progress
+
+
+@pytest.mark.parametrize('identifier,origin', [
+    ('test', 'manual'),
+    ('11111111-1111-4111-8111-111111111111', 'job'),
+    (None, 'unknown'), ('', 'unknown'), ('legacy-unknown', 'unknown'), ([], 'unknown'),
+])
+@pytest.mark.parametrize('archived', [False, True])
+def test_retained_origin_uses_manifest_identity_without_rewriting(config, profile, monkeypatch, identifier, origin, archived):
+    """Origins survive missing jobs and do not depend on export/archive success."""
+    fake_export(monkeypatch, profile)
+    results = backup.export_profiles(config, [profile], 'test', 'run')
+    try:
+        results[0].update(archived=archived, status='failed')
+        if identifier is None:
+            results[0].pop('job_id')
+        else:
+            results[0]['job_id'] = identifier
+        backup.write_manifest(results[0])
+        manifest = backup.result_directory(results[0]) / 'manifest.json'
+        before = manifest.read_bytes()
+        monkeypatch.setattr(database_api, 'list_profiles', lambda _: {'profiles':[profile]})
+        response = database_api.retained_runs(config)
+        assert not response['errors']
+        row = response['runs'][0]
+        assert row['origin'] == origin
+        assert row['job_id'] == (identifier if origin == 'job' else '')
+        assert row['archived'] is archived and row['status'] == 'failed'
+        assert manifest.read_bytes() == before
+    finally:
+        backup.close_results(results)
+
+
+@pytest.mark.parametrize('retention', ['keep', 'after_archive', None, 'future-policy', []])
+def test_retained_policy_comes_from_manifest_not_current_profile(config, profile, monkeypatch, retention):
+    """Historical retention remains truthful after profile edits; missing data stays unknown."""
+    fake_export(monkeypatch, profile)
+    results = backup.export_profiles(config, [profile], 'test', 'run')
+    try:
+        if retention is None:
+            results[0].pop('retention')
+        else:
+            results[0]['retention'] = retention
+        backup.write_manifest(results[0])
+        manifest = backup.result_directory(results[0]) / 'manifest.json'
+        before = manifest.read_bytes()
+        current_profile = {**profile, 'retention': 'after_archive' if retention == 'keep' else 'keep'}
+        monkeypatch.setattr(database_api, 'list_profiles', lambda _: {'profiles': [current_profile]})
+        response = database_api.retained_runs(config)
+        assert not response['errors']
+        assert response['runs'][0]['retention'] == (retention if retention in ('keep', 'after_archive') else 'unknown')
+        assert manifest.read_bytes() == before
+    finally:
+        backup.close_results(results)

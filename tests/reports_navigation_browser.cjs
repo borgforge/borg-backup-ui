@@ -14,7 +14,7 @@ const {chromium} = require('playwright');
  await page.goto('http://bbui.test/');
  await page.addStyleTag({content:'*,*::before,*::after{transition:none!important;animation:none!important}'});
  await page.evaluate(dicts=>{
-  window.lang='de';window.dicts=dicts;window.held=null;window.pending=[];
+  window.lang='de';window.dicts=dicts;window.held=null;window.pending=[];window.calls=[];
   window.BBUI={core:{state:{currentPage:'berichte'}},components:{i18n:{getLanguage:()=>lang,t:(key,params={})=>{
    const text=key.split('.').reduce((value,part)=>value?.[part],dicts[lang]);return typeof text==='string'?text.replace(/\{(\w+)\}/g,(_,name)=>params[name]??''):key;
   }}}};
@@ -31,6 +31,7 @@ const {chromium} = require('playwright');
    {date:'2026-10-28',repository_size:2900000000,original_size:3000000000,deduplicated_size:300000000,duration_seconds:120},
   ],monthly_status:[{month:'2026-09',success:3,warning:1,error:1},{month:'2026-10',success:8,warning:0,error:0}]});
   window.fetch=async url=>{
+   calls.push(url);
    if(url===held)await new Promise(resolve=>pending.push(resolve));
    if(url==='/api/jobs')return {ok:true,json:async()=>({jobs:jobsFixture})};
    if(url==='/api/reports/jobs')return {ok:true,json:async()=>({jobs:jobsFixture.map(j=>({...j,display_name:j.name}))})};
@@ -47,8 +48,13 @@ const {chromium} = require('playwright');
  const loaded=async key=>page.waitForFunction(key=>BBUI.reportState.job?.key===key&&BBUI.reportState.data&&document.getElementById('bericht-body').style.display!=='none',key);
  for(const lang of ['de','en'])for(const theme of ['light','dark']){
   await page.setViewportSize({width:1600,height:1100});
-  await page.evaluate(async({lang,theme})=>{localStorage.clear();window.lang=lang;translate();document.documentElement.dataset.theme=theme;document.getElementById('bericht-job-sel').value='';BBUI.reportState.location=null;BBUI.reportState.selectedJobs={};await berichtInit();},{lang,theme});
-  await loaded('local-vms');
+  await page.evaluate(async({lang,theme})=>{localStorage.setItem('bbui.jobPicker.reports',JSON.stringify({key:'usb-app'}));calls=[];window.lang=lang;translate();document.documentElement.dataset.theme=theme;document.getElementById('bericht-job-sel').value='';BBUI.reportState.location=null;await berichtInit();},{lang,theme});
+  assert.equal(await page.locator('#bericht-job-sel').inputValue(),'');
+  assert.equal(await page.evaluate(()=>BBUI.reportState.job),null);
+  assert.equal(await page.locator('#report-source-toggle').innerText(),lang==='de'?'Job wählen':'Choose job');
+  assert(await page.locator('#bericht-empty').isVisible());
+  assert.equal(await page.evaluate(()=>calls.some(url=>url.startsWith('/api/reports/data?'))),false);
+  await choose('local','local-vms');await loaded('local-vms');
   await page.locator('#report-source-toggle').click();
   assert.deepEqual(await page.locator('[data-picker-location]').evaluateAll(es=>es.map(e=>e.dataset.pickerLocation)),['local','usb','storagebox']);
   assert.equal(await page.locator('[data-picker-location=local] .location-nav-count').innerText(),'2');
@@ -108,12 +114,14 @@ const {chromium} = require('playwright');
   assert.equal(await page.locator('#job-picker-search').inputValue(),'');
   await page.locator('[data-picker-job=usb-app]').click();await loaded('usb-app');
   assert.match(await page.locator('#report-selection-subtitle').innerText(),/USB/);
-  await page.evaluate(async()=>{document.getElementById('bericht-job-sel').value='';BBUI.reportState.location=null;await berichtInit();});await loaded('usb-app');
+  await page.evaluate(async()=>{document.getElementById('bericht-job-sel').value='';BBUI.reportState.location=null;await berichtInit();});
+  assert.equal(await page.locator('#bericht-job-sel').inputValue(),'');assert(await page.locator('#bericht-empty').isVisible());
   await choose('local','local-app');await loaded('local-app');
   await page.locator('#report-source-toggle').click();
   assert.equal(await page.locator('[data-picker-job=local-app]').getAttribute('aria-pressed'),'true');
   await page.keyboard.press('Escape');
-  await page.evaluate(()=>berichtInit());await loaded('local-app');
+  await page.evaluate(()=>berichtInit());assert.equal(await page.locator('#bericht-job-sel').inputValue(),'');
+  await choose('local','local-app');await loaded('local-app');
   await page.evaluate(()=>{window.lang=lang==='de'?'en':'de';translate();window.dispatchEvent(new Event('bbui:language-changed'));});
   assert.match(await page.locator('#report-selection-subtitle').innerText(),/Lokal|Local/);
   await choose('storagebox','ssh-photo');await loaded('ssh-photo');
@@ -136,8 +144,8 @@ const {chromium} = require('playwright');
  await page.evaluate(async()=>{held=null;pending.splice(0).forEach(resolve=>resolve());await new Promise(r=>setTimeout(r,0));});
  assert.equal(await page.evaluate(()=>BBUI.reportState.borgInfoLoaded),false);
  assert(!await page.locator('#bericht-borginfo-cards').isVisible());
- // Removal reconciles remembered locations and selection; an empty installation remains usable.
- await page.evaluate(async()=>{jobsFixture=jobsFixture.filter(j=>j.location!=='local');await berichtInit();});await loaded('usb-app');
+ // Removal never silently selects a different job; an empty installation remains usable.
+ await page.evaluate(async()=>{jobsFixture=jobsFixture.filter(j=>j.location!=='local');await berichtInit();});assert.equal(await page.locator('#bericht-job-sel').inputValue(),'');
  assert.equal(await page.locator('[data-picker-location=local]').count(),0);
  await page.evaluate(async()=>{jobsFixture=[];await berichtInit();});
  assert.equal(await page.locator('[data-picker-location]').count(),0);assert(await page.locator('#bericht-empty').isVisible());

@@ -42,11 +42,12 @@ const {chromium} = require('playwright');
         window.escHtml=v=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;');
         window.settingsT=(key,params)=>window.BBUI.components.i18n.t('settings.'+key,params);
         window.settingsState={};
-        window.settingsLocale=()=> 'de-DE';window.settingsFmtBytes=v=>`${v} B`;window.apiErrorMessage=d=>d.code||'error';
+        window.settingsLocale=()=> 'de-DE';window.apiErrorMessage=d=>d.code||'error';
         window.wizardState={jobIdRequest:1};window._wizardShowError=()=>{};
       },JSON.parse(fs.readFileSync(`ui/i18n/${language}.json`,'utf8')));
    await page.addScriptTag({content:fs.readFileSync('ui/js/utils/dom.js','utf8')});
       const settings=fs.readFileSync('ui/js/pages/settings.js','utf8');
+      await page.addScriptTag({content:settings.match(/function settingsFmtBytes[\s\S]*?\n}/)[0]});
       await page.addScriptTag({content:settings.match(/function settingsCard[\s\S]*?\n}/)[0] + settings.match(/function settingsMenuIcon[\s\S]*?\n}/)[0]});
       for(const name of ['settingsFormSignature','_updateUnsavedChangesUi','canLeaveSettingsPage']) await page.addScriptTag({content:settings.match(new RegExp('(?:async )?function '+name+'[\\s\\S]*?\\n}'))[0]});
       await page.addScriptTag({content:settings.match(/function _openSettingsDialog[\s\S]*?\n}/)[0]});
@@ -58,6 +59,16 @@ const {chromium} = require('playwright');
         settingsState.activeTab='databases';
       });
       await page.evaluate(()=>loadDatabaseSettings());
+      const retentionLabels=JSON.parse(fs.readFileSync(`ui/i18n/${language}.json`,'utf8')).database;
+      assert.equal(await page.locator('#db-retention-hint').textContent(),retentionLabels.retentionKeepHint);
+      if(process.env.BBUI_SCREENSHOT_DIR)await page.locator('#db-retention').locator('..').locator('..').screenshot({path:`${process.env.BBUI_SCREENSHOT_DIR}/retention-profile-${language}.png`});
+      assert.equal(await page.locator('#db-retention').getAttribute('aria-describedby'),'db-retention-hint');
+      await page.locator('#db-retention').selectOption('after_archive');
+      assert.equal(await page.locator('#db-retention-hint').textContent(),retentionLabels.retentionAfterArchiveHint);
+      assert.equal(await page.evaluate(()=>settingsState.databaseDirty),true);
+      await page.locator('#db-retention').selectOption('keep');
+      assert.equal(await page.locator('#db-retention-hint').textContent(),retentionLabels.retentionKeepHint);
+      assert.equal(await page.evaluate(()=>settingsState.databaseDirty),false);
       assert.ok((await page.locator('#db-unsupported').textContent()).includes('<img retired>'));
       assert.equal(await page.locator('#db-unsupported img').count(),0);
       assert.equal(await page.locator('#db-container').evaluate(el=>el.tagName), 'SELECT');
@@ -113,9 +124,10 @@ const {chromium} = require('playwright');
       await page.locator('[data-db-action=dump]').click();
       await page.waitForFunction(()=>document.getElementById('db-result').textContent.includes('Borg')===false && document.getElementById('db-cancel').disabled);
       assert.equal(actions,2);
-      await page.waitForSelector('#db-runs article');
+      await page.waitForSelector('#db-runs .database-run-row');
+      await page.locator('[data-run-details]').click();
       assert.ok((await page.locator('#db-runs').textContent()).includes('MariaDB Apps'));
-      assert.ok((await page.locator('#db-runs').textContent()).includes('5700000000'));
+      assert.ok((await page.locator('#db-runs').textContent()).includes('5.3 GB'));
       assert.equal(await page.locator('#db-runs time').getAttribute('datetime'),'2026-10-24T09:35:10Z');
       await page.locator('[data-cleanup]').click();
       assert.equal(await page.locator('#settings-dialog-modal').isVisible(),true);
@@ -205,6 +217,89 @@ const {chromium} = require('playwright');
       runsOverride={runs:[],errors:[]};
       await page.evaluate(()=>loadDatabaseRuns());
       assert.ok((await page.locator('#db-runs').textContent()).includes(labels.noRuns));
+      // Compact retained-run table: separate origins, stable cleanup target and paging (#691).
+      await page.setViewportSize({width:1200,height:1000});
+      const mixed = Array.from({length:13}, (_,i) => ({
+        profile_id:'db-aaaaaaaaaaaa', profile_name:i % 2 ? 'Sicherung PostgreSQL' : 'Sicherung MariaDB',
+        directory:'/mnt/cache/borg-database-dumps/bbui-profile-'+i, started_at:`2026-11-${String(i+1).padStart(2,'0')}T20:14:00Z`,
+        origin:i % 3 === 0 ? 'manual' : 'job', status:i === 11 ? 'failed' : i % 3 === 0 ? 'dump_completed' : 'archived',
+        archived:i % 3 !== 0 && i !== 11, bytes:2800000000+i, uncompressed_bytes:5400000000,
+        retention:i % 2 ? 'after_archive' : 'keep',
+        compression:'gzip', job_id:i % 3 === 0 ? '' : '11111111-1111-4111-8111-111111111111',
+      }));
+      mixed.push({profile_id:'db-aaaaaaaaaaaa',profile_name:'<img old>',directory:'/mnt/cache/<old>/'+'x'.repeat(180),origin:'unknown',started_at:'not-a-date',bytes:123,status:'dump_completed'});
+      runsOverride={runs:mixed,errors:[]};
+      await page.evaluate(()=>loadDatabaseRuns());
+      assert.equal(await page.locator('.database-run-row').count(),10);
+      assert.equal(await page.locator('.database-run-row time').first().getAttribute('datetime'),mixed[12].started_at,'Newest runs first across profiles');
+      assert.equal(await page.locator('.database-run-detail').count(),0,'Long paths and cleanup start collapsed');
+      assert.ok((await page.locator('[data-run-filter=all]').textContent()).includes('14'));
+      assert.ok((await page.locator('[data-run-filter=manual]').textContent()).includes('5'));
+      assert.ok((await page.locator('[data-run-filter=job]').textContent()).includes('8'));
+      assert.ok((await page.locator('[data-run-filter=unknown]').textContent()).includes('1'));
+      assert.ok(await page.locator('.database-run-row').evaluateAll(rows=>rows.every(row=>row.getBoundingClientRect().height<85)),'Compact rows replace large cards');
+      if(process.env.BBUI_SCREENSHOT_DIR)await page.locator('.database-runs-body').screenshot({path:`${process.env.BBUI_SCREENSHOT_DIR}/runs-table-${language}.png`});
+      await page.locator('[data-run-page="1"]').click();
+      assert.equal(await page.locator('.database-run-row').count(),4);
+      assert.equal(await page.locator('[data-run-page="1"]').isDisabled(),true);
+      await page.locator('[data-run-filter=job]').click();
+      assert.equal(await page.locator('.database-run-row').count(),8);
+      assert.ok((await page.locator('.database-run-row').first().textContent()).includes(labels.failed),'A failed export is still a job run');
+      assert.equal(await page.locator('[data-run-page]').count(),0);
+      await page.evaluate(()=>loadDatabaseRuns());
+      assert.equal(await page.locator('[data-run-filter=job]').getAttribute('aria-pressed'),'true','Refresh retains selected origin');
+      await page.locator('[data-run-details]').first().click();
+      assert.ok((await page.locator('.database-run-detail').textContent()).includes(labels.runRetention+': '+labels.after_archive));
+      await page.locator('[data-run-filter=manual]').click();
+      assert.equal(await page.locator('.database-run-row').count(),5);
+      const toggle=page.locator('[data-run-details]').first();
+      await toggle.focus();await page.keyboard.press('Enter');
+      assert.equal(await toggle.getAttribute('aria-expanded'),'true');
+      assert.equal(await toggle.evaluate(el=>document.activeElement===el),true,'Details preserve keyboard focus');
+      assert.ok((await page.locator('.database-run-detail').textContent()).includes(mixed[12].directory));
+      assert.ok((await page.locator('.database-run-detail').textContent()).includes(labels.runRetention+': '+labels.keep));
+      if(process.env.BBUI_SCREENSHOT_DIR)await page.locator('.database-run-detail').screenshot({path:`${process.env.BBUI_SCREENSHOT_DIR}/retention-detail-${language}.png`});
+      await page.evaluate(()=>{settingsState.databaseDirty=false;});
+      const beforeCleanup=actions;
+      await page.locator('[data-cleanup]').click();
+      assert.ok((await page.locator('#settings-dialog-description').textContent()).includes(mixed[12].directory),'Filtered/sorted cleanup targets the displayed run');
+      await page.locator('#settings-dialog-cancel-btn').click();assert.equal(actions,beforeCleanup);
+      await page.locator('[data-cleanup]').click();await page.locator('#settings-dialog-confirm-btn').click();
+      await page.waitForFunction(()=>document.getElementById('db-cancel').disabled);
+      assert.equal(lastAction.directory,mixed[12].directory);
+      assert.equal(lastAction.profile_id,mixed[12].profile_id);
+      await page.locator('[data-run-filter=unknown]').click();
+      assert.equal(await page.locator('.database-run-row').count(),1);
+      await page.locator('[data-run-details]').click();
+      assert.ok((await page.locator('.database-run-detail').textContent()).includes('/mnt/cache/<old>'));
+      assert.ok((await page.locator('.database-run-detail').textContent()).includes(labels.runRetention+': '+labels.runRetentionUnknown));
+      assert.equal(await page.locator('#db-runs img, #db-runs old').count(),0);
+      await page.setViewportSize({width:390,height:844});
+      assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'Narrow tables scroll internally');
+      assert.equal(await page.locator('.database-runs-table-wrap').evaluate(el=>el.scrollWidth>el.clientWidth),true);
+      if(process.env.BBUI_SCREENSHOT_DIR)await page.locator('.database-runs-body').screenshot({path:`${process.env.BBUI_SCREENSHOT_DIR}/runs-table-narrow-${language}.png`});
+      runsOverride={runs:[mixed[0]],errors:[]};
+      await page.locator('[data-run-filter=job]').click();
+      await page.evaluate(()=>loadDatabaseRuns());
+      assert.ok((await page.locator('#db-runs').textContent()).includes(labels.runFilterEmpty));
+      // A newer refresh wins even if an earlier request completes last.
+      await page.evaluate(async () => {
+        const original=databaseRequest;
+        let finish;
+        let call=0;
+        databaseRequest=async (path,...rest) => {
+          if(path!=='/runs')return original(path,...rest);
+          if(++call===1)return new Promise(resolve=>{finish=resolve;});
+          return {runs:[],errors:[]};
+        };
+        try {
+          const old=loadDatabaseRuns();
+          await loadDatabaseRuns();
+          finish({runs:[{profile_name:'STALE RESULT',directory:'/stale',bytes:0}],errors:[]});
+          await old;
+        } finally {databaseRequest=original;}
+      });
+      assert.equal((await page.locator('#db-runs').textContent()).includes('STALE RESULT'),false);
       assert.deepEqual(browserDialogs,[]);
       assert.deepEqual(errors,[]);
       await page.close();

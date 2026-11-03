@@ -121,11 +121,32 @@ def start_operation(config, payload):
     return state.copy()
 
 
+def _run_origin(manifest):
+    """Classify existing dump provenance without inferring it from archive success.
+
+    Manual exports use the explicit test sentinel; canonical job UUIDs remain
+    attributable even after job deletion. Missing/invalid legacy identities are
+    reported as unknown. No manifests are changed.
+    """
+    from job_identity import validate_job_id
+    identifier = manifest.get('job_id')
+    if identifier == 'test':
+        return {'origin': 'manual', 'job_id': ''}
+    try:
+        return {'origin': 'job', 'job_id': validate_job_id(identifier)}
+    except (ValueError, TypeError, AttributeError):
+        return {'origin': 'unknown', 'job_id': ''}
+
+
 def retained_runs(config):
     """List dumps with normal Unraid permissions through held directory handles.
 
     Listing never creates paths or changes owners/modes. Unavailable locations
     include their profile name and configured path for actionable UI diagnostics.
+    Each row includes origin (job/manual/unknown) and a validated job_id, or an
+    empty string. Retention is the manifest policy at creation (keep/after_archive),
+    or unknown when absent/unsupported, never the current profile setting.
+    Old manifests remain readable and are never rewritten.
     """
     rows, errors = [], []
     for profile in list_profiles(config)['profiles']:
@@ -149,8 +170,9 @@ def retained_runs(config):
                             entry = os.stat(child, dir_fd=run_fd, follow_symlinks=False)
                             if stat.S_ISREG(entry.st_mode):
                                 size += entry.st_size
-                        rows.append({'profile_id': profile['id'], 'profile_name': row.get('profile_name') or profile['name'],
+                        rows.append({**_run_origin(row), 'profile_id': profile['id'], 'profile_name': row.get('profile_name') or profile['name'],
                                      'compression': row.get('compression', 'none'),
+                                     'retention': row.get('retention') if row.get('retention') in ('keep', 'after_archive') else 'unknown',
                                      'uncompressed_bytes': sum(f.get('uncompressed_bytes', f.get('bytes', 0)) for f in row.get('files', [])),
                                      'directory': str(Path(profile['staging_dir']) / name), 'status': row.get('status'),
                                      'started_at': row.get('started_at'), 'archived': row.get('archived', False), 'bytes': size})

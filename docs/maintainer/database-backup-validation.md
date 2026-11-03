@@ -78,6 +78,15 @@ Manual test-channel acceptance on Unraid:
 - Run a mixed file/database job and a database-only job. Verify current dumps and
   manifest in Borg, missing/excluded artifacts cause failure, warnings retain
   local dumps, and no previous/partial dump appears in the current archive.
+- On a Btrfs pool, run PostgreSQL and MariaDB profiles with `after_archive` retention
+  (#694). Both current run directories must disappear after successful readback;
+  older/manual dumps must remain. Check per-profile cleanup start/completion logs.
+  Directory enumeration must use a fresh view of the pinned run, including files
+  created after export opened it. Automated storage tests simulate this Btrfs
+  boundary and a consumed directory cursor, including unknown-file protection.
+  If cleanup fails, all verified profiles must retain their persisted archived
+  status and the log must identify local cleanup as the failing phase. The job
+  still fails and skips maintenance; successful readback is not a restore test.
 - While a database export runs, check the active Database backups step and elapsed
   time before Docker shutdown. Verify persisted success/failure/cancellation and
   file details, and visibility of assigned Pre/Post scripts. Check seven steps in

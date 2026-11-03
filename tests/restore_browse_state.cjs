@@ -60,7 +60,7 @@ function page(language = 'en') {
   return {context, get, state: context.window.BBUI.restoreState, labels, renderers};
 }
 
-test('returning after backups, repository switches and rename refreshes the same job', async () => {
+test('page entry clears remembered jobs and refreshes archives only after explicit selection', async () => {
   const {context, get, state} = page();
   const calls = [];
   let repository = 'repo1', name = 'Test';
@@ -80,7 +80,13 @@ test('returning after backups, repository switches and rename refreshes the same
     state.selectedPath = 'old-file'; state.precheck = {ok: true};
     get('restore-source-path').value = 'old-file';
     get('restore-confirm-check').checked = true;
+    const archiveCalls = calls.filter(url => url.startsWith('/api/restore/archives')).length;
     await context.restoreInit();
+    assert.equal(state.job, '');
+    assert.equal(state.archives.length, 0);
+    assert.equal(calls.filter(url => url.startsWith('/api/restore/archives')).length, archiveCalls);
+    get('restore-job-sel').value = 'job-id';
+    await context.restoreLoadArchives();
     assert.equal(state.job, 'job-id');
     assert.equal(state.jobs[0].repository_key, repository);
     assert.equal(state.jobs[0].name, name);
@@ -142,7 +148,7 @@ test('a removed job or failed archive refresh leaves no old selectable archive',
   state.job = 'removed'; state.archive = 'old'; state.archives = [{name: 'old'}];
   context.fetch = async () => response({jobs: [{key: 'remaining'}]});
   await context.restoreInit();
-  assert.equal(state.job, 'remaining');
+  assert.equal(state.job, '');
   assert.equal(state.archives.length, 0);
   get('restore-job-sel').value = 'remaining';
   context.fetch = async () => response({code: 'internal_error'}, 500);
