@@ -221,6 +221,63 @@ def test_runner_database_step_precedes_container_stop(run_backup, monkeypatch, t
     assert ('cleanup' in state.actions)==(outcome=='cleanup')
 
 
+@pytest.mark.parametrize('failure', ['cleanup', 'manifest', None])
+def test_runner_persists_all_archive_proofs_before_cleanup(run_backup, monkeypatch, tmp_path, failure, caplog):
+    """A first-profile cleanup failure must not hide the second archive proof."""
+    import wizard_runner
+    caplog.set_level('INFO')
+    state = run_backup
+    original = wizard_runner._load_env_from_job
+    selected = [{'id': 'db-' + letter * 12, 'retention': 'after_archive'} for letter in 'ab']
+    results = []
+    for profile in selected:
+        directory = tmp_path / profile['id']
+        directory.mkdir()
+        result = {'directory': str(directory), 'files': [], 'profile_id': profile['id'], 'status': 'dump_completed'}
+        backup.write_manifest(result)
+        results.append(result)
+    def load(*args):
+        env, meta = original(*args)
+        meta.update(database_profile_ids=[p['id'] for p in selected], _database_profiles=selected)
+        return env, meta
+    monkeypatch.setattr(wizard_runner, '_load_env_from_job', load)
+    monkeypatch.setattr(backup, 'validate_sources', lambda *args: None)
+    monkeypatch.setattr(backup, 'reconcile_operations', lambda *args: None)
+    monkeypatch.setattr(backup, 'export_profiles', lambda *args, **kwargs: results)
+    def verify(repo, archive, rows, cancelled):
+        for row in rows:
+            row.update(status='archived', archived=True, archive=archive)
+    monkeypatch.setattr(backup, 'verify_archive', verify)
+    write_manifest = backup.write_manifest
+    def persist(row):
+        if failure == 'manifest' and row is results[1]:
+            raise OSError('manifest write failed')
+        write_manifest(row)
+    monkeypatch.setattr(backup, 'write_manifest', persist)
+    def cleanup(*args, **kwargs):
+        state.actions.append('cleanup')
+        if failure == 'cleanup':
+            raise OSError('cleanup failed')
+    monkeypatch.setattr(backup, 'cleanup_run', cleanup)
+    if failure:
+        with pytest.raises(OSError, match=failure + '.*failed'):
+            state.run()
+        assert 'prune' not in state.actions
+    else:
+        assert state.run() == 0
+    persisted = [json.loads((Path(row['directory']) / 'manifest.json').read_text()) for row in results]
+    if failure == 'manifest':
+        assert 'cleanup' not in state.actions
+    else:
+        assert all(row['status'] == 'archived' and row['archived'] for row in persisted)
+        assert state.actions.count('cleanup') == (1 if failure else 2)
+    if failure == 'cleanup':
+        assert 'automatic local cleanup failed' in caplog.text
+        assert 'automatic local cleanup completed' not in caplog.text
+    elif failure is None:
+        assert caplog.text.count('automatic local cleanup completed') == 2
+
+
 @pytest.mark.parametrize("managed", [False, True])
 def test_database_only_configuration_roundtrip(tmp_path, profile, managed):
     from test_settings_transfer_repository_model import _canonical_source

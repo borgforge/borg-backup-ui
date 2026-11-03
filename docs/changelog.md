@@ -1,5 +1,10 @@
 # Changelog
 
+## Pending - Automatic database dump cleanup on Btrfs (#694)
+
+- Enumerate the pinned dump directory through a fresh descriptor so files created after opening the run are included on Btrfs. Preserve unknown-file, link and path-replacement safeguards.
+- Persist all verified archive manifests before any automatic cleanup. Log each profile's cleanup start, completion and failure; a cleanup failure still fails the job and skips maintenance without hiding later profiles' archive proofs.
+
 ## Pending - Consistent restore width and explicit job selection (#692)
 
 - Restore the Jobs-width limit and horizontal alignment for Browse & Restore while preserving the viewport-height wizard, internal scroll areas and visible action bar. Restore History retains page scrolling within the same width.

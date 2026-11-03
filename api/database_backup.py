@@ -842,6 +842,8 @@ def cleanup_run(directory, profile, *, verified=False, interrupted=False):
 
     Existing Unraid ownership/modes are accepted. A replaced run, links, unknown
     files or incompatible manifest block cleanup. No recursive deletion occurs.
+    Enumeration opens a fresh view of the pinned directory, including files
+    created after export opened it. Filesystem errors may leave a partial cleanup.
     interrupted permits a running manifest only after exporter reconciliation
     under docker-control; verified requires an archived manifest.
     """
@@ -883,7 +885,13 @@ def _cleanup_run(root_fd, run_name, run_fd, profile, *, verified, interrupted):
     if manifest.get('scope', {}).get('globals'):
         name = 'globals.sql.gz' if manifest.get('compression') == 'gzip' else 'globals.sql'
         allowed.update((name, name + '.partial'))
-    children = os.listdir(run_fd)
+    # Btrfs can retain the entry boundary from when the empty run was opened.
+    # A new open (not dup) refreshes enumeration without trusting its pathname.
+    scan_fd = os.open('.', DIRECTORY_FLAGS, dir_fd=run_fd)
+    try:
+        children = os.listdir(scan_fd)
+    finally:
+        os.close(scan_fd)
     for child in children:
         info = os.stat(child, dir_fd=run_fd, follow_symlinks=False)
         if child not in allowed or not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:

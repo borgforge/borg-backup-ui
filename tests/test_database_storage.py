@@ -130,6 +130,37 @@ def test_path_replacement_during_export_cannot_redirect_io(config, profile, pool
         with pytest.raises(OSError): os.fstat(fd)
 
 
+@pytest.mark.parametrize('stale_view', ['btrfs', 'consumed_cursor'])
+@pytest.mark.parametrize('unexpected_file', [False, True])
+def test_cleanup_refreshes_directory_view(config, profile, pool, monkeypatch, stale_view, unexpected_file):
+    """Files created after opening the run must be validated before any deletion."""
+    fake_export(monkeypatch, profile)
+    results = backup.export_profiles(config, [profile], 'job', 'run')
+    result = results[0]
+    directory = Path(result['directory'])
+    result.update(status='archived', archived=True)
+    backup.write_manifest(result)
+    if unexpected_file:
+        (directory / 'keep-me.txt').write_text('unrelated data')
+    before = {p.name: p.read_bytes() for p in directory.iterdir()}
+    if stale_view == 'btrfs':
+        # Btrfs captures the entry boundary when the empty run is opened.
+        listdir = os.listdir
+        monkeypatch.setattr(backup.os, 'listdir', lambda fd: [] if fd == result._run_fd else listdir(fd))
+    else:
+        os.lseek(result._run_fd, 2**63 - 1, os.SEEK_SET)
+    try:
+        if unexpected_file:
+            with pytest.raises(DatabaseError, match='cleanup_blocked'):
+                backup.cleanup_run(result, profile, verified=True)
+            assert {p.name: p.read_bytes() for p in directory.iterdir()} == before
+        else:
+            backup.cleanup_run(result, profile, verified=True)
+            assert not directory.exists()
+    finally:
+        backup.close_results(results)
+
+
 def test_retained_listing_reports_precise_storage_error(config, profile, pool, monkeypatch):
     monkeypatch.setattr(database_api, 'list_profiles', lambda config: {'profiles':[profile]})
     Path(profile['staging_dir']).rmdir()
