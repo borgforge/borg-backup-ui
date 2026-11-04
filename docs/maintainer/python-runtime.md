@@ -86,7 +86,14 @@ Existing saved Bash hooks are preserved, not rewritten. Hooks explicitly calling
 review them before removing a provider used by custom scripts or other plugins.
 
 Diagnostics show source, version and path under Settings > System Health &
-Migration and on the Unraid control page. DE/EN user documentation explains the
+Migration and on the Unraid control page. The same actual-process diagnostics
+are recorded in backup and restore-test logs (including the protected worker).
+Settings > About > Third-party separately shows the bundled CPython version/build
+and the active interpreter. Each bundle owns its expandable full license notices;
+the build generates runtime/licenses/bundles.json from the packaged Python archive,
+Apprise wheel license/notice files, Borg and Prism notices. It does not read host
+site-packages or fetch licenses at runtime. Original supplier notices are retained
+unchanged; the component inventory identifies the libraries actually shipped. DE/EN user documentation explains the
 transition. New manifests use Unraid's native `Min="6.12.5" Max="7.99.99"`
 attributes and CA metadata uses MinVer/MaxVer. Stable promotion carries the tested
 gate forward. Unraid 8 prereleases are above this maximum. The broad 7.x bound is

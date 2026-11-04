@@ -187,6 +187,7 @@ def is_deployable_path(path: str) -> bool:
         "plugin/check_apprise_runtime.py",
         "plugin/build.sh",
         "plugin/python_runtime.py",
+        "plugin/bundle_notices.py",
         "plugin/package_documentation.py",
         "docs/auth-user-store-recovery.md",
         "plugin/build-candidate.sh",

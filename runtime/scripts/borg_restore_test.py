@@ -1224,6 +1224,8 @@ def main() -> None:
     conf  = load_conf()
     tester = RestoreTest(conf, args)
     try:
+        from python_runtime_info import runtime_log_line
+        tester.log(runtime_log_line())
         if args.resource_worker:
             try:
                 repos = [repo for repo in discover_repos(conf) if repo["job_key"] in args.job_keys]
