@@ -1,0 +1,31 @@
+name: Monitor Apprise releases
+run-name: Apprise monitor | ${{ github.event_name == 'schedule' && 'Daily schedule' || 'Manual on main' }}
+on:
+  schedule:
+    - cron: '41 6 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: apprise-monitor
+  cancel-in-progress: false
+jobs:
+  monitor:
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    environment: dependency-monitor
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Install hash-pinned metadata parser
+        run: python -m pip install --require-hashes -r .github/requirements-monitor.lock
+      - name: Check upstream metadata and reconcile update issues
+        env:
+          GH_TOKEN: ${{ secrets.BBUI_BOT_TOKEN }}
+          BBUI_ENVIRONMENT: dependency-monitor
+        run: python plugin/apprise_monitor.py --apply

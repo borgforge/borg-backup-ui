@@ -76,6 +76,12 @@ stable preparation and weekly. This short check is repeated because advisory
 information can change without a source change. Findings fail visibly; none are
 suppressed. This is different from repeating the expensive source test suite.
 
+The daily [Apprise release monitor](apprise-monitor.md) (#699) complements these
+audits with deduplicated upstream-version and public-advisory issues. Its
+`dependency-monitor` environment requires separate maintainer setup and a live
+check after merge. It does not update dependencies or authorize releases; Python
+runtime monitoring remains part of #548.
+
 ## Local development and convenience commands
 
 1. Use an issue and a fresh feature/fix branch. Run focused checks while editing.
@@ -268,8 +274,9 @@ separate job without bot secrets. Do not replace this separation with
 checking out candidate code in a job holding the bot token.
 
 GitHub Releases are the additional publication step described above. The guarded
-main-push job in `ci.yml` is the sole non-dispatch job that uses a bot secret;
-it cannot run for a pull request, source-only push or failed prerequisite job.
+main-push job in `ci.yml` cannot run for a pull request, source-only push or failed
+prerequisite job. The separate scheduled Apprise monitor also uses a main-only
+protected bot credential, restricted to issue maintenance as documented above.
 
 GitHub may retain only the latest pending run in a concurrency group; active
 publishing runs are not canceled. Check the Actions page after several requests
