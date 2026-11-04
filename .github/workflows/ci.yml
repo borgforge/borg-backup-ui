@@ -110,7 +110,13 @@ jobs:
   github-release:
     name: Publish GitHub release
     needs: [plan, result]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.plan.outputs.mode == 'artifact'
+    # Artifact-only CI skips source checks. Override the implicit success()
+    # gate on that ancestor, but require the aggregate checks to pass (#696).
+    if: >-
+      ${{ !cancelled() &&
+          needs.plan.result == 'success' && needs.result.result == 'success' &&
+          github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+          needs.plan.outputs.mode == 'artifact' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     environment: release-publish

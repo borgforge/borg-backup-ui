@@ -286,8 +286,6 @@ def test_workflows_isolate_publication_authority_to_protected_main_jobs():
                     assert job_id == 'github-release'
                     assert job['environment'] == 'release-publish'
                     assert set(job['needs']) == {'plan', 'result'}
-                    assert job['if'] == ("github.event_name == 'push' && github.ref == 'refs/heads/main' "
-                                         "&& needs.plan.outputs.mode == 'artifact'")
                 else:
                     assert set(workflow['on']) == {'workflow_dispatch'}
                     assert job['environment'] in {'testing', 'stable', 'release-publish'}
@@ -316,3 +314,53 @@ def test_workflows_isolate_publication_authority_to_protected_main_jobs():
     assert 'secrets.' not in str(testing['jobs']['build'])
     assert 'checks.yml' not in str(testing)  # the resolver reuses/requests CI evidence
     assert 'push' not in testing['on']
+
+
+def publisher_condition_matches(condition, context, *, cancelled, source_result):
+    """Evaluate the publisher's conjunction-only condition for policy tests.
+
+    Supports context/string equality and status predicates, rejecting other
+    syntax. Models GitHub's implicit success gate over the dependency chain
+    when no status function is present; this is not a general Actions runner.
+    """
+    condition = condition.strip().removeprefix('${{').removesuffix('}}').strip()
+    ancestor_results = [context['needs.plan.result'], context['needs.result.result'], source_result]
+    success = not cancelled and all(result == 'success' for result in ancestor_results)
+    statuses = {'always()': True, 'cancelled()': cancelled, '!cancelled()': not cancelled,
+                'success()': success, 'failure()': 'failure' in ancestor_results}
+    clauses = [clause.strip() for clause in condition.split('&&')]
+    if not any(clause in statuses for clause in clauses) and not success:
+        return False
+    outcomes = []
+    for clause in clauses:
+        if clause in statuses:
+            outcomes.append(statuses[clause])
+        else:
+            match = re.fullmatch(r"([\w.]+)\s*==\s*'([^']*)'", clause)
+            assert match, f'Unsupported publisher predicate: {clause}'
+            key, expected = match.groups()
+            outcomes.append(context[key] == expected)
+    return all(outcomes)
+
+
+@pytest.mark.parametrize('source_result', ['skipped', 'success'])
+@pytest.mark.parametrize('overrides,cancelled,expected', [
+    pytest.param({}, False, True, id='successful-release'),
+    pytest.param({}, True, False, id='cancelled-run'),
+    *[pytest.param({f'needs.{job}.result': result}, False, False, id=f'{job}-{result}')
+      for job in ('plan', 'result') for result in ('failure', 'cancelled', 'skipped', '')],
+    *[pytest.param({'github.event_name': event}, False, False, id=event)
+      for event in ('pull_request', 'workflow_dispatch', 'pull_request_target')],
+    *[pytest.param({'github.ref': ref}, False, False, id=ref)
+      for ref in ('refs/heads/codex/feature', 'refs/pull/695/merge', 'refs/tags/v2026.11.03.1237')],
+    *[pytest.param({'needs.plan.outputs.mode': mode}, False, False, id=f'mode-{mode}')
+      for mode in ('source', '', 'unknown')],
+])
+def test_automatic_publisher_condition(overrides, cancelled, expected, source_result):
+    """Exercise the actual YAML guard, including skipped source-test ancestors (#696)."""
+    workflow = yaml.load((ROOT / '.github/workflows/ci.yml').read_text(), Loader=yaml.BaseLoader)
+    context = {'github.event_name': 'push', 'github.ref': 'refs/heads/main',
+               'needs.plan.outputs.mode': 'artifact', 'needs.plan.result': 'success',
+               'needs.result.result': 'success', **overrides}
+    assert publisher_condition_matches(workflow['jobs']['github-release']['if'], context,
+                                       cancelled=cancelled, source_result=source_result) is expected

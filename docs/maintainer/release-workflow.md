@@ -162,6 +162,19 @@ dependency audit. Only a push to main with an artifact-only delta reaches the
 `release-publish` environment; PR runs never receive its token. The protected
 lightweight tag `v<version>` points to the release PR's exact merge commit.
 
+The publisher explicitly requires successful `plan` and `CI result` jobs and a
+non-cancelled run (#696). Its `!cancelled()` status condition overrides GitHub's
+implicit `success()` gate, which otherwise propagates the intentionally skipped
+source checks through the dependency chain and skips publication even after a
+successful artifact-only CI. Artifact checks and the dependency audit remain
+mandatory through `CI result`; PRs, manual CI dispatches and source-only pushes
+cannot reach the publisher.
+
+Changes to this gate are checked with focused condition regressions, workflow
+validation and PR CI. Automatic publication can only be verified live after the
+fix is merged to main, on the next approved stable release merge. A manual retry
+verifies publication but does not exercise the automatic job's condition.
+
 The release description is the tested current-version changelog, including its
 contributor credits. Four assets are published:
 
