@@ -102,7 +102,7 @@ def test_native_inventory_matches_committed_provenance():
     lock = json.loads((ROOT / 'runtime/python/runtime.lock.json').read_text())
     assert lock['components']['cpython']['version'] == lock['version']
     assert lock['glibc_minimum'] == '2.17'
-    assert all(len(lock[key]) == 64 for key in ('sha256', 'metadata_sha256', 'downloads_sha256'))
+    assert all(len(lock[key]) == 64 for key in ('sha256', 'metadata_sha256', 'downloads_sha256', 'install_sha256'))
     import python_monitor
     assert set(lock['components']) <= set(python_monitor.PRODUCTS)
 
@@ -220,3 +220,14 @@ def test_active_external_pins_resolved_binary_not_moving_python3_link(launcher):
     assert json.loads(run().stdout)['path'] == str(commands / 'python3.12')
     Path(env['BBUI_SERVICE_PIDFILE']).unlink()
     assert json.loads(run().stdout)['path'] == str(commands / 'python3.13')
+
+
+@pytest.mark.parametrize('size, allowed', [(100 * 1024 * 1024, True), (100 * 1024 * 1024 + 1, False)])
+def test_github_package_size_boundary(size, allowed):
+    from types import SimpleNamespace
+    package = SimpleNamespace(stat=lambda: SimpleNamespace(st_size=size))
+    if allowed:
+        release.verify_package_size(package)
+    else:
+        with pytest.raises(RuntimeError, match='100 MiB'):
+            release.verify_package_size(package)

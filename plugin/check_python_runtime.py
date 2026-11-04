@@ -27,6 +27,8 @@ def check(work: Path, tests: bool = False) -> None:
     shutil.copytree(ROOT / 'runtime/python', runtime, dirs_exist_ok=True)
     meta = python_runtime.build(runtime, work / 'cache')
     vendor = app / 'runtime/vendor'
+    if vendor.exists():
+        shutil.rmtree(vendor)
     subprocess.run([sys.executable, '-m', 'pip', 'install', '--disable-pip-version-check', '--no-compile',
                     '--only-binary=:all:', '--require-hashes', '--target', str(vendor),
                     '-r', str(ROOT / 'plugin/apprise-requirements.lock')], check=True)

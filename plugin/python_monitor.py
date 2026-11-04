@@ -270,7 +270,8 @@ def baselines(root=ROOT) -> list[tuple[str, dict]]:
     with tarfile.open(package) as archive:
         member = archive.extractfile('boot/config/plugins/borg-backup-ui/runtime/python/python-runtime.json')
         shipped = json.loads(member.read())
-    same = all(shipped.get(key) == source[key] for key in ('version', 'build', 'components', 'sha256'))
+    same = all(shipped.get(key) == source.get(key) for key in
+               ('version', 'build', 'components', 'sha256', 'install_sha256'))
     if same:
         return [(f'published stable {version} and current source', shipped)]
     return [(f'published stable {version}', shipped), ('planned source update', source)]

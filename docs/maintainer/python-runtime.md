@@ -29,14 +29,19 @@ The 3.13 series is deliberately bounded; new stable series require compatibility
 review. External Python 3.10 through 3.13 must pass the same import/operation probe.
 Compatibility with an old external version is not an upstream support guarantee.
 
-The archive, supplier downloads inventory, supplier license and `PYTHON.json`
+The full provenance archive, supplier-stripped install archive, downloads
+inventory, supplier license and `PYTHON.json`
 are SHA256-pinned. The builder compares Python version, target, glibc requirement,
 linked libraries and native source versions to the committed inventory. It
 rejects unknown linked libraries or inventory drift. Native versions come from
 the pinned supplier source inventory; runtime checks also exercise SSL, SQLite,
 compression, authentication and the exact packaged Apprise dependencies.
 
-The full supplier archive is a build input only. The package contains a compressed
+The full supplier archive is a build input only. Executable binaries come from
+the separately pinned `install_only_stripped` archive from the same release.
+This removes debug data while preserving supplier-produced relocation metadata.
+Package build and validation reject payloads above GitHub's 100 MiB ordinary
+Git-file limit before test/stable publication. The package contains a compressed
 install tree, original component license texts, supplier license, original
 `PYTHON.json`, supplier downloads inventory and normalized provenance. Compiler
 objects, headers/static development archives, pip/ensurepip, stdlib tests,

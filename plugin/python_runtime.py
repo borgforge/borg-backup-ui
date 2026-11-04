@@ -76,7 +76,7 @@ def inventory(metadata: dict, downloads: dict, lock: dict) -> dict:
 def build(destination: Path, cache: Path, root: Path = ROOT) -> dict:
     """Verify upstream provenance and create a deterministic portable bundle.
 
-    Only the install tree and licenses are shipped; compiler objects, headers,
+    Only the supplier-stripped install tree and licenses are shipped; compiler objects, headers,
     pip, ensurepip and stdlib tests are omitted. No interpreter is installed on
     the build host. Errors prevent package publication.
     """
@@ -108,7 +108,20 @@ def build(destination: Path, cache: Path, root: Path = ROOT) -> dict:
     components = inventory(metadata, json.loads(downloads_path.read_text()), lock)
     if components != lock['components']:
         raise ValueError('Committed Python inventory differs from supplier provenance')
+    # Use the supplier's stripped binaries (separately pinned), preserving its
+    # relocation/version metadata. The full archive supplies build evidence and
+    # license texts. Avoid shipping debug data that exceeds GitHub's file limit.
+    stripped = cache / lock['install_archive']
+    fetch(release + '/' + urllib.parse.quote(lock['install_archive']), stripped, lock['install_sha256'])
+    selected = cache / 'selected'
+    if selected.exists():
+        shutil.rmtree(selected)
+    selected.mkdir()
+    with tarfile.open(stripped) as source:
+        source.extractall(selected, filter='data')
     install = unpacked / 'python/install'
+    shutil.rmtree(install)
+    shutil.move(str(selected / 'python'), install)
     for path in list(install.rglob('*.a')) + [install / 'include']:
         if path.is_dir():
             shutil.rmtree(path)

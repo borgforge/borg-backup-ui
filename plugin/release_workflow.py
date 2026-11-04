@@ -69,6 +69,12 @@ def verify_package_permissions(members: list[tarfile.TarInfo]) -> None:
                 raise RuntimeError(f"Package member has unsafe permissions: {member.name}")
 
 
+def verify_package_size(package: Path) -> None:
+    """Reject packages exceeding GitHub's 100 MiB ordinary Git-file limit."""
+    if package.stat().st_size > 100 * 1024 * 1024:
+        raise RuntimeError('Package exceeds the GitHub 100 MiB file limit; reduce bundled payload')
+
+
 def build_package(root: Path, package: Path) -> None:
     """Write a normalized package without touching live host paths.
 
@@ -102,9 +108,11 @@ def build_package(root: Path, package: Path) -> None:
                             archive.addfile(member, handle)
                     else:
                         archive.addfile(member)
+            verify_package_size(output)
             os.replace(output, package)
         return
     subprocess.run([makepkg, "-l", "y", "-c", "y", str(package)], cwd=root, check=True)
+    verify_package_size(package)
 
     # Filter the finished archive, including makepkg-generated install hooks.
     # Never extract it or chmod live host paths. The temporary archive stays
@@ -762,6 +770,7 @@ def prepare_build_tree(
 
 
 def package_provenance(package: Path) -> dict[str, object]:
+    verify_package_size(package)
     with tarfile.open(package, "r:*") as archive:
         verify_package_permissions(archive.getmembers())
         members = {member.name.lstrip("./"): member for member in archive.getmembers()}

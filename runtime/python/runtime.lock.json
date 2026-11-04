@@ -68,6 +68,8 @@
     "_tkinter"
   ],
   "glibc_minimum": "2.17",
+  "install_archive": "cpython-3.13.18+20261026-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+  "install_sha256": "df15fe60d3ff55bf9dcf25824b5572756bb8816ff93865a273d3301d7066a8b7",
   "metadata_sha256": "53304e0a7215bbe05a08780b6d491e965e02814bf38820819ba26ac15fc54e40",
   "schema": 1,
   "sha256": "f003449a05408c2e4b184f2a7abd1ea277081ff1a9100289075243ab5ed81207",
