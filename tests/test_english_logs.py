@@ -77,7 +77,7 @@ def test_public_plugin_install_and_service_messages_are_english():
     assert not GERMAN_LOG_TEXT.search(public_text)
     assert "downloading package" in installer
     assert "installing package" in installer
-    assert "Python runtime is not available yet" in service_script
+    assert "Python RAM cache is unavailable" in service_script
     assert "Borg Backup UI started" in service_script
 
 

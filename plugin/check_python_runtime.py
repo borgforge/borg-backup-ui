@@ -78,6 +78,7 @@ def check(work: Path, tests: bool = False) -> None:
         subprocess.run([str(private), '-E', '-s', '-S', '-B', '-c', code, '-q',
                         'tests/test_auth.py', 'tests/test_job_groups.py', 'tests/test_wizard_runner_runtime_path.py',
                         'tests/test_restore_test_scheduling.py', 'tests/test_job_scripts.py', 'tests/test_python_runtime.py',
+                        'tests/test_restore_test_memory.py', 'tests/test_notification_events.py',
                         '--basetemp=' + str(work / 'tests')], cwd=ROOT,
                        env={**os.environ, 'PYTEST_DISABLE_PLUGIN_AUTOLOAD': '1'}, check=True)
     print('Private/external Python, isolation, offline extraction, Apprise and ELF checks passed.')
