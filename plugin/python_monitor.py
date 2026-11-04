@@ -9,6 +9,7 @@ import json
 import os
 import re
 import sys
+import tarfile
 import time
 import urllib.parse
 import urllib.request
@@ -16,6 +17,7 @@ import urllib.request
 from packaging.version import Version, InvalidVersion
 
 import apprise_monitor as monitor
+import release_workflow as release
 
 ROOT = monitor.ROOT
 PEPS = 'https://peps.python.org/api/python-releases.json'
@@ -94,14 +96,14 @@ def release_findings(lock: dict, pep: dict, supplier: dict, today: date) -> list
     latest_patch = max(patches)
     if latest_patch > current:
         output.append(finding(f'release:patch-{latest_patch}', f'Update bundled Python to {latest_patch}',
-                              f'Shipped Python: {current}. Available patch/security release: {latest_patch}.\n'
+                              f'Monitored Python: {current}. Available patch/security release: {latest_patch}.\n'
                               f'Urgency: review promptly, including the security changes. Source: {PEPS}\n'
                               'Obtain a verified supplier build; do not change the Python series automatically.'))
     latest_series = max(stable)
     if latest_series.release[:2] > current.release[:2]:
         new = f'{latest_series.major}.{latest_series.minor}'
         output.append(finding(f'release:series-{new}', f'Review Python {new} compatibility for the private runtime',
-                              f'Shipped series: {series}. New stable series: {new}.\n'
+                              f'Monitored series: {series}. New stable series: {new}.\n'
                               f'Urgency: compatibility planning, no automatic series switch. Source: {PEPS}'))
     tag = supplier['tag_name']
     if supplier['draft'] or supplier['prerelease'] or not re.fullmatch(r'\d{8}', tag):
@@ -116,7 +118,7 @@ def release_findings(lock: dict, pep: dict, supplier: dict, today: date) -> list
     candidate = max(available)
     if candidate > current or (candidate == current and tag > lock['build']):
         output.append(finding(f'release:build-{candidate}-{tag}', f'Review Python runtime build {candidate}+{tag}',
-                              f'Shipped build: {current}+{lock["build"]}. Available: {candidate}+{tag}.\n'
+                              f'Monitored build: {current}+{lock["build"]}. Available: {candidate}+{tag}.\n'
                               f'Source: https://github.com/astral-sh/python-build-standalone/releases/tag/{tag}\n'
                               'Urgency: review native-library and security changes, including same-version rebuilds.'))
     eol = date.fromisoformat(metadata[series]['end_of_life'])
@@ -124,7 +126,7 @@ def release_findings(lock: dict, pep: dict, supplier: dict, today: date) -> list
     if days <= 180:
         threshold = 0 if days <= 0 else 90 if days <= 90 else 180
         output.append(finding(f'release:eol-{series}-{threshold}', f'Plan Python {series} support transition ({threshold}-day warning)',
-                              f'Shipped series: {series}. Upstream support ends {eol.isoformat()}.\n'
+                              f'Monitored series: {series}. Upstream support ends {eol.isoformat()}.\n'
                               f'Urgency: {"unsupported; prioritize replacement" if threshold == 0 else "complete migration before support ends"}.\n'
                               f'Source: {PEPS}\nWarning policy: 180 days, escalation at 90 days and at end of support.'))
     return output
@@ -227,7 +229,7 @@ def security_findings(lock: dict, request=read_json, pause=time.sleep) -> list[d
     for identifier, record in sorted(by_cve.items()):
         digest = hashlib.sha256(json.dumps(record['facts'], sort_keys=True).encode()).hexdigest()
         output.append(finding(f'security:{identifier}', f'Review private Python runtime advisory {identifier}',
-                              f'Shipped build: {lock["version"]}+{lock["build"]}.\n'
+                              f'Monitored build: {lock["version"]}+{lock["build"]}.\n'
                               f'Potentially affected components: {", ".join(sorted(record["components"]))}.\n'
                               f'Source and affected/fixed version ranges: https://nvd.nist.gov/vuln/detail/{identifier}\n'
                               'Urgency: security triage now; confirm platform/feature applicability and supplier fixes.\n'
@@ -235,24 +237,73 @@ def security_findings(lock: dict, request=read_json, pause=time.sleep) -> list[d
     return output
 
 
+def baselines(root=ROOT) -> list[tuple[str, dict]]:
+    """Read planned source and actual stable payload, never infer shipped pins.
+
+    A merged source update may precede stable publication. Keep scanning the
+    released runtime during that interval. Historical releases without private
+    Python are validated but contribute no invented runtime baseline.
+    """
+    source = json.loads((root / 'runtime/python/runtime.lock.json').read_text())
+    version = release.manifest_version(root / 'borg-backup-ui.plg')
+    if not re.fullmatch(r'[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[0-9]{4}', version):
+        raise ValueError('Malformed stable plugin version')
+    package = root / 'releases' / f'borg-backup-ui-{version}.txz'
+    provenance = release.package_provenance(package)
+    if 'python_runtime_lock_sha256' not in provenance:
+        return [('planned source; stable has no private runtime yet', source)]
+    with tarfile.open(package) as archive:
+        member = archive.extractfile('boot/config/plugins/borg-backup-ui/runtime/python/python-runtime.json')
+        shipped = json.loads(member.read())
+    same = all(shipped.get(key) == source[key] for key in ('version', 'build', 'components', 'sha256'))
+    if same:
+        return [(f'published stable {version} and current source', shipped)]
+    return [(f'published stable {version}', shipped), ('planned source update', source)]
+
+
+def merge_findings(scoped: list[tuple[str, list[dict]]]) -> list[dict]:
+    """Group a CVE/release across shipped and proposed builds into one issue."""
+    grouped = {}
+    for scope, detected in scoped:
+        for item in detected:
+            text = f'Scope: {scope}.\n' + item['text']
+            if item['key'] in grouped:
+                grouped[item['key']]['text'] += '\n\n' + text
+            else:
+                grouped[item['key']] = {**item, 'text': text}
+    return list(grouped.values())
+
+
 def run(apply: bool = False) -> dict:
     """Collect complete upstream evidence before reconciling bot-authored issues."""
     if apply:
         monitor.require_main_job('python-monitor.yml')
         monitor.hosted.bot()
-    lock = json.loads((ROOT / 'runtime/python/runtime.lock.json').read_text())
+    versions = baselines(ROOT)
     tag = read_json(LATEST)['tag']
     if not re.fullmatch(r'\d{8}', tag):
         raise ValueError('Invalid latest supplier tag')
     supplier = monitor.evidence.api(f'repos/astral-sh/python-build-standalone/releases/tags/{tag}')
-    found = release_findings(lock, read_json(PEPS), supplier, date.today())
-    found += security_findings(lock)
+    pep = read_json(PEPS)
+    cache = {}
+    def cached_request(url):
+        """Reuse identical public queries within this complete multi-build scan."""
+        if url not in cache:
+            cache[url] = read_json(url)
+        return cache[url]
+    scoped = []
+    for scope, lock in versions:
+        found = release_findings(lock, pep, supplier, date.today())
+        found += security_findings(lock, request=cached_request)
+        scoped.append((scope, found))
+    found = merge_findings(scoped)
     actions, deferred = monitor.plan_updates(found, monitor.existing_issues(), namespace='python', checklist=CHECKLIST)
     if apply:
         for action in actions:
             monitor.write_issue(action, workflow='python-monitor.yml')
-    return {'mode': 'apply' if apply else 'preview', 'build': lock['version'] + '+' + lock['build'],
-            'components_scanned': len(lock['components']), 'findings': len(found), 'deferred': deferred,
+    return {'mode': 'apply' if apply else 'preview',
+            'baselines': [{'scope': scope, 'build': item['version'] + '+' + item['build']} for scope, item in versions],
+            'components_scanned': sum(len(item['components']) for _, item in versions), 'findings': len(found), 'deferred': deferred,
             'creates': sum(a['method'] == 'POST' for a in actions), 'updates': sum(a['method'] == 'PATCH' for a in actions)}
 
 

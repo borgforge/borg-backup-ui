@@ -18,7 +18,11 @@ monitor activation and version-specific documentation are verified.
 ## Provenance and package layout
 
 `runtime/python/runtime.lock.json` is the single version/build/component inventory
-used by the builder and monitor. The initial supplier is
+used by the builder for the planned source version. The monitor also reads
+actual runtime provenance from the current stable package. If a source update
+is merged before its stable release, both builds remain monitored; duplicate
+findings are grouped. Older releases without private Python do not create a
+fictitious shipped-runtime baseline. The initial supplier is
 [Astral python-build-standalone](https://docs.astral.sh/python-build-standalone/),
 CPython 3.13.18, build 20261026, ordinary GIL, x86_64-unknown-linux-gnu (not v2/v3).
 The 3.13 series is deliberately bounded; new stable series require compatibility
@@ -144,6 +148,10 @@ second-run counts. Record run links in #548. A local preview is not activation.
    manual matrix. Obtain explicit test/stable approval; use a separate stable PR.
 5. Verify the release, update the first-version documentation if this is the
    transition release, and rerun the monitor against the shipped provenance.
+
+The CI logs explicitly name the source, Python version and absolute interpreter
+for host/private contract tests, private application tests and the full source
+suite. A host interpreter cannot silently substitute for the private test run.
 
 ## Required manual compatibility matrix (pending)
 

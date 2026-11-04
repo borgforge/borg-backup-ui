@@ -1,5 +1,6 @@
 """Offline upstream/schema and idempotent issue coverage for the Python monitor."""
 from datetime import date
+import json
 from pathlib import Path
 import sys
 
@@ -129,3 +130,51 @@ def test_windows_only_context_is_not_a_linux_finding():
     assert monitor.security_findings(inputs()[0], request=lambda _: data, pause=lambda _: None) == []
     config['operator'] = 'OR'
     assert len(monitor.security_findings(inputs()[0], request=lambda _: data, pause=lambda _: None)) == 1
+
+
+def test_shipped_runtime_remains_monitored_before_new_source_release(tmp_path, monkeypatch):
+    import io
+    import tarfile
+    source = {'version': '3.13.2', 'build': '20260202', 'components': {'cpython': {'version': '3.13.2'}}, 'sha256': 'new'}
+    shipped = {**source, 'version': '3.13.1', 'build': '20260101', 'sha256': 'old'}
+    runtime = tmp_path / 'runtime/python'
+    runtime.mkdir(parents=True)
+    (runtime / 'runtime.lock.json').write_text(json.dumps(source))
+    (tmp_path / 'borg-backup-ui.plg').write_text('<!ENTITY version "2026.01.01.1200">')
+    packages = tmp_path / 'releases'
+    packages.mkdir()
+    package = packages / 'borg-backup-ui-2026.01.01.1200.txz'
+    content = json.dumps(shipped).encode()
+    with tarfile.open(package, 'w:xz') as archive:
+        member = tarfile.TarInfo('boot/config/plugins/borg-backup-ui/runtime/python/python-runtime.json')
+        member.size = len(content)
+        archive.addfile(member, io.BytesIO(content))
+    monkeypatch.setattr(monitor.release, 'package_provenance', lambda _: {'python_runtime_lock_sha256': 'verified'})
+    baseline = monitor.baselines(tmp_path)
+    assert [entry['version'] for _, entry in baseline] == ['3.13.1', '3.13.2']
+    assert baseline[0][0].startswith('published stable')
+    (runtime / 'runtime.lock.json').write_text(json.dumps(shipped))
+    assert len(monitor.baselines(tmp_path)) == 1
+    monkeypatch.setattr(monitor.release, 'package_provenance', lambda _: {})
+    assert 'stable has no private runtime yet' in monitor.baselines(tmp_path)[0][0]
+
+
+def test_one_cve_across_two_baselines_becomes_one_issue():
+    item = monitor.finding('security:CVE-2026-12345', 'Review CVE', 'Affected', security=True)
+    found = monitor.merge_findings([('stable', [item]), ('planned', [item])])
+    assert len(found) == 1
+    assert 'Scope: stable' in found[0]['text'] and 'Scope: planned' in found[0]['text']
+    actions, _ = monitor.monitor.plan_updates(found, [], namespace='python')
+    assert len(actions) == 1
+
+
+def test_keyword_security_candidates_are_not_silently_discarded():
+    lock = {'version': '3.13.1', 'build': '20260101', 'components': {'mpdecimal': {'version': '4.0.0'}}}
+    data = nvd()
+    data['vulnerabilities'][0]['cve'].pop('configurations')
+    urls = []
+    def request(url):
+        urls.append(url)
+        return data
+    found = monitor.security_findings(lock, request=request, pause=lambda _: None)
+    assert len(found) == 1 and 'keywordSearch=mpdecimal' in urls[0]

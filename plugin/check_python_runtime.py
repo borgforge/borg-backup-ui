@@ -37,7 +37,10 @@ def check(work: Path, tests: bool = False) -> None:
     for name in ('sitecustomize', 'usercustomize', 'apprise', 'ssl'):
         (poison / (name + '.py')).write_text(f'from pathlib import Path\nPath({str(marker)!r}).touch()\nraise RuntimeError("poison")\n')
     env = {**os.environ, 'PYTHONPATH': str(poison), 'PYTHONHOME': str(poison)}
-    for interpreter in (Path(sys.executable), private):
+    for source, interpreter in (("external", Path(sys.executable)), ("bundled", private)):
+        details = subprocess.check_output([str(interpreter), "-E", "-s", "-S", "-c",
+                                           "import sys; print(sys.version.split()[0], sys.executable)"], text=True).strip()
+        print(f"Runtime contract tests: source={source}; {details}", flush=True)
         command = [str(interpreter), '-E', '-s', '-S', '-B']
         result = subprocess.check_output([*command, str(runtime / 'probe.py'), str(app)], env=env, text=True)
         assert json.loads(result)['ok']
@@ -67,6 +70,7 @@ def check(work: Path, tests: bool = False) -> None:
             if versions and max(versions) > ceiling:
                 raise ValueError('Shipped ELF exceeds the locked glibc baseline')
     if tests:
+        print(f"Application regression tests: source=bundled; Python {meta['version']}; interpreter={private}", flush=True)
         paths = [str(ROOT), str(ROOT / 'api'), str(ROOT / 'runtime'), *site.getsitepackages()]
         code = f'import sys,runpy; sys.path[:0]={paths!r}; runpy.run_module("pytest",run_name="__main__")'
         subprocess.run([str(private), '-E', '-s', '-S', '-B', '-c', code, '-q',

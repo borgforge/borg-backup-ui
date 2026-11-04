@@ -74,6 +74,7 @@ jobs:
       - name: Full suite (isolated data; optional host tests stay opt-in)
         run: |
           umask 0022
+          python -c 'import sys; print(f"Full source suite: source=CI setup-python; Python {sys.version.split()[0]}; interpreter={sys.executable}", flush=True)'
           python plugin/build_metrics.py --output .release-tmp/ci/tests.jsonl --step pytest -- python -m pytest -q tests -rs --durations=20 --basetemp=.release-tmp/ci/pytest --junitxml=.release-tmp/ci/tests.xml
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
