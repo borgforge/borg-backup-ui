@@ -172,9 +172,18 @@ def test_keyword_security_candidates_are_not_silently_discarded():
     lock = {'version': '3.13.1', 'build': '20260101', 'components': {'mpdecimal': {'version': '4.0.0'}}}
     data = nvd()
     data['vulnerabilities'][0]['cve'].pop('configurations')
+    data['vulnerabilities'][0]['cve']['descriptions'] = [{'lang': 'en', 'value': 'A vulnerability in mpdecimal.'}]
     urls = []
     def request(url):
         urls.append(url)
         return data
     found = monitor.security_findings(lock, request=request, pause=lambda _: None)
     assert len(found) == 1 and 'keywordSearch=mpdecimal' in urls[0]
+
+
+@pytest.mark.parametrize('description, expected', [
+    ('editorconfig-core-c affects libeditorconfig.', False),
+    ('A libedit vulnerability.', True), ('The editline library is affected.', True)])
+def test_libedit_keyword_does_not_match_editorconfig(description, expected):
+    cve = {'descriptions': [{'lang': 'en', 'value': description}]}
+    assert monitor.keyword_mentions_component(cve, 'libedit') is expected

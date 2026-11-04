@@ -175,6 +175,21 @@ def linux_configuration(config: dict) -> bool:
     return True
 
 
+def keyword_mentions_component(cve: dict, name: str) -> bool:
+    """Require a whole component name for unclassified keyword candidates.
+
+    NVD substring search for libedit also returns libeditorconfig. Inspect prose
+    only as data for disambiguation; never render upstream text in an issue.
+    """
+    aliases = {'libedit': ('libedit', 'editline'), 'uuid': ('libuuid',),
+               'mpdecimal': ('mpdecimal', 'libmpdec')}[name]
+    descriptions = cve['descriptions']
+    if not isinstance(descriptions, list) or not descriptions:
+        raise ValueError('Missing keyword candidate description')
+    text = ' '.join(row['value'] for row in descriptions).lower()
+    return any(re.search(r'(?<![a-z0-9])' + re.escape(alias) + r'(?![a-z0-9])', text) for alias in aliases)
+
+
 def security_findings(lock: dict, request=read_json, pause=time.sleep) -> list[dict]:
     """Query all shipped components with NVD rate limiting and bounded pagination.
 
@@ -216,7 +231,7 @@ def security_findings(lock: dict, request=read_json, pause=time.sleep) -> list[d
                 matches = [match for config in cve.get('configurations', []) if linux_configuration(config)
                            for node in config['nodes']
                            for match in node['cpeMatch'] if product and relevant_match(match, product, version)]
-                if product is None or (name == 'libedit' and not cve.get('configurations')):
+                if (product is None or (name == 'libedit' and not cve.get('configurations'))) and keyword_mentions_component(cve, name):
                     matches = [{'keyword_candidate': name}]
                 if matches:
                     record = by_cve.setdefault(identifier, {'components': set(), 'facts': []})
