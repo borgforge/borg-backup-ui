@@ -48,6 +48,14 @@ def issue(finding, **changes):
             'labels': [{'name': name} for name in payload['labels']], **changes}
 
 
+@pytest.fixture
+def pinned_runtime(tmp_path, monkeypatch):
+    """Isolate run tests from future real Apprise lockfile upgrades."""
+    (tmp_path / 'plugin').mkdir()
+    (tmp_path / 'plugin/apprise-requirements.lock').write_text('apprise==2.1.0\n')
+    monkeypatch.setattr(monitor, 'ROOT', tmp_path)
+
+
 @pytest.mark.parametrize('pins', ['apprise==2.1.0 \\\n    --hash=sha256:test\n', 'apprise==2.1.0\n'])
 def test_read_bundled_pin(tmp_path, pins):
     path = tmp_path / 'runtime.lock'
@@ -395,7 +403,7 @@ def test_successful_bounded_metadata_read_and_redirect_policy(monkeypatch):
         monitor.pypi_json('https://evil.invalid')
 
 
-def test_preview_and_no_change_do_not_write(monkeypatch):
+def test_preview_and_no_change_do_not_write(monkeypatch, pinned_runtime):
     monkeypatch.setattr(monitor, 'pypi_json', lambda url: index('2.1.0') if url == monitor.INDEX else metadata())
     monkeypatch.setattr(monitor, 'existing_issues', lambda: [])
     monkeypatch.setattr(monitor, 'write_issue', lambda action: pytest.fail('preview wrote an issue'))
@@ -404,7 +412,7 @@ def test_preview_and_no_change_do_not_write(monkeypatch):
     assert result['mode'] == 'preview'
 
 
-def test_apply_round_trip_creates_updates_and_then_stays_quiet(monkeypatch):
+def test_apply_round_trip_creates_updates_and_then_stays_quiet(monkeypatch, pinned_runtime):
     history = []
     source = [advisory()]
     calls = []
@@ -444,7 +452,7 @@ def test_apply_round_trip_creates_updates_and_then_stays_quiet(monkeypatch):
     assert calls.count('write') == 3
 
 
-def test_failure_before_reconciliation_cannot_create_partial_findings(monkeypatch):
+def test_failure_before_reconciliation_cannot_create_partial_findings(monkeypatch, pinned_runtime):
     monkeypatch.setattr(monitor, 'require_main_job', lambda: None)
     monkeypatch.setattr(monitor.hosted, 'bot', lambda: None)
     monkeypatch.setattr(monitor, 'pypi_json', lambda url: index('2.2.0') if url == monitor.INDEX else {})
