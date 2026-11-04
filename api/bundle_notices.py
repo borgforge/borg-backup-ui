@@ -1,4 +1,4 @@
-"""Generate per-bundle full license notices from the packaged inputs (#548)."""
+"""Build and read bundle-attributed original license notices (#548)."""
 from __future__ import annotations
 
 import argparse
@@ -7,6 +7,21 @@ import json
 from pathlib import Path
 import re
 import tarfile
+
+
+def read_bundles(app: Path) -> list[dict]:
+    """Read packaged bundle notices; source-only development has no generated index.
+
+    Only the fixed plugin-owned path is read. Malformed installed data raises
+    rather than presenting incomplete or invented license information.
+    """
+    index = app / 'runtime/licenses/bundles.json'
+    if not index.is_file():
+        return []
+    data = json.loads(index.read_text(encoding='utf-8'))
+    if data.get('schema_version') != 1 or not isinstance(data.get('bundles'), list):
+        raise ValueError('Unsupported bundle license index')
+    return data['bundles']
 
 
 def notice(name: str, content: str) -> dict:

@@ -1183,8 +1183,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         }
         if license_id == "third-party":
             from python_runtime_info import runtime_info
-            index = SCRIPT_DIR / "runtime/licenses/bundles.json"
-            result["bundles"] = json.loads(index.read_text(encoding="utf-8"))["bundles"] if index.is_file() else []
+            from bundle_notices import read_bundles
+            result["bundles"] = read_bundles(SCRIPT_DIR)
             result["python_runtime"] = runtime_info()
         return result
 
