@@ -21,4 +21,8 @@ def runtime_log_line() -> str:
     """Format safe, single-line runtime diagnostics for job logs."""
     info = runtime_info()
     path = info['path'].replace('\r', '\\r').replace('\n', '\\n')
-    return f"Active Python: {info['version']} | source={info['source']} | executable={path}"
+    return f"Borg Backup UI Python: {info['version']} | source={info['source']} | executable={path}"
+
+
+if __name__ == '__main__':
+    print(runtime_log_line())

@@ -680,7 +680,7 @@ fi
 # Remove runtime files installed outside the persistent plugin directory.
 rm -f "${RC_SCRIPT}" 2>/dev/null || true
 rm -rf "${EMHTTP_DIR}" 2>/dev/null || true
-rm -rf /run/borg-backup-ui 2>/dev/null || true
+rm -rf /run/borg-backup-ui /usr/local/lib/borg-backup-ui 2>/dev/null || true
 rm -f "${PIDFILE}" "${WAIT_PIDFILE}" "${LOGFILE}" "${CLIENT_LOGFILE}" 2>/dev/null || true
 
 # Remove plugin-owned payload from the USB flash. User data outside this

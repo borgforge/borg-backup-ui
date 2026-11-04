@@ -70,7 +70,7 @@ function bbui_python_runtime_status() {
   $launcher = "$PLUGIN_DIR/runtime/python/launch.sh";
   $raw = shell_exec('/bin/bash ' . escapeshellarg($launcher) . ' --status 2>/dev/null');
   $status = json_decode((string)$raw, true);
-  if (is_array($status) && !empty($status['ok'])) return $status;
+  if (is_array($status) && isset($status['ok']) && is_bool($status['ok']) && isset($status['reason'])) return $status;
   return ['ok' => false, 'path' => '', 'version' => '', 'source' => '',
           'reason' => 'Python runtime is unavailable. Reinstall Borg Backup UI and check the service log and available RAM.',
           'min_version' => '3.10'];
@@ -169,7 +169,7 @@ $async = (($_POST['bbui_async'] ?? '') === '1' || ($_GET['bbui_async'] ?? '') ==
 $json_response = null;
 $admin_recovery_result = null;
 
-if (($action === 'start' || $action === 'restart') && !$python_ok) {
+if ($action === 'start' && !$python_ok) {
   $warn_msg = $python_status['reason'];
 } elseif ($action === 'start') {
   shell_exec("$RC start >/dev/null 2>&1 &");
@@ -381,9 +381,9 @@ $admin_accounts = $python_ok ? bbui_load_admin_accounts($PLUGIN_DIR, $python_sta
     <div class="bbui-btn-row" id="bbui-ctrl-btns">
       <?php if ($running): ?>
         <button type="button" class="bbui-btn danger" onclick="bbui_action('stop')">&#9632; Stop</button>
-        <button type="button" class="bbui-btn"        onclick="bbui_action('restart')" <?= $python_ok ? '' : 'disabled title="Python 3 is missing or too old"' ?>>&#8635; Restart</button>
+        <button type="button" class="bbui-btn"        onclick="bbui_action('restart')">&#8635; Restart</button>
       <?php else: ?>
-        <button type="button" class="bbui-btn primary" onclick="bbui_action('start')" <?= $python_ok ? '' : 'disabled title="Python 3 is missing or too old"' ?>>&#9654; Start</button>
+        <button type="button" class="bbui-btn primary" onclick="bbui_action('start')" <?= $python_ok ? '' : 'disabled title="Python runtime is unavailable; see the diagnostic above"' ?>>&#9654; Start</button>
       <?php endif ?>
     </div>
 
@@ -512,6 +512,8 @@ $admin_accounts = $python_ok ? bbui_load_admin_accounts($PLUGIN_DIR, $python_sta
                   <option value="<?= htmlspecialchars($admin_name) ?>"><?= htmlspecialchars($admin_label) ?></option>
                 <?php endforeach; ?>
               </select>
+            <?php elseif (!$python_ok): ?>
+              <span style="color:#888;font-size:13px">Administrator accounts cannot be checked while the Python runtime is unavailable.</span>
             <?php else: ?>
               <span style="color:#888;font-size:13px">No administrator account found.</span>
             <?php endif; ?>

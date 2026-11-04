@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import shutil
 import sys
 import time
 
@@ -29,6 +30,8 @@ temporary = root / 'result.tmp'
 temporary.write_text(json.dumps(report))
 temporary.replace(root / 'result.json')
 ''')
+    (plugin / "api").mkdir()
+    shutil.copy2(ROOT / "api/python_runtime_info.py", plugin / "api/python_runtime_info.py")
     runtime = plugin / "runtime/python"
     runtime.mkdir(parents=True)
     (runtime / "launch.sh").write_text('printf "%s\\n" ' + str(Path(sys.executable).resolve()) + '\n')
@@ -59,6 +62,9 @@ def _start(launcher, plugin, tmp_path):
     env["PYTHONPYCACHEPREFIX"] = str(tmp_path / "wrong-cache")
     run = subprocess.run(["bash", str(launcher), "start"], env=env, capture_output=True, text=True, timeout=15)
     assert run.returncode == 0, run.stderr
+    assert "Borg Backup UI Python:" in run.stdout
+    assert f"executable={Path(sys.executable).resolve()}" in run.stdout
+    assert "Borg Backup UI Python:" in (tmp_path / "service.log").read_text()
     deadline = time.monotonic() + 10
     while not report.exists() and time.monotonic() < deadline:
         time.sleep(0.02)

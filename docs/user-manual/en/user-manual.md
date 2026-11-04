@@ -143,6 +143,8 @@ Borg Backup UI is installed through **Unraid Community Apps**. It supports **Unr
 
 Under **Settings > About > Third-party**, the bundled Python version and active interpreter are shown separately. Expand each bundle to read its full original license notices. Backup and restore-test logs identify the actual Python version, source and interpreter path.
 
+During installation and service startup, the plugin reports whether the private Python runtime is extracted or reused and displays the selected interpreter. The executable private runtime resides in its own directory under `/usr/local/lib/borg-backup-ui`; Unraid's `/run` is unsuitable because it is mounted with `noexec`.
+
 A compatible external Python 3.10-3.13 is used when available; otherwise the private runtime starts without another download. Installing another Python provider does not switch a running service. Restart Borg Backup UI to reconsider the selection. The selected source, version and path are visible under **Settings > System Health & Migration**. Remove Python 3 for Unraid only after checking whether other plugins need it. Future 7.x versions still require compatibility testing.
 
 1. Open **Apps** in Unraid.

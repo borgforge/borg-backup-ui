@@ -72,7 +72,7 @@ start() {
         chmod 755 "${BORG_LINK_BIN}" 2>/dev/null || true
       fi
     fi
-    echo "Borg Binary: ${BORG_BIN}"
+    echo "BorgBackup executable: ${BORG_BIN}"
   else
     echo "WARNING: bundled Borg binary not found, using system PATH."
   fi
@@ -91,7 +91,7 @@ start() {
   if [ -z "$PY_BIN" ]; then
     return 1
   fi
-  bash "$PYTHON_LAUNCHER" --status >> "$LOGFILE" 2>&1
+  "$PY_BIN" -E -s -S -B "${PLUGIN_DIR}/api/python_runtime_info.py" | tee -a "$LOGFILE"
   "$PY_BIN" -E -s -S "${PYTHON_ARGS[@]}" "${PLUGIN_DIR}/borg_backup_ui.py" 8>&- >> "$LOGFILE" 2>&1 &
   echo $! > "$PIDFILE"
   echo "Borg Backup UI started (PID: $!)"

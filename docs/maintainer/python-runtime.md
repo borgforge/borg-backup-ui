@@ -55,11 +55,21 @@ lockfile. Package validation verifies these against the embedded source
 provenance. Historical packages without the new marker retain their existing
 verification contract. No binaries are downloaded on Unraid: the archive is
 included in the plugin package and extracted into
-`/run/borg-backup-ui/python/<bundle-sha256>/` on demand. Python libraries and
+`/usr/local/lib/borg-backup-ui/python/<bundle-sha256>/` on demand.
+Unraid mounts `/run` with `noexec` (and may impose a small size limit); only
+selection/lock files and bytecode cache remain there. The private executable tree
+lives in Unraid's writable `/usr` overlay. Before extraction, the launcher checks
+direct execution in the staging directory and reports a specific error for
+`noexec` or denied execution. Tests override `BBUI_RUNTIME_STATE` and
+`BBUI_RUNTIME_ROOT` independently; production uses the paths above. Python libraries and
 symlinks stay inside that private tree; system Python and global PATH/site-packages
 are unchanged. RAM trees survive service restarts and disappear on reboot. Old
 hash trees are retained until reboot so running workers are not broken by an
-upgrade. Uninstall removes only plugin-owned files, not another Python provider.
+upgrade. Uninstall removes only `/run/borg-backup-ui` and
+`/usr/local/lib/borg-backup-ui` in addition to the plugin payload, not another
+Python provider. Previously extracted trees under the old `/run` location are
+left until reboot/uninstall so already-running workers on other hosts are not
+broken by an upgrade.
 
 The supplier advertises glibc 2.17. `check_python_runtime.py` checks the actual
 shipped ELF symbol requirements against this ceiling. This is necessary evidence,
@@ -88,6 +98,13 @@ review them before removing a provider used by custom scripts or other plugins.
 Diagnostics show source, version and path under Settings > System Health &
 Migration and on the Unraid control page. The same actual-process diagnostics
 are recorded in backup and restore-test logs (including the protected worker).
+`BorgBackup executable` identifies the backup program; `Borg Backup UI Python`
+identifies the interpreter running the application/worker. During installation
+and service start, the console reports private extraction or reuse followed by
+the selected interpreter; interpreter details also enter the service log.
+An unavailable runtime prevents account discovery and is shown as an unavailable
+check, not as evidence that no administrator exists. Restart remains available
+for a running service whose external interpreter has been removed.
 Settings > About > Third-party separately shows the bundled CPython version/build
 and the active interpreter. Each bundle owns its expandable full license notices;
 the build generates runtime/licenses/bundles.json from the packaged Python archive,
