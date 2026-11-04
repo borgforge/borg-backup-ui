@@ -27,7 +27,7 @@ def launcher(tmp_path):
     commands = tmp_path / 'bin'
     commands.mkdir()
     for name in ('dirname', 'install', 'flock', 'timeout', 'cat', 'sed', 'sha256sum',
-                 'tar', 'xz', 'mktemp', 'rm', 'touch', 'mv'):
+                 'tar', 'xz', 'mktemp', 'rm', 'touch', 'mv', 'readlink'):
         (commands / name).symlink_to(shutil.which(name))
     env = {**os.environ, 'PATH': str(commands), 'BBUI_RUNTIME_STATE': str(tmp_path / 'ram'),
            'BBUI_SERVICE_PIDFILE': str(tmp_path / 'service.pid')}
@@ -121,7 +121,7 @@ def test_manifest_generation_uses_native_unraid_version_gate():
     changed = release.rewrite_host_compatibility(original)
     assert 'Min="6.12.5" Max="7.99.99"' in changed
     assert release.rewrite_host_compatibility(changed) == changed
-    assert 'Max="7.99.99"' not in original  # source PR does not edit stable artifact
+    assert (ROOT / "borg-backup-ui.plg").read_text() == original
 
 
 @pytest.mark.skipif(not shutil.which('php'), reason='PHP version_compare is checked in GitHub quality image')
@@ -205,3 +205,18 @@ def test_real_http_setup_page_api_and_runtime_diagnostics(tmp_path, monkeypatch)
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
+
+
+def test_active_external_pins_resolved_binary_not_moving_python3_link(launcher):
+    run, commands, env, _, interpreter = launcher
+    interpreter(commands / 'python3.12')
+    interpreter(commands / 'python3.13')
+    link = commands / 'python3'
+    link.symlink_to('python3.12')
+    assert run('--select').stdout.strip() == str(commands / 'python3.12')
+    Path(env['BBUI_SERVICE_PIDFILE']).write_text(str(os.getpid()))
+    link.unlink()
+    link.symlink_to('python3.13')
+    assert json.loads(run().stdout)['path'] == str(commands / 'python3.12')
+    Path(env['BBUI_SERVICE_PIDFILE']).unlink()
+    assert json.loads(run().stdout)['path'] == str(commands / 'python3.13')

@@ -34,6 +34,7 @@ if [ "$RUNNING" = 1 ]; then
   RESULT="$(probe)" || fail
 else
   PYTHON="$(command -v python3 || true)"
+  if [ -n "$PYTHON" ]; then PYTHON="$(readlink -f -- "$PYTHON")" || PYTHON=""; fi
   export BBUI_PYTHON_SOURCE=external
   RESULT=""
   if [ -n "$PYTHON" ] && [[ "$PYTHON" = /* ]]; then RESULT="$(probe)" || RESULT=""; fi
