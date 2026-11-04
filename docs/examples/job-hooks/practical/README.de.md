@@ -206,3 +206,9 @@ Empfaenger bleiben manuell zu testen. Der Paketbau kopiert diese Sammlung nicht
 ins Plugin; ein Test-Channel-Paket wuerde die Dateien nicht ausliefern. Deshalb
 werden diese Beispiele per manuellem Import getestet. Kein Stable-Release in
 diesem Schritt.
+
+Python-Beispiele verwenden `BBUI_PYTHON`, den vom Job gewaehlten Interpreter,
+mit isolierter Standardbibliothek. Ausserhalb von Borg Backup UI verwenden sie
+`python3`. Gespeicherte Skripte werden nicht umgeschrieben: Verwenden Sie dort
+`"$BBUI_PYTHON" -E -s -S -B` statt `python3`, wenn kein eigener Python-Anbieter
+vorausgesetzt werden soll.

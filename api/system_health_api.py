@@ -565,6 +565,12 @@ def get_system_health_data(config: dict) -> Dict[str, Any]:
         "startup_state": startup_state,
         "job_health": job_health,
         "runtime_recovery": runtime_recovery,
+        "python_runtime": {
+            "version": ".".join(map(str, sys.version_info[:3])),
+            "path": sys.executable,
+            "source": "bundled" if (Path(sys.prefix) / "provenance.json").is_file() else "external",
+            "isolated_dependencies": bool(sys.flags.no_site and sys.flags.ignore_environment),
+        },
         "notification_delivery": notification_delivery,
         "secrets_permissions": {
             "ok": secrets_permissions_ok,

@@ -1446,6 +1446,12 @@ function renderSettingsSystemHealth(data) {
         </div>
 
         <div class="system-health-block">
+          <div class="system-health-block-title">${settingsT('health.pythonRuntime')}</div>
+          <div>${escHtml(data?.python_runtime?.version || '—')} · ${settingsT(data?.python_runtime?.source === 'bundled' ? 'health.pythonBundled' : 'health.pythonExternal')}</div>
+          <code>${escHtml(data?.python_runtime?.path || '—')}</code>
+        </div>
+
+        <div class="system-health-block">
           <div class="system-health-block-title">${settingsT('health.runtimeRecovery')}</div>
           ${_renderRuntimeRecoveryOverview(runtimeRecovery)}
         </div>

@@ -251,22 +251,28 @@ def existing_issues() -> list[dict]:
     raise RuntimeError('Issue history exceeds 2,000 entries; extend the bounded monitor scan')
 
 
-def plan_updates(detected: list[dict], issues: list[dict]) -> tuple[list[dict], int]:
+def plan_updates(detected: list[dict], issues: list[dict], *, namespace: str = 'apprise', checklist: str = CHECKLIST) -> tuple[list[dict], int]:
     """Plan idempotent writes, preserving maintainer text and deliberate deferral.
 
-    Closed release issues, status::waiting and not-planned issues are left alone.
+    namespace selects independent Apprise/Python managed blocks; checklist is
+    appended only on creation. Closed release issues, status::waiting and
+    not-planned issues are left alone.
     Changed security facts may reopen a completed security issue while the
     bundled version is still affected. Invalid/duplicate markers fail closed.
     """
+    if namespace not in ('apprise', 'python'):
+        raise ValueError('Unknown dependency monitor namespace')
+    start_pattern = re.compile(r'<!-- bbui-' + namespace + r'-monitor:((?:release|security):[\w.!+-]+):start -->')
+    end_marker = f'<!-- bbui-{namespace}-monitor:end -->'
     known = {}
     for issue in issues:
         body = issue.get('body') or ''
-        matches = list(START.finditer(body))
+        matches = list(start_pattern.finditer(body))
         if not matches:
-            if '<!-- bbui-apprise-monitor:' in body:
+            if f'<!-- bbui-{namespace}-monitor:' in body:
                 raise ValueError('Damaged monitor issue marker requires maintainer reconciliation')
             continue
-        if (len(matches) != 1 or body.count(END) != 1 or body.index(END) < matches[0].end()
+        if (len(matches) != 1 or body.count(end_marker) != 1 or body.index(end_marker) < matches[0].end()
                 or issue['user']['login'] != hosted.BOT or issue['state'] not in ('open', 'closed')
                 or type(issue['number']) is not int or issue['number'] <= 0):
             raise ValueError('Invalid monitor issue identity or managed block')
@@ -284,11 +290,11 @@ def plan_updates(detected: list[dict], issues: list[dict]) -> tuple[list[dict], 
                 raise ValueError('Overlapping advisory issues require maintainer reconciliation')
             if matches:
                 key = matches[0]
-        block = f'<!-- bbui-apprise-monitor:{key}:start -->\n{finding["text"]}\n{END}'
+        block = f'<!-- bbui-{namespace}-monitor:{key}:start -->\n{finding["text"]}\n{end_marker}'
         issue = known.get(key)
         if issue is None:
             actions.append({'method': 'POST', 'endpoint': f'repos/{REPO}/issues',
-                            'payload': {'title': finding['title'], 'body': block + CHECKLIST,
+                            'payload': {'title': finding['title'], 'body': block + checklist,
                                         'labels': finding['labels']}})
             continue
         if ('status::waiting' in {label['name'] for label in issue['labels']}
@@ -297,8 +303,8 @@ def plan_updates(detected: list[dict], issues: list[dict]) -> tuple[list[dict], 
             deferred += 1
             continue
         body = issue['body']
-        start = START.search(body).start()
-        end = body.index(END) + len(END)
+        start = start_pattern.search(body).start()
+        end = body.index(end_marker) + len(end_marker)
         updated = body[:start] + block + body[end:]
         if updated != body:
             payload = {'body': updated}
@@ -310,14 +316,19 @@ def plan_updates(detected: list[dict], issues: list[dict]) -> tuple[list[dict], 
     return actions, deferred
 
 
-def require_main_job() -> None:
-    """Reject local, stale, PR and other-repository jobs before any issue write."""
+def require_main_job(workflow: str = 'apprise-monitor.yml') -> None:
+    """Require the named allowlisted monitor workflow on current protected main.
+
+    Reject local, stale, PR and other-repository jobs before any issue write.
+    """
+    if workflow not in ('apprise-monitor.yml', 'python-monitor.yml'):
+        raise ValueError('Unknown dependency monitor workflow')
     security.guard_public(ROOT)
     if (os.environ.get('GITHUB_ACTIONS') != 'true'
             or os.environ.get('GITHUB_REPOSITORY') != REPO
             or os.environ.get('GITHUB_REF') != 'refs/heads/main'
             or os.environ.get('GITHUB_EVENT_NAME') not in ('schedule', 'workflow_dispatch')
-            or os.environ.get('GITHUB_WORKFLOW_REF') != f'{REPO}/.github/workflows/apprise-monitor.yml@refs/heads/main'
+            or os.environ.get('GITHUB_WORKFLOW_REF') != f'{REPO}/.github/workflows/{workflow}@refs/heads/main'
             or os.environ.get('BBUI_ENVIRONMENT') != 'dependency-monitor'):
         raise RuntimeError('Issue writes require the protected main dependency-monitor workflow')
     sha = evidence.exact_sha(os.environ.get('GITHUB_SHA', ''))
@@ -326,13 +337,16 @@ def require_main_job() -> None:
         raise RuntimeError('Main changed or checkout is stale; rerun the monitor on current main')
 
 
-def write_issue(action: dict) -> None:
+def write_issue(action: dict, *, workflow: str = 'apprise-monitor.yml') -> None:
     """Write one planned issue as the verified bot, then verify its persisted author.
 
     Payloads go through stdin, not shell arguments. Failures never print tokens,
     upstream bodies or raw API errors; an interrupted creation is found on retry.
     """
-    require_main_job()
+    if workflow == 'apprise-monitor.yml':
+        require_main_job()
+    else:
+        require_main_job(workflow)
     if action['method'] == 'PATCH':
         current = evidence.api(action['endpoint'])
         if (current['user']['login'] != hosted.BOT

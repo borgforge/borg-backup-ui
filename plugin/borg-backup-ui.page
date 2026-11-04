@@ -2,7 +2,7 @@ Menu="Utilities:8"
 Type="xmenu"
 Title="Borg Backup UI"
 Icon="plugin-icon.png"
-Description="Borg Backup web interface for dashboard, jobs, storage, history, restore tests, and settings. Requires Python 3 for Unraid."
+Description="Borg Backup web interface for dashboard, jobs, storage, history, restore tests, and settings. Includes a private Python runtime."
 Markdown="false"
 ---
 <?PHP
@@ -64,39 +64,16 @@ function bbui_ui_url($port) {
   return "http://$host:$port/";
 }
 
+/** Read the shared runtime selection, including the active service interpreter. */
 function bbui_python_runtime_status() {
-  $path = trim((string)shell_exec("command -v python3 2>/dev/null"));
-  $status = [
-    'ok' => false,
-    'path' => $path,
-    'version' => '',
-    'reason' => '',
-    'min_version' => '3.10',
-  ];
-  if ($path === '') {
-    $status['reason'] = 'Python 3 was not found.';
-    return $status;
-  }
-  if (!is_executable($path)) {
-    $status['reason'] = "python3 is not executable: $path";
-    return $status;
-  }
-  $cmd = escapeshellarg($path) . " -c " . escapeshellarg("import sys; print('.'.join(map(str, sys.version_info[:3]))); raise SystemExit(0 if sys.version_info >= (3, 10) else 1)") . " 2>/dev/null";
-  $lines = [];
-  $rc = 1;
-  exec($cmd, $lines, $rc);
-  $version = trim((string)($lines[0] ?? ''));
-  $status['version'] = $version;
-  if ($version === '') {
-    $status['reason'] = "The Python version could not be determined.";
-    return $status;
-  }
-  if ($rc !== 0) {
-    $status['reason'] = "Python $version is too old. Python 3.10 or newer is required.";
-    return $status;
-  }
-  $status['ok'] = true;
-  return $status;
+  global $PLUGIN_DIR;
+  $launcher = "$PLUGIN_DIR/runtime/python/launch.sh";
+  $raw = shell_exec('/bin/bash ' . escapeshellarg($launcher) . ' --status 2>/dev/null');
+  $status = json_decode((string)$raw, true);
+  if (is_array($status) && !empty($status['ok'])) return $status;
+  return ['ok' => false, 'path' => '', 'version' => '', 'source' => '',
+          'reason' => 'Python runtime is unavailable. Reinstall Borg Backup UI and check the service log and available RAM.',
+          'min_version' => '3.10'];
 }
 
 function bbui_run_admin_helper($plugin_dir, $python_path, $args, $payload = null) {
@@ -105,10 +82,10 @@ function bbui_run_admin_helper($plugin_dir, $python_path, $args, $payload = null
     return ['ok' => false, 'error' => 'Admin recovery helper is missing. Reinstall or update the plugin package.'];
   }
   if ($python_path === '' || !is_executable($python_path)) {
-    return ['ok' => false, 'error' => 'Python 3 is not available. Install or update Python 3 for Unraid first.'];
+    return ['ok' => false, 'error' => 'Python runtime is unavailable. Reinstall Borg Backup UI and check the service log.'];
   }
 
-  $cmd = escapeshellarg($python_path) . ' ' . escapeshellarg($script);
+  $cmd = '/bin/bash ' . escapeshellarg("$plugin_dir/runtime/python/launch.sh") . ' --exec ' . escapeshellarg($script);
   foreach ($args as $arg) {
     $cmd .= ' ' . escapeshellarg($arg);
   }
@@ -193,7 +170,7 @@ $json_response = null;
 $admin_recovery_result = null;
 
 if (($action === 'start' || $action === 'restart') && !$python_ok) {
-  $warn_msg = $python_status['reason'] . " Install or update the 'Python 3 for Unraid' plugin first.";
+  $warn_msg = $python_status['reason'];
 } elseif ($action === 'start') {
   shell_exec("$RC start >/dev/null 2>&1 &");
 } elseif ($action === 'stop') {
@@ -221,7 +198,7 @@ if (($action === 'start' || $action === 'restart') && !$python_ok) {
 } elseif ($action === 'admin_recovery_start') {
   $username = trim((string)bbui_request_value('username', ''));
   if (!$python_ok) {
-    $admin_recovery_result = ['ok' => false, 'error' => $python_status['reason'] . " Install or update the 'Python 3 for Unraid' plugin first."];
+    $admin_recovery_result = ['ok' => false, 'error' => $python_status['reason']];
   } else {
     $current_conf = bbui_read_conf($CONF_FILE);
     $admin_recovery_result = bbui_create_admin_recovery_link($PLUGIN_DIR, $python_status['path'], $username, $current_conf['PORT']);
@@ -370,11 +347,11 @@ $admin_accounts = $python_ok ? bbui_load_admin_accounts($PLUGIN_DIR, $python_sta
     <div class="bbui-runtime <?= $python_ok ? 'ok' : 'warn' ?>">
       <strong>Python Runtime:</strong>
       <?php if ($python_ok): ?>
-        OK, Python <?= htmlspecialchars($python_status['version']) ?> at <code><?= htmlspecialchars($python_status['path']) ?></code>
+        OK, <?= htmlspecialchars($python_status['source']) ?> Python <?= htmlspecialchars($python_status['version']) ?> at <code><?= htmlspecialchars($python_status['path']) ?></code>
       <?php else: ?>
         <?= htmlspecialchars($python_status['reason']) ?><br>
         Borg Backup UI requires <strong>Python 3.10 or newer</strong>.
-        Official prerequisite: install or update <strong>Python 3 for Unraid</strong> through Unraid Apps.
+        A private runtime is included; the separate Python plugin is not required.
       <?php endif; ?>
     </div>
 

@@ -69,7 +69,7 @@ notieren. Screenshots sind optional und muessen frei von Secrets sein.
   [Release-Workflow](./release-workflow.md) verifiziert.
 - `./plugin/mr-preflight.sh` war fuer den zu testenden Commit erfolgreich.
 - Das Unraid-Array ist gestartet.
-- `Python 3 for Unraid` stellt Python 3.10 oder neuer bereit.
+- Fuer Builds mit #548 beide Laufzeitquellen gemaess [Python-Testmatrix](python-runtime.md) testen; aeltere stabile Versionen brauchen weiterhin externes Python.
 - Fuer den Basistest stehen vier ausschliessliche Testpfade zur Verfuegung:
   - Quelle: `/mnt/user/borg-ui-maintest-source`
   - Repository: `/mnt/user/borg-ui-maintest-repository`

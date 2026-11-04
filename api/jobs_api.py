@@ -499,7 +499,7 @@ class JobManager:
                 log_handle = os.fdopen(os.open(log_file, os.O_WRONLY | os.O_NOFOLLOW), "wb")
                 env["BORG_UI_CAPTURE_LOG"] = str(log_file)
                 env["BORG_UI_RETAINED_LOG"] = read_record(capture_record_file)["retained_file"]
-                command = [sys.executable, str(Path(__file__).with_name("activity_log_capture.py")), str(capture_record_file), *command]
+                command = [sys.executable, "-E", "-s", "-S", "-B", str(Path(__file__).with_name("activity_log_capture.py")), str(capture_record_file), *command]
                 env["PYTHONUNBUFFERED"] = "1"
                 env["PYTHONIOENCODING"] = "utf-8"
             proc = subprocess.Popen(

@@ -752,7 +752,7 @@ def _kick_notification_delivery(config: dict) -> None:
     )
     try:
         subprocess.Popen(  # noqa: S603 - fixed interpreter and inline code without secrets.
-            [sys.executable or "python3", "-c", code],
+            [sys.executable, "-E", "-s", "-S", "-B", "-c", code],
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,

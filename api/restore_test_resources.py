@@ -92,7 +92,7 @@ class MemoryGroup:
         A pipe EOF makes it exit if the supervisor dies; no workload inherits it.
         """
         self.keeper = subprocess.Popen(
-            [sys.executable, str(Path(__file__).resolve()), "--keepalive", str(self.path)],
+            [sys.executable, "-E", "-s", "-S", "-B", str(Path(__file__).resolve()), "--keepalive", str(self.path)],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, start_new_session=True,
         )
         ready, _, _ = select.select([self.keeper.stdout], [], [], 5)
@@ -213,7 +213,7 @@ def run_guarded(command: list[str], env: dict, lock_dir: Path, limit_mib: int,
                                              f"Insufficient available RAM for {limit_mib} MiB test budget plus {reserve_mib} MiB host reserve")
                 group = MemoryGroup(limit)
                 log(f"Memory protection active: {limit_mib} MiB for worker and Borg children; host reserve {reserve_mib} MiB; group retained until final counter check")
-                launch = [sys.executable, str(Path(__file__).resolve()), str(group.path), *command]
+                launch = [sys.executable, "-E", "-s", "-S", "-B", str(Path(__file__).resolve()), str(group.path), *command]
                 proc = subprocess.Popen(launch, env=env)
                 while proc.poll() is None:
                     check_cancelled(cancel_requested)

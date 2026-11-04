@@ -1,0 +1,78 @@
+{
+  "archive": "cpython-3.13.18+20261026-x86_64-unknown-linux-gnu-pgo+lto-full.tar.zst",
+  "build": "20261026",
+  "components": {
+    "bzip2": {
+      "source": "https://astral-sh.github.io/mirror/files/bzip2-1.0.8.tar.gz",
+      "source_sha256": "ab5a03176ee106d3f0fa90e381da478ddae405918153cca248e682cd0c4a2269",
+      "version": "1.0.8"
+    },
+    "cpython": {
+      "source": "https://www.python.org/",
+      "version": "3.13.18"
+    },
+    "expat": {
+      "source": "https://github.com/libexpat/libexpat/releases/download/R_2_9_0/expat-2.9.0.tar.xz",
+      "source_sha256": "1e6371862cc31999b368c3b89b49994f0677e1bab5f1b2b85ae3741f5d803051",
+      "version": "2.9.0"
+    },
+    "libedit": {
+      "source": "https://thrysoee.dk/editline/libedit-20240808-3.1.tar.gz",
+      "source_sha256": "5f0573349d77c4a48967191cdd6634dd7aa5f6398c6a57fe037cc02696d6099f",
+      "version": "20240808-3.1"
+    },
+    "libffi": {
+      "source": "https://github.com/libffi/libffi/releases/download/v3.8.0/libffi-3.8.0.tar.gz",
+      "source_sha256": "7da3e2d9a171eb0a038f592ecad3ff2bb2550f3496d87b3b29ad0cf4430c0db4",
+      "version": "3.8.0"
+    },
+    "mpdecimal": {
+      "source": "https://astral-sh.github.io/mirror/files/mpdecimal-4.0.0.tar.gz",
+      "source_sha256": "942445c3245b22730fd41a67a7c5c231d11cb1b9936b9c0f76334fb7d0b4468c",
+      "version": "4.0.0"
+    },
+    "ncurses": {
+      "source": "https://astral-sh.github.io/mirror/files/ncurses-6.5.tar.gz",
+      "source_sha256": "136d91bc269a9a5785e5f9e980bc76ab57428f604ce3e5a5a90cebc767971cc6",
+      "version": "6.5"
+    },
+    "openssl-3.5": {
+      "source": "https://github.com/openssl/openssl/releases/download/openssl-3.5.9/openssl-3.5.9.tar.gz",
+      "source_sha256": "603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a",
+      "version": "3.5.9"
+    },
+    "sqlite": {
+      "source": "https://www.sqlite.org/2026/sqlite-autoconf-3530100.tar.gz",
+      "source_sha256": "83e6b2020a034e9a7ad4a72feea59e1ad52f162e09cbd26735a3ffb98359fc4f",
+      "version": "3.53.1"
+    },
+    "uuid": {
+      "source": "https://sourceforge.net/projects/libuuid/files/libuuid-1.0.3.tar.gz",
+      "source_sha256": "46af3275291091009ad7f1b899de3d0cea0252737550e7919d17237997db5644",
+      "version": "1.0.3"
+    },
+    "xz": {
+      "source": "https://github.com/tukaani-project/xz/releases/download/v5.8.4/xz-5.8.4.tar.gz",
+      "source_sha256": "0014c7886930454fe8bd4228665b51af55eeae560ea135c9c4cd33f55b2591d9",
+      "version": "5.8.4"
+    },
+    "zlib": {
+      "source": "https://github.com/madler/zlib/releases/download/v1.3.2/zlib-1.3.2.tar.gz",
+      "source_sha256": "bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16",
+      "version": "1.3.2"
+    }
+  },
+  "downloads_sha256": "8b0e472c66797dcd58dfa461171c7f416602503924091e5e4629e776221b8a27",
+  "excluded_extensions": [
+    "_dbm",
+    "_tkinter"
+  ],
+  "glibc_minimum": "2.17",
+  "metadata_sha256": "53304e0a7215bbe05a08780b6d491e965e02814bf38820819ba26ac15fc54e40",
+  "schema": 1,
+  "sha256": "f003449a05408c2e4b184f2a7abd1ea277081ff1a9100289075243ab5ed81207",
+  "supplier": "astral-sh/python-build-standalone",
+  "supplier_license_sha256": "1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5",
+  "target": "x86_64-unknown-linux-gnu",
+  "version": "3.13.18"
+}

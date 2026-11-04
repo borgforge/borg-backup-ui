@@ -147,10 +147,12 @@ Die Anwendung kennt die Rollen `admin`, `operator` und `viewer`:
 
 Allgemeine Unraid-Schritte erläutern die offiziellen Anleitungen zu [Community Apps](https://docs.unraid.net/unraid-os/manual/applications/) und [Plugins](https://docs.unraid.net/unraid-os/using-unraid-to/customize-your-experience/plugins/).
 
-Borg Backup UI wird über **Unraid Community Apps** installiert. Voraussetzungen sind **Unraid 6.12.5 oder neuer** sowie **Python 3.10 oder neuer**. Installieren Sie das separate Plugin **Python 3 for Unraid** zuerst über Community Apps. BorgBackup selbst ist im Borg-Backup-UI-Paket enthalten; eine zusätzliche Borg- oder pip-Installation ist nicht erforderlich.
+Borg Backup UI wird über **Unraid Community Apps** installiert. Unterstützt wird **Unraid 6.12.5 bis 7.x**; Unraid 8 wird nicht unterstützt. Die kommende Version liefert eine eigene Python-Laufzeit mit. Die erste stabile Versionsnummer wird hier nach erfolgreichen Unraid-Tests und Release-Freigabe eingetragen. Bis dahin benötigen ältere stabile Versionen weiterhin **Python 3 for Unraid**. BorgBackup selbst ist im Borg-Backup-UI-Paket enthalten; eine zusätzliche Borg- oder pip-Installation ist nicht erforderlich.
+
+Ein geeignetes externes Python 3.10-3.13 wird verwendet, wenn es vorhanden ist. Sonst startet die mitgelieferte Laufzeit ohne zusätzlichen Download. Die Installation eines anderen Python-Anbieters wechselt die Laufzeit eines laufenden Dienstes nicht. Erst ein Neustart von Borg Backup UI wählt erneut. Quelle, Version und Pfad stehen unter **Einstellungen > Systemzustand & Migration**. Entfernen Sie Python 3 for Unraid erst, nachdem Sie geprüft haben, ob andere Plugins es benötigen. Zukünftige 7.x-Versionen müssen weiterhin auf Kompatibilität getestet werden.
 
 1. Öffnen Sie in Unraid **Apps**.
-2. Installieren Sie **Python 3 for Unraid**, falls es noch nicht vorhanden ist.
+2. Installieren Sie bei älteren stabilen Versionen zuerst **Python 3 for Unraid**; die kommende Version enthält eine eigene Laufzeit.
 3. Suchen Sie nach **Borg Backup UI** und installieren Sie das Plugin.
 4. Öffnen Sie **Einstellungen > Borg Backup UI**, starten Sie den Dienst und rufen Sie die Weboberfläche auf.
 5. Legen Sie das erste Administratorkonto mit einem Passwort von mindestens zwölf Zeichen an.

@@ -668,7 +668,7 @@ class RestoreTest:
                 mounted, error = self._ensure_smb_mount(repo)
                 if error:
                     raise ResourceGuardError("RT_SMB_MOUNT_FAILED", error)
-            command = [sys.executable, str(Path(__file__).resolve()), "--resource-worker",
+            command = [sys.executable, "-E", "-s", "-S", "-B", str(Path(__file__).resolve()), "--resource-worker",
                        "--job-key", repo["job_key"], "--level", str(self.test_level), "--location", "all", "--force"]
             if getattr(self.args, "scheduled", False):
                 command.append("--scheduled")

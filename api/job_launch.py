@@ -1,6 +1,6 @@
 """Shared backup launch path for individual and grouped starts (#570)."""
 
-import os
+import sys
 from pathlib import Path
 from lifecycle_log import emit_lifecycle
 
@@ -28,10 +28,6 @@ def start_backup(config, job_key, *, app_version="", request_id="", source="manu
         raise RuntimeError("Job is already running")
 
     info = jobs[job_key]
-    plugin_runtime = Path(__file__).resolve().parent.parent / "runtime"
-    existing_pp = os.environ.get("PYTHONPATH", "")
-    runtime_pp = str(plugin_runtime)
-    merged_pp = f"{runtime_pp}:{existing_pp}" if existing_pp else runtime_pp
     if info.standard != "wizard":
         raise RuntimeError(f"Unsupported job standard: {info.standard}")
     runner = Path(__file__).resolve().parent / "wizard_runner.py"
@@ -45,7 +41,6 @@ def start_backup(config, job_key, *, app_version="", request_id="", source="manu
         "BORG_UI_REQUEST_SOURCE": source,
         "BORG_UI_REQUEST_ACTOR": actor,
         "BORG_UI_FILE_ACTIVITY_RUN": "1" if getattr(info, "file_activity", False) else "0",
-        "PYTHONPATH": merged_pp,
     }
     extra_env.update(group_env or {})
     if extra_env["BORG_UI_FILE_ACTIVITY_RUN"] == "1":
@@ -54,7 +49,7 @@ def start_backup(config, job_key, *, app_version="", request_id="", source="manu
     captured_state = state_sink if state_sink is not None else {}
     ok, err = JobManager.get().start(
         job_key,
-        ["python3", str(runner)],
+        [sys.executable, "-E", "-s", "-S", "-B", str(runner)],
         backup_scripts_dir,
         extra_env=extra_env, run_id=run_id, inherited_fds=inherited_fds, state_sink=captured_state,
     )

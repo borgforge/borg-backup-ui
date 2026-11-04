@@ -12,7 +12,8 @@ CURL_CONFIG="/CHANGE_ME/private-webhook.curl"
 [[ "$CONFIGURED" == "yes" ]] || { echo 'Configure this example before use.' >&2; exit 2; }
 [[ "${BBUI_HOOK_PHASE:-}" == "post" ]] || { echo 'Assign this script as Post.' >&2; exit 2; }
 command -v curl >/dev/null
-command -v python3 >/dev/null
+PYTHON_BIN="${BBUI_PYTHON:-$(command -v python3)}"
+[ -x "$PYTHON_BIN" ]
 [[ -f "$CURL_CONFIG" && ! -L "$CURL_CONFIG" ]] || { echo 'Private curl configuration is missing.' >&2; exit 1; }
 [[ $(stat -c %u -- "$CURL_CONFIG") == "$EUID" && $(stat -c %a -- "$CURL_CONFIG") == 600 ]] || {
     echo 'Curl configuration must be owned by the executing user with mode 0600.' >&2; exit 1;
@@ -22,7 +23,7 @@ case "${BBUI_JOB_RESULT:-}" in
     *) echo 'Missing or unsupported job result.' >&2; exit 2 ;;
 esac
 [[ -n "${BBUI_JOB_ID:-}" ]] || { echo 'Missing job ID.' >&2; exit 2; }
-payload=$(python3 - <<'PYTHON'
+payload=$("$PYTHON_BIN" -E -s -S -B - <<'PYTHON'
 import json
 import os
 print(json.dumps({"job_id": os.environ["BBUI_JOB_ID"], "result": os.environ["BBUI_JOB_RESULT"]}))

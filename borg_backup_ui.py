@@ -2859,7 +2859,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             raise FileNotFoundError(f"borg_restore_test.py not found in {scripts_dir}")
 
         backup_scripts_dir = Path(self.config["BACKUP_SCRIPTS_DIR"])
-        cmd = ["python3", str(script_path), "--level", level, "--location", location]
+        cmd = [sys.executable, "-E", "-s", "-S", "-B", str(script_path), "--level", level, "--location", location]
         if smb_auto_mount:
             cmd.append("--smb-auto-mount")
         if scheduled:

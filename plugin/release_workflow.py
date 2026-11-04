@@ -178,6 +178,7 @@ def is_deployable_path(path: str) -> bool:
         "plugin/apprise-providers.json",
         "plugin/check_apprise_runtime.py",
         "plugin/build.sh",
+        "plugin/python_runtime.py",
         "plugin/package_documentation.py",
         "docs/auth-user-store-recovery.md",
         "plugin/build-candidate.sh",
@@ -671,6 +672,7 @@ fi
 # Remove runtime files installed outside the persistent plugin directory.
 rm -f "${RC_SCRIPT}" 2>/dev/null || true
 rm -rf "${EMHTTP_DIR}" 2>/dev/null || true
+rm -rf /run/borg-backup-ui 2>/dev/null || true
 rm -f "${PIDFILE}" "${WAIT_PIDFILE}" "${LOGFILE}" "${CLIENT_LOGFILE}" 2>/dev/null || true
 
 # Remove plugin-owned payload from the USB flash. User data outside this
@@ -692,6 +694,20 @@ def rewrite_remove_handler(manifest: str) -> str:
     if not REMOVE_HANDLER_RE.search(manifest):
         raise RuntimeError("Plugin manifest remove handler was not found")
     return REMOVE_HANDLER_RE.sub(lambda _match: block, manifest, count=1)
+
+
+def rewrite_host_compatibility(manifest: str) -> str:
+    """Render Unraid's native Min/Max plugin attributes for the legacy line.
+
+    This applies only to newly prepared candidates; existing stable artifacts
+    stay byte-identical. Max rejects Unraid 8, including its prereleases.
+    """
+    match = re.search(r'<PLUGIN\b[^>]*>', manifest)
+    if not match:
+        raise ValueError('Missing plugin metadata')
+    opening = re.sub(r'\s+(?:min|max)="[^"]*"', '', match[0], flags=re.IGNORECASE)
+    opening = opening[:-1] + ' Min="6.12.5" Max="7.99.99">'
+    return manifest[:match.start()] + opening + manifest[match.end():]
 
 
 def prepare_build_tree(
@@ -716,6 +732,7 @@ def prepare_build_tree(
     manifest = replace_changelog_block(manifest, version, notes)
     manifest = rewrite_go_autostart_handling(manifest)
     manifest = rewrite_remove_handler(manifest)
+    manifest = rewrite_host_compatibility(manifest)
     manifest_path.write_text(manifest, encoding="utf-8")
 
     app = app_path.read_text(encoding="utf-8")
@@ -735,6 +752,9 @@ def prepare_build_tree(
         "platform": "unraid-legacy",
         "architecture": "x86_64",
     }
+    python_lock = root / "runtime/python/runtime.lock.json"
+    if python_lock.is_file():
+        provenance["python_runtime_lock_sha256"] = hashlib.sha256(python_lock.read_bytes()).hexdigest()
     (root / PROVENANCE_NAME).write_text(
         json.dumps(provenance, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
@@ -790,7 +810,29 @@ def package_provenance(package: Path) -> dict[str, object]:
         handle = archive.extractfile(members[PROVENANCE_MEMBER])
         if handle is None:
             raise RuntimeError("Package provenance cannot be read")
-        return json.loads(handle.read().decode("utf-8"))
+        provenance = json.loads(handle.read().decode("utf-8"))
+        if "python_runtime_lock_sha256" in provenance:
+            prefix = f"boot/config/plugins/{NAME}/runtime/python/"
+            def read_runtime(name: str) -> bytes:
+                """Read a required regular runtime member; reject missing payload."""
+                member = members.get(prefix + name)
+                if member is None or not member.isfile():
+                    raise RuntimeError("Missing private Python runtime member")
+                return archive.extractfile(member).read()
+            lock_bytes = read_runtime("runtime.lock.json")
+            if hashlib.sha256(lock_bytes).hexdigest() != provenance["python_runtime_lock_sha256"]:
+                raise RuntimeError("Private Python provenance differs from source lock")
+            lock = json.loads(lock_bytes)
+            meta = json.loads(read_runtime("python-runtime.json"))
+            if any(meta.get(key) != value for key, value in lock.items()):
+                raise RuntimeError("Private Python metadata differs from locked provenance")
+            if meta.get("bundle") != "python-runtime.tar.xz":
+                raise RuntimeError("Invalid private Python bundle name")
+            if hashlib.sha256(read_runtime(meta["bundle"])).hexdigest() != meta.get("bundle_sha256"):
+                raise RuntimeError("Private Python bundle checksum mismatch")
+            for required in ("launch.sh", "probe.py"):
+                read_runtime(required)
+        return provenance
 
 
 def manifest_version(manifest: Path) -> str:
@@ -941,6 +983,10 @@ def promote_artifacts(worktree: Path, test_manifest: Path, version: str, md5: st
     tested_block = block_match.group(0).strip() + "\n\n"
 
     stable = re.sub(r'<!ENTITY version\s+"[^"]*">', f'<!ENTITY version   "{version}">', stable, count=1)
+    # Carry the tested host gate into stable promotion without changing old
+    # candidates that predate private Python delivery.
+    if 'Min="6.12.5" Max="7.99.99"' in test:
+        stable = rewrite_host_compatibility(stable)
     tested_package_install = package_install_re.search(test)
     if tested_package_install:
         package_install_replacement = tested_package_install.group(0)
