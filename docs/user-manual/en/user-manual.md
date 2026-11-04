@@ -139,10 +139,12 @@ The application supports the `admin`, `operator`, and `viewer` roles:
 
 General Unraid steps are covered by the official [Community Apps](https://docs.unraid.net/unraid-os/manual/applications/) and [plugins](https://docs.unraid.net/unraid-os/using-unraid-to/customize-your-experience/plugins/) guides.
 
-Borg Backup UI is installed through **Unraid Community Apps**. It requires **Unraid 6.12.5 or newer** and **Python 3.10 or newer**. Install the separate **Python 3 for Unraid** plugin from Community Apps first. BorgBackup itself is bundled with Borg Backup UI; no separate Borg or pip installation is required.
+Borg Backup UI is installed through **Unraid Community Apps**. It supports **Unraid 6.12.5 through 7.x**; Unraid 8 is not supported. The upcoming version includes a private Python runtime. Its first stable version number will be recorded here after successful Unraid testing and release approval. Until that release, **Python 3 for Unraid** remains necessary for older stable versions. BorgBackup itself is bundled with Borg Backup UI; no separate Borg or pip installation is required.
+
+A compatible external Python 3.10-3.13 is used when available; otherwise the private runtime starts without another download. Installing another Python provider does not switch a running service. Restart Borg Backup UI to reconsider the selection. The selected source, version and path are visible under **Settings > System Health & Migration**. Remove Python 3 for Unraid only after checking whether other plugins need it. Future 7.x versions still require compatibility testing.
 
 1. Open **Apps** in Unraid.
-2. Install **Python 3 for Unraid** if it is not already present.
+2. For older stable versions, install **Python 3 for Unraid** first; the upcoming version includes its own runtime.
 3. Search for **Borg Backup UI** and install the plugin.
 4. Open **Settings > Borg Backup UI**, start the service, and open the web interface.
 5. Create the first administrator account with a password of at least twelve characters.

@@ -39,7 +39,7 @@ def test_plugin_manifest_uses_github_stable_channel_urls() -> None:
     assert 'gitlab.thetwist.de' not in manifest
 
 
-def test_community_apps_metadata_mentions_python_runtime_requirement() -> None:
+def test_community_apps_metadata_describes_private_python() -> None:
     plugin = ROOT / "plugins" / "borg-backup-ui.xml"
     profile = ROOT / "ca_profile.xml"
 
@@ -49,9 +49,9 @@ def test_community_apps_metadata_mentions_python_runtime_requirement() -> None:
     plugin_text = plugin.read_text(encoding="utf-8")
     profile_text = profile.read_text(encoding="utf-8")
     assert "Python 3 for UNRAID" in plugin_text
-    assert "Requires the separate Python 3 for UNRAID plugin" in plugin_text
+    assert "Includes a private Python runtime" in plugin_text
     assert "Python 3 for UNRAID" in profile_text
-    assert "Runtime requirement" in profile_text
+    assert "include private Python" in profile_text
 
 
 def test_community_apps_metadata_supports_unraid_6_12_5() -> None:
@@ -266,17 +266,10 @@ def test_release_promotion_copies_tested_remove_handler() -> None:
     assert "tested_remove_handler.group(0)" in script
 
 
-def test_rc_script_waits_for_python_runtime_before_reporting_missing_python() -> None:
-    script = (ROOT / "plugin" / "rc.borg_backup_ui").read_text(encoding="utf-8")
-
-    assert 'PYTHON_WAIT_SECONDS="${PYTHON_WAIT_SECONDS:-300}"' in script
-    assert 'WAIT_PIDFILE="/var/run/borg_backup_ui_start_wait.pid"' in script
-    assert "defer_start_until_python_ready" in script
-    assert 'BBUI_DEFERRED_START=1 "$0" start >> "$LOGFILE" 2>&1 &' in script
-    assert 'if [ "${BBUI_DEFERRED_START:-0}" != "1" ] && ! command -v python3 >/dev/null 2>&1; then' in script
-    assert "waiting up to ${PYTHON_WAIT_SECONDS}s for Unraid plugin initialization" in script
-    assert "python3 was not found after ${PYTHON_WAIT_SECONDS}s" in script
-    assert "Borg Backup UI wait process stopped" in script
-    assert "Borg Backup UI is waiting for the Python runtime" in script
-    assert "Python runtime became available after" in script
-    assert 'export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"' in script
+def test_rc_script_selects_private_fallback_without_boot_order_wait() -> None:
+    script = (ROOT / "plugin/rc.borg_backup_ui").read_text()
+    assert 'bash "$PYTHON_LAUNCHER" --select' in script
+    assert 'defer_start_until_python_ready' not in script
+    assert 'PYTHON_WAIT_SECONDS' not in script
+    # Older deferred processes are still stopped during an upgrade.
+    assert 'Borg Backup UI wait process stopped' in script

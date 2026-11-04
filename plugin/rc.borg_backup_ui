@@ -12,77 +12,22 @@ BORG_BUNDLE_VERSIONED="${BORG_BUNDLE_DIR}/borg-linux-glibc231-x86_64-1.4.5"
 BORG_BUNDLE_PLAIN="${BORG_BUNDLE_DIR}/borg"
 BORG_STAGE_BIN="/usr/local/bin/borg"
 BORG_LINK_BIN="/usr/bin/borg"
-MIN_PYTHON_MAJOR=3
-MIN_PYTHON_MINOR=10
-PYTHON_WAIT_SECONDS="${PYTHON_WAIT_SECONDS:-300}"
-PYTHON_WAIT_STEP_SECONDS="${PYTHON_WAIT_STEP_SECONDS:-3}"
+PYTHON_LAUNCHER="${PLUGIN_DIR}/runtime/python/launch.sh"
 
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 
-python_runtime_status() {
-  waited=0
-  logged_wait=0
-  PY_BIN="$(command -v python3 || true)"
-  while [ -z "$PY_BIN" ] && [ "$waited" -lt "$PYTHON_WAIT_SECONDS" ]; do
-    if [ "$logged_wait" -eq 0 ]; then
-      echo "Python runtime is not available yet, waiting up to ${PYTHON_WAIT_SECONDS}s for Unraid plugin initialization..." >> "$LOGFILE"
-      logged_wait=1
-    fi
-    sleep "$PYTHON_WAIT_STEP_SECONDS"
-    waited=$((waited + PYTHON_WAIT_STEP_SECONDS))
-    PY_BIN="$(command -v python3 || true)"
-  done
-  if [ -z "$PY_BIN" ]; then
-    echo "ERROR: python3 was not found after ${PYTHON_WAIT_SECONDS}s. Install the 'Python 3 for Unraid' plugin or check the boot order." >> "$LOGFILE"
-    return 1
-  fi
-  if [ "$waited" -gt 0 ]; then
-    echo "Python runtime became available after ${waited}s: ${PY_BIN}" >> "$LOGFILE"
-  fi
-  if [ ! -x "$PY_BIN" ]; then
-    echo "ERROR: python3 is not executable: $PY_BIN" >> "$LOGFILE"
-    return 1
-  fi
-  PY_VERSION="$("$PY_BIN" -c 'import sys; print(".".join(map(str, sys.version_info[:3]))); raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null)"
-  PY_RC=$?
-  if [ "$PY_RC" -ne 0 ]; then
-    echo "ERROR: Python ${PY_VERSION:-unknown} is too old. Python ${MIN_PYTHON_MAJOR}.${MIN_PYTHON_MINOR} or newer is required. Please update the 'Python 3 for Unraid' plugin." >> "$LOGFILE"
-    return 1
-  fi
-  echo "$PY_BIN"
-  return 0
-}
-
-defer_start_until_python_ready() {
-  if [ -f "$WAIT_PIDFILE" ] && kill -0 "$(cat "$WAIT_PIDFILE")" 2>/dev/null; then
-    echo "Borg Backup UI is already waiting for the Python runtime in the background (PID: $(cat "$WAIT_PIDFILE"))"
-    return 0
-  fi
-  echo "Python runtime is not available yet, starting Borg Backup UI background wait process (up to ${PYTHON_WAIT_SECONDS}s)." >> "$LOGFILE"
-  BBUI_DEFERRED_START=1 "$0" start >> "$LOGFILE" 2>&1 &
-  echo $! > "$WAIT_PIDFILE"
-  echo "Borg Backup UI wait process started (PID: $!)"
-  return 0
-}
-
 start() {
+  # Serialize service starts; the launcher separately serializes RAM extraction.
+  install -d -m 0700 /run/borg-backup-ui
+  exec 8>/run/borg-backup-ui/start.lock
+  flock -w 60 8 || return 1
   if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
     echo "Borg Backup UI is already running (PID: $(cat "$PIDFILE"))"
     return 0
   fi
-  if [ "${BBUI_DEFERRED_START:-0}" != "1" ] && [ -f "$WAIT_PIDFILE" ] && kill -0 "$(cat "$WAIT_PIDFILE")" 2>/dev/null; then
-    echo "Borg Backup UI is already waiting for the Python runtime in the background (PID: $(cat "$WAIT_PIDFILE"))"
-    return 0
-  fi
-
   if [ ! -f "${PLUGIN_DIR}/borg_backup_ui.py" ]; then
     echo "ERROR: ${PLUGIN_DIR}/borg_backup_ui.py not found" >&2
     return 1
-  fi
-
-  if [ "${BBUI_DEFERRED_START:-0}" != "1" ] && ! command -v python3 >/dev/null 2>&1; then
-    defer_start_until_python_ready
-    return 0
   fi
 
   # Prefer bundled Borg binary when available (no symlink requirement on flash FS).
@@ -135,20 +80,20 @@ start() {
   # Keep bytecode off the boot USB stick. API-started jobs (including cron
   # requests) inherit this cache, which survives service restarts until reboot.
   export PYTHONPYCACHEPREFIX="${PYTHON_CACHE_DIR}"
+  PYTHON_ARGS=(-X "pycache_prefix=${PYTHON_CACHE_DIR}")
   if ! install -d -m 0700 "${PYTHON_CACHE_DIR}"; then
     # An optional cache must not prevent startup or fall back to USB writes.
     export PYTHONDONTWRITEBYTECODE=1
+    PYTHON_ARGS=(-B)
     echo "WARNING: Python RAM cache is unavailable; bytecode writes are disabled for this run." >> "$LOGFILE"
   fi
-  PY_BIN="$(python_runtime_status)"
+  PY_BIN="$(bash "$PYTHON_LAUNCHER" --select)"
   if [ -z "$PY_BIN" ]; then
-    [ "${BBUI_DEFERRED_START:-0}" = "1" ] && rm -f "$WAIT_PIDFILE"
     return 1
   fi
-  echo "Python Runtime: ${PY_BIN}" >> "$LOGFILE"
-  "$PY_BIN" "${PLUGIN_DIR}/borg_backup_ui.py" >> "$LOGFILE" 2>&1 &
+  bash "$PYTHON_LAUNCHER" --status >> "$LOGFILE" 2>&1
+  "$PY_BIN" -E -s -S "${PYTHON_ARGS[@]}" "${PLUGIN_DIR}/borg_backup_ui.py" 8>&- >> "$LOGFILE" 2>&1 &
   echo $! > "$PIDFILE"
-  [ "${BBUI_DEFERRED_START:-0}" = "1" ] && rm -f "$WAIT_PIDFILE"
   echo "Borg Backup UI started (PID: $!)"
 }
 

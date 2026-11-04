@@ -13,6 +13,7 @@ import re
 import selectors
 import signal
 import subprocess
+import sys
 import time
 import uuid
 
@@ -288,7 +289,9 @@ def run_hook(script: dict, phase: str, job_id: str, *, result: str = '', cancell
 
     ``cancelled`` is polled for Pre only; Post cleanup is never cancelled. Output
     is masked and capped at 64 KiB. Children are terminated when the hook ends.
-    Returns a serializable outcome; does not raise for launch or script failures.
+    BBUI_PYTHON exposes the selected absolute interpreter to hooks without
+    changing PATH. Returns a serializable outcome; does not raise for launch or
+    script failures.
     """
     outcome = {'script_id': script['id'], 'name': script['name'], 'status': 'failed', 'exit_code': 2}
     logging.info('━' * 80)
@@ -310,6 +313,7 @@ def run_hook(script: dict, phase: str, job_id: str, *, result: str = '', cancell
                 'PATH': '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
                 'HOME': '/root', 'LANG': 'C.UTF-8',
                 'BBUI_JOB_ID': job_id, 'BBUI_HOOK_PHASE': phase, 'BBUI_JOB_RESULT': result,
+                'BBUI_PYTHON': sys.executable,
             })
         output = bytearray()
         with selectors.DefaultSelector() as selector:

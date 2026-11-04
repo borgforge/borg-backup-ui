@@ -330,7 +330,7 @@ def test_cleanup_cannot_mask_memory_failure_or_missing_final_counters(tmp_path, 
 def test_supervisors_queue_instead_of_combining_budgets(tmp_path):
     """Use real independent supervisors/flocks, with a simulated kernel backend."""
     harness = tmp_path / "supervisor.py"
-    harness.write_text('''
+    harness.write_text(f"import sys; sys.path.insert(0, {str(Path(resources.__file__).resolve().parent)!r})\n" + '''
 import os, sys, time
 from pathlib import Path
 import restore_test_resources as r
@@ -484,9 +484,10 @@ def test_kernel_limit_kills_worker_and_children_but_not_supervisor(tmp_path):
 def keeper_harness(tmp_path, monkeypatch):
     """Run real keeper pipes/processes, mapping only kernel files to fixture files."""
     harness = tmp_path / "keeper.py"
-    harness.write_text('''
+    harness.write_text(f'''
 import sys
 from pathlib import Path
+sys.path.insert(0, {str(Path(resources.__file__).resolve().parent)!r})
 import restore_test_resources as r
 root = Path(sys.argv[2])
 def mapped_path(value):

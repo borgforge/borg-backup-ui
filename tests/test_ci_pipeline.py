@@ -286,7 +286,7 @@ def test_workflows_isolate_publication_authority_to_protected_main_jobs():
                     assert job_id == 'github-release'
                     assert job['environment'] == 'release-publish'
                     assert set(job['needs']) == {'plan', 'result'}
-                elif path.name == 'apprise-monitor.yml':
+                elif path.name in ('apprise-monitor.yml', 'python-monitor.yml'):
                     assert set(workflow['on']) == {'schedule', 'workflow_dispatch'}
                     assert job_id == 'monitor'
                     assert job['environment'] == 'dependency-monitor'

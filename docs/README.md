@@ -35,11 +35,12 @@ library, but requires an installed Python 3 runtime on Unraid.
 
 ## Runtime Requirement
 
-- Python 3.10 or newer.
-- Recommended and officially required on Unraid: `Python 3 for Unraid` from
-  Community Applications.
-- The Unraid control page checks the `python3` path and version, and disables
-  start/restart actions when the runtime is missing or too old.
+- Unraid 6.12.5 through 7.x; Unraid 8 remains outside this plugin line.
+- Builds containing #548 use compatible external Python 3.10-3.13 or a bundled,
+  isolated fallback. No extra Python download or pip installation at boot.
+- The first stable release with this feature is pending Unraid validation and
+  release approval. Earlier stable versions still require Python 3 for Unraid.
+- See [private runtime ownership and validation](maintainer/python-runtime.md).
 
 ## Target Paths on Unraid
 

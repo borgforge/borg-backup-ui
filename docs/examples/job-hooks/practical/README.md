@@ -194,3 +194,8 @@ Real Unraid mounts, hardware WOL, database contents/restores and a real receiver
 still require a maintainer test. This repository-only set is not copied by the
 plugin package builder; a test-channel package would not distribute these files.
 Test them through manual import instead. No stable release is prepared here.
+
+Python examples use `BBUI_PYTHON`, the job's selected interpreter, with isolated
+standard-library imports. Outside Borg Backup UI they fall back to `python3`.
+Existing saved scripts are not rewritten: use `"$BBUI_PYTHON" -E -s -S -B`
+instead of `python3` if they must work without a separate Python provider.

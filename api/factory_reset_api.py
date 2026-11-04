@@ -275,7 +275,7 @@ def schedule_factory_reset(
     try:
         try:
             subprocess.Popen(
-                [sys.executable, str(worker), str(marker)],
+                [sys.executable, "-E", "-s", "-S", "-B", str(worker), str(marker)],
                 stdin=subprocess.DEVNULL,
                 stdout=log_handle,
                 stderr=subprocess.STDOUT,

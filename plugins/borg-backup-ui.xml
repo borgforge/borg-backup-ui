@@ -1,6 +1,6 @@
 <Plugin>
   <Name>Borg Backup UI</Name>
-  <Overview>Guided BorgBackup web interface for Unraid backups, repositories, restore tests, reports, archive browsing, and notifications. Requires the separate Python 3 for UNRAID plugin.</Overview>
+  <Overview>Guided BorgBackup web interface for Unraid backups, repositories, restore tests, reports, archive browsing, and notifications. Includes a private Python runtime; Python 3 for UNRAID is not required for builds containing #548.</Overview>
   <PluginURL>https://raw.githubusercontent.com/borgforge/borg-backup-ui/main/borg-backup-ui.plg</PluginURL>
   <PluginAuthor>Thorsten Steinberg</PluginAuthor>
   <Support>https://forums.unraid.net/topic/198728-plugin-borg-backup-ui-web-ui-for-borg-backup-on-unraid/</Support>
@@ -8,6 +8,7 @@
   <ReadMe>https://raw.githubusercontent.com/borgforge/borg-backup-ui/main/README.md</ReadMe>
   <Category>Backup: Tools:System Plugins:</Category>
   <MinVer>6.12.5</MinVer>
+  <MaxVer>7.99.99</MaxVer>
   <Icon>https://raw.githubusercontent.com/borgforge/borg-backup-ui/main/ui/assets/app-icon.png</Icon>
   <License>MIT</License>
   <ExtraSearchTerms>borg borgbackup backup restore repository repositories unraid snapshots</ExtraSearchTerms>

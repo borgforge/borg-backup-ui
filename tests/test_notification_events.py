@@ -12,6 +12,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "runtime"))
+sys.path.insert(0, str(ROOT / "runtime/lib"))
 sys.path.insert(0, str(ROOT / "api"))
 
 from lib.notification_events import (  # noqa: E402
@@ -292,8 +293,8 @@ def test_send_event_kicks_queued_apprise_delivery_immediately(monkeypatch, tmp_p
 
     assert result["apprise"] is True
     assert len(popen_calls) == 1
-    assert popen_calls[0]["args"][1] == "-c"
-    assert "drain_notification_queue" in popen_calls[0]["args"][2]
+    assert popen_calls[0]["args"][:6] == [sys.executable, "-E", "-s", "-S", "-B", "-c"]
+    assert "drain_notification_queue" in popen_calls[0]["args"][6]
     assert "json://token" not in " ".join(map(str, popen_calls[0]["args"]))
     assert popen_calls[0]["kwargs"]["env"]["BBUI_BACKUP_SCRIPTS_DIR"] == str(tmp_path)
     assert "json://token" not in json.dumps(popen_calls[0]["kwargs"]["env"])

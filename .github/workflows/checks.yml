@@ -66,11 +66,15 @@ jobs:
           python -m pip install --require-hashes -r .github/requirements-ci.lock
           npm ci --ignore-scripts --prefix .github/browser
           .github/browser/node_modules/.bin/playwright install --with-deps chromium
+          sudo apt-get install -y php-cli
           python plugin/ci_checks.py test-dependencies
           echo "$GITHUB_WORKSPACE/.release-tmp/ci/bin" >> "$GITHUB_PATH"
+      - name: Private and external Python runtime compatibility
+        run: python plugin/check_python_runtime.py --work .release-tmp/ci/python-runtime --tests
       - name: Full suite (isolated data; optional host tests stay opt-in)
         run: |
           umask 0022
+          python -c 'import sys; print(f"Full source suite: source=CI setup-python; Python {sys.version.split()[0]}; interpreter={sys.executable}", flush=True)'
           python plugin/build_metrics.py --output .release-tmp/ci/tests.jsonl --step pytest -- python -m pytest -q tests -rs --durations=20 --basetemp=.release-tmp/ci/pytest --junitxml=.release-tmp/ci/tests.xml
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()

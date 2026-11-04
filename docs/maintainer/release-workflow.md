@@ -80,7 +80,8 @@ The daily [Apprise release monitor](apprise-monitor.md) (#699) complements these
 audits with deduplicated upstream-version and public-advisory issues. Its
 `dependency-monitor` environment requires separate maintainer setup and a live
 check after merge. It does not update dependencies or authorize releases; Python
-runtime monitoring remains part of #548.
+runtime monitoring is documented in the [private runtime guide](python-runtime.md)
+and remains a mandatory activation check for #548.
 
 ## Local development and convenience commands
 

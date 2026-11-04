@@ -45,7 +45,7 @@ metrics; Docker/VM behavior is explained through the job configuration.
 ## Install
 
 1. Open **Apps** in the Unraid web interface.
-2. Install **Python 3 for Unraid** if it is not already installed.
+2. Check the installed version: private Python is included in the upcoming release; older stable versions still need **Python 3 for Unraid**.
 3. Search for **Borg Backup UI** and open its Community Apps listing.
 4. Install the plugin.
 5. Open **Settings > Borg Backup UI**, start the service, and complete the
@@ -156,8 +156,8 @@ If the Apps tab is unavailable, follow the official
 ## Requirements
 
 - Unraid with a running array.
-- Python 3.10 or newer.
-- Recommended on Unraid: `Python 3 for Unraid` from Community Applications.
+- Unraid 6.12.5 through 7.x; Unraid 8 is not supported.
+- The upcoming version bundles private Python. Its first stable version is pending successful Unraid testing and release approval; older stable versions still require `Python 3 for Unraid`.
 - Reachable storage targets for the selected backup locations.
 
 BorgBackup is bundled with the plugin package. No pip-based runtime dependency

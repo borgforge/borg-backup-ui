@@ -16,8 +16,9 @@ WAIT_SECONDS=120
 [[ "$CONFIGURED" == "yes" ]] || { echo 'Configure this example before use.' >&2; exit 2; }
 [[ "${BBUI_HOOK_PHASE:-}" == "pre" ]] || { echo 'Assign this script as Pre.' >&2; exit 2; }
 
-command -v python3 >/dev/null
-python3 - "$MAC_ADDRESS" "$BROADCAST_IP" "$SERVER_IP" "$SERVER_PORT" "$WAIT_SECONDS" <<'PYTHON'
+PYTHON_BIN="${BBUI_PYTHON:-$(command -v python3)}"
+[ -x "$PYTHON_BIN" ]
+"$PYTHON_BIN" -E -s -S -B - "$MAC_ADDRESS" "$BROADCAST_IP" "$SERVER_IP" "$SERVER_PORT" "$WAIT_SECONDS" <<'PYTHON'
 import ipaddress
 import re
 import socket

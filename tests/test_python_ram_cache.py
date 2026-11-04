@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -28,10 +29,14 @@ temporary = root / 'result.tmp'
 temporary.write_text(json.dumps(report))
 temporary.replace(root / 'result.json')
 ''')
+    runtime = plugin / "runtime/python"
+    runtime.mkdir(parents=True)
+    (runtime / "launch.sh").write_text('printf "%s\\n" ' + str(Path(sys.executable).resolve()) + '\n')
     script = (ROOT / "plugin/rc.borg_backup_ui").read_text()
     replacements = {
         "/boot/config/plugins/borg-backup-ui": str(plugin),
         "/run/borg-backup-ui/pycache": str(cache),
+        "/run/borg-backup-ui": str(cache.parent),
         "/var/run/borg_backup_ui.pid": str(tmp_path / "service.pid"),
         "/var/run/borg_backup_ui_start_wait.pid": str(tmp_path / "wait.pid"),
         "/var/log/borg_backup_ui.log": str(tmp_path / "service.log"),
@@ -83,7 +88,8 @@ def test_unavailable_optional_cache_does_not_block_service_or_write_to_plugin(tm
     cache.write_text("not a directory")
     report = _start(launcher, plugin, tmp_path)
     assert report["value"] == report["child"]["value"] == 497
-    assert report["prefix"] == report["child"]["prefix"] == str(cache)
+    assert report["prefix"] is None
+    assert report["child"]["prefix"] == str(cache)
     assert not list(plugin.rglob("*.pyc"))
     assert not (tmp_path / "wrong-cache").exists()
     assert cache.read_text() == "not a directory"
