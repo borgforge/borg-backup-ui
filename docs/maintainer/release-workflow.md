@@ -79,8 +79,12 @@ suppressed. This is different from repeating the expensive source test suite.
 The dependency audit covers the Python distributions in the Apprise lockfile,
 not CPython or native libraries linked into the private runtime. Native advisory
 triage and the [runtime release decision](python-runtime-security-audit.md) are
-separate requirements. Passing pip-audit/CI does not clear an open native-library
-release blocker.
+separate requirements. Passing pip-audit/CI does not establish native CVE
+applicability. Open library-update issues alone do not prohibit a release when
+the product-specific assessment establishes that the reported paths are not
+reachable and the intended publication is authorized. This does not mark the
+library patched, suppress findings or waive unresolved applicability, reachable
+vulnerabilities, pipeline checks or the separate stable-release approval.
 
 The daily [Apprise release monitor](apprise-monitor.md) (#699) complements these
 audits with deduplicated upstream-version and public-advisory issues. Its

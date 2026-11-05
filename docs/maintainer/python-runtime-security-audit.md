@@ -6,12 +6,31 @@ private runtime. This is an applicability review, not a release attestation.
 
 ## Decision
 
-**Blocked for a new security-fix testing candidate and for stable promotion.**
-Eleven advisories concern code present in the bundled SQLite library. The normal
-application does not expose their prerequisites, but the library is not patched.
-Two findings are not applicable to this particular bundle because the required
-component is absent. Neither passing tests nor pip-audit removes this blocker.
-No stable approval, test installation, or risk acceptance is inferred.
+**Testing publication authorized by the maintainer on 2026-11-06, retaining
+Python 3.13 and the existing protected CI/publication process. No stable release
+or promotion is authorized.** This supersedes the initial blanket release block.
+
+Eleven advisories concern code present in the bundled SQLite library. The
+reviewed BBUI application does not expose their SQL/database-input prerequisites;
+for that product scope they are assessed as not affected by the reported paths.
+The contained library is still affected and unpatched. Keep #706-#715 and #718
+open to track verified native-library updates, without treating their presence
+alone as a testing-release blocker. #716 and #717 remain not applicable because
+the required session extension/native shell is absent.
+
+The maintainer explicitly authorized publishing a new test candidate with this
+assessment and continued library-update tracking. This is not a claim of a
+patched runtime, a general-purpose Python security guarantee, or completed
+Unraid acceptance. Custom hooks and future SQLite usage are outside the reviewed
+application scope. Reassess when application/dependency code, native build
+options, the runtime bundle or advisory facts change. Reachable vulnerabilities,
+unresolved applicability, failed CI/audits or provenance failures still require
+resolution before publication; this decision is not a global CVE exemption.
+
+This distinction follows the execution-path/impact reasoning described by
+[OpenVEX](https://github.com/openvex/spec/blob/main/OPENVEX-SPEC.md) and
+[SQLite's vulnerability guidance](https://www.sqlite.org/cves.html). It does not
+silence the native monitor or replace any protected pipeline check.
 
 The official supplier latest-release pointer and release API still identify
 [20261026](https://github.com/astral-sh/python-build-standalone/releases/tag/20261026).
@@ -76,6 +95,8 @@ bundle contains those fixes. See [SQLite release history](https://sqlite.org/cha
 For every library-present row, status is **open, affected library; unreachable
 in the reviewed application flow**. Residual risk is use through custom Python
 code or future application changes; keep the issue open until remediation.
+These are library-update tracking issues, not unresolved product-applicability
+decisions or automatic release blockers for the reviewed use described above.
 
 | Issue / advisory | Required path and actual bundle | Upstream fixed version | Decision |
 | --- | --- | --- | --- |
@@ -100,6 +121,13 @@ reports security maintenance until 2029-10-01, with 3.13.18 the current actual
 release in this series. [PEP 719](https://peps.python.org/pep-0719/) documents its
 security-only phase. A move to 3.15 would not itself prove that the supplier's
 SQLite was fixed. #705 remains deferred compatibility work, not a security fix.
+
+The official 3.15.2+20261026 Linux x86_64 stripped artifact was also downloaded,
+its SHA256 checked against the supplier release digest, and its interpreter
+executed with `-I -S`: it reports SQLite 3.53.1 and OpenSSL 3.5.9 as well.
+Artifact SHA256: `7b03163a980c607ba8194709d4a4086735a7a9c488cc475b098157306927b36b`.
+Switching to that build would not fix these SQLite findings. This version probe
+is not a full BBUI compatibility test for Python 3.15.
 
 A future 3.15 review must adjust the explicit 3.10-3.13 provider gate, check stdlib
 API removals/behavior, Apprise and native wheel compatibility, ordinary-GIL build
@@ -136,9 +164,10 @@ remain enabled. No security check or protected workflow was disabled.
 `plugin/apprise-requirements.lock`. It does **not** scan the interpreter or its
 statically linked SQLite/OpenSSL/native components. The native monitor is a
 separate advisory/triage source, not a blocking CI vulnerability scanner today.
-A green dependency audit or `CI result` cannot override this documented release
-blocker. Automated native release enforcement would be a separately reviewed
-CI-policy change, merged before privileged publication.
+A green dependency audit or `CI result` does not by itself establish native CVE
+applicability. The explicit product assessment and testing authorization above
+are separate from those checks. Automated native release enforcement would be a
+separately reviewed CI-policy change, merged before privileged publication.
 
 ## Local verification
 
@@ -158,12 +187,15 @@ from both the extracted published candidate and a freshly verified local bundle.
 
 ## Outstanding acceptance
 
-- Obtain a verified patched runtime and repeat per-CVE native/feature assessment.
+- Continue tracking a verified patched runtime in #706-#715 and #718, and repeat
+  the per-CVE assessment when it changes. This is not a prerequisite to the
+  explicitly authorized test publication for the current reviewed scope.
 - Complete GitHub CI for this change; record the PR/run evidence in the issues.
 - After merge, run the protected Python monitor twice and verify idempotence;
   local previews do not activate main workflow changes.
-- Publish a fresh unique testing version only after the security blocker is
-  resolved; verify manifest, package, hashes, source, snapshot and immutable tag.
+- Publish the explicitly authorized fresh testing version after successful CI;
+  verify manifest, package, hashes, source, snapshot and immutable tag. Keep
+  Python 3.13 and do not describe this candidate as fixing the SQLite library.
 - Run real Unraid 6.12.5 and supported 7.x fresh install/upgrade, external/private
   provider, API/UI, admin recovery, notifications, scheduled/manual backup,
   restore/restore-test, reboot/offline and uninstall checks. None was performed

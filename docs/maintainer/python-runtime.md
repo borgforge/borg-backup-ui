@@ -207,7 +207,7 @@ passed here. Future 7.x versions require new validation.
 - Native plugin manager rejects 6.12.4 and 8.0 (including prerelease), accepts
   6.12.5 and the tested 7.x versions. CA metadata alone is not installer proof.
 
-## Security review and release blocker (2026-11-06)
+## Security review and testing authorization (2026-11-06)
 
 See the [per-CVE audit for #705-#718](python-runtime-security-audit.md), including
 actual published-package evidence, native build options, supplier availability,
@@ -216,7 +216,14 @@ remain open for the contained library; the normal application does not expose
 their required inputs. The session-extension and native-CLI findings are not
 applicable to this exact build. None is represented as patched.
 
-A new security-fix testing candidate and stable promotion are blocked pending a
-verified patched runtime. CPython 3.13 remains supported; #705 is future-series
-compatibility planning. pip-audit covers Python distributions only, not native
-libraries. Monitor completion and passing CI are not native-security clearance.
+The maintainer authorized a new Python-3.13 test candidate based on the reviewed
+application paths and continued tracking of the unpatched library. This replaces
+the initial blanket release block; it does not mark the library fixed or apply
+to arbitrary custom hooks/future SQLite usage. Reassess changes to code, build
+options, runtime or advisory facts. Stable promotion remains unauthorized and
+requires explicit successful Unraid testing and separate stable approval.
+
+CPython 3.13 remains supported; #705 is future-series compatibility planning.
+The inspected supplier Python 3.15.2 build also contains SQLite 3.53.1.
+pip-audit covers Python distributions only, not native libraries. Monitor
+completion and passing CI do not replace the product-specific assessment.
