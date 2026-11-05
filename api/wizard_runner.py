@@ -657,7 +657,9 @@ def main() -> int:
     backup_scripts_dir = Path(backup_scripts_dir_raw)
     try:
         borg_bin = _ensure_borg_available()
-        logging.info("Active Borg binary: %s", borg_bin)
+        logging.info("BorgBackup executable: %s", borg_bin)
+        from python_runtime_info import runtime_log_line
+        logging.info("%s", runtime_log_line())
         env, meta = _load_env_from_job(job_key, borg_scripts_dir, backup_scripts_dir)
     except Exception as exc:
         logging.error("Loading job failed: %s", exc)

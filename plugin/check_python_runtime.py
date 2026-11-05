@@ -54,10 +54,10 @@ def check(work: Path, tests: bool = False) -> None:
     (commands / 'python3').write_text('#!/bin/sh\nexit 1\n')
     (commands / 'python3').chmod(0o755)
     launch_env = {**env, 'PATH': str(commands) + ':' + os.environ['PATH'],
-                  'BBUI_RUNTIME_STATE': str(work / 'ram'), 'BBUI_SERVICE_PIDFILE': str(work / 'service.pid')}
+                  'BBUI_RUNTIME_STATE': str(work / 'ram'), 'BBUI_RUNTIME_ROOT': str(work / 'executable-ram/python'), 'BBUI_SERVICE_PIDFILE': str(work / 'service.pid')}
     status = json.loads(subprocess.check_output(['bash', str(runtime / 'launch.sh'), '--status'], env=launch_env, text=True))
     assert status['source'] == 'bundled' and status['version'] == meta['version']
-    assert Path(status['path']).is_relative_to(work / 'ram')
+    assert Path(status['path']).is_relative_to(work / 'executable-ram/python')
     import re
     ceiling = tuple(map(int, meta['glibc_minimum'].split('.')))
     install = private.parent.parent

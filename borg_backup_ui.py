@@ -1165,6 +1165,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
         return build_homepage_widget_summary(self.config)
 
     def _get_license_file(self, query: str = "") -> dict:
+        """Serve allowlisted notices and bundle attribution, plus live Python diagnostics."""
         qs = parse_qs(query or "")
         license_id = str((qs.get("id") or [""])[0] or "").strip()
         path = LICENSE_FILES.get(license_id)
@@ -1174,12 +1175,18 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             exc.api_status = 404
             raise exc
         text = path.read_text(encoding="utf-8")
-        return {
+        result = {
             "id": license_id,
             "path": str(path.relative_to(SCRIPT_DIR)),
             "content": text,
             "format": "markdown" if path.suffix.lower() == ".md" else "text",
         }
+        if license_id == "third-party":
+            from python_runtime_info import runtime_info
+            from bundle_notices import read_bundles
+            result["bundles"] = read_bundles(SCRIPT_DIR)
+            result["python_runtime"] = runtime_info()
+        return result
 
     def _get_database_profiles(self) -> dict:
         """List credential-free managed database profiles."""
