@@ -34,7 +34,10 @@ inventory, supplier license and `PYTHON.json`
 are SHA256-pinned. The builder compares Python version, target, glibc requirement,
 linked libraries and native source versions to the committed inventory. It
 rejects unknown linked libraries or inventory drift. Native versions come from
-the pinned supplier source inventory; runtime checks also exercise SSL, SQLite,
+the pinned supplier source inventory; the builder executes the isolated binary and verifies Python, SQLite and OpenSSL
+versions against the lock. Inner/outer provenance records native versions, SQLite
+source ID, compile options, session symbol and CLI presence;
+runtime checks also exercise SSL, SQLite,
 compression, authentication and the exact packaged Apprise dependencies.
 
 The full supplier archive is a build input only. Executable binaries come from
@@ -204,19 +207,16 @@ passed here. Future 7.x versions require new validation.
 - Native plugin manager rejects 6.12.4 and 8.0 (including prerelease), accepts
   6.12.5 and the tested 7.x versions. CA metadata alone is not installer proof.
 
-## Initial advisory review (2026-11-04; open)
+## Security review and release blocker (2026-11-06)
 
-The public metadata preview found 13 SQLite CVEs affecting supplier SQLite
-3.53.1 (CVE-2026-11822, CVE-2026-11824, CVE-2026-119371 through
-CVE-2026-119379, CVE-2026-119586 and CVE-2026-119591). NVD lists fixes in
-3.53.2 / 3.54.0; the pinned supplier release still contains 3.53.1. SQLite is
-built into libpython, so deleting sqlite3's Python package would not remove the
-native library. Retain truthful inventory and monitor coverage.
+See the [per-CVE audit for #705-#718](python-runtime-security-audit.md), including
+actual published-package evidence, native build options, supplier availability,
+residual risks and the explicit release decision. Eleven SQLite advisories
+remain open for the contained library; the normal application does not expose
+their required inputs. The session-extension and native-CLI findings are not
+applicable to this exact build. None is represented as patched.
 
-The application uses JSON stores and does not open SQLite databases or accept
-SQL; the runtime probe only executes a fixed `select 1` against a new in-memory
-database. This limits current application exposure, but is not a blanket safety
-claim for arbitrary custom Python hooks. Review supplier updates and record the
-maintainer's applicability decision before stable approval; do not mark the
-monitor or #548 complete based on the preview. CVE-2026-3087 has an explicit
-mandatory Windows context and is excluded for this Linux target by tested logic.
+A new security-fix testing candidate and stable promotion are blocked pending a
+verified patched runtime. CPython 3.13 remains supported; #705 is future-series
+compatibility planning. pip-audit covers Python distributions only, not native
+libraries. Monitor completion and passing CI are not native-security clearance.

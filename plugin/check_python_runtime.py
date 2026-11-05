@@ -26,6 +26,7 @@ def check(work: Path, tests: bool = False) -> None:
     runtime = app / 'runtime/python'
     shutil.copytree(ROOT / 'runtime/python', runtime, dirs_exist_ok=True)
     meta = python_runtime.build(runtime, work / 'cache')
+    print('Verified native runtime facts: ' + json.dumps(meta['native_facts'], sort_keys=True), flush=True)
     vendor = app / 'runtime/vendor'
     if vendor.exists():
         shutil.rmtree(vendor)
@@ -79,6 +80,7 @@ def check(work: Path, tests: bool = False) -> None:
                         'tests/test_auth.py', 'tests/test_job_groups.py', 'tests/test_wizard_runner_runtime_path.py',
                         'tests/test_restore_test_scheduling.py', 'tests/test_job_scripts.py', 'tests/test_python_runtime.py',
                         'tests/test_restore_test_memory.py', 'tests/test_notification_events.py',
+                        'tests/test_runtime_recovery.py', 'tests/test_runtime_before_maintenance.py',
                         '--basetemp=' + str(work / 'tests')], cwd=ROOT,
                        env={**os.environ, 'PYTEST_DISABLE_PLUGIN_AUTOLOAD': '1'}, check=True)
     print('Private/external Python, isolation, offline extraction, Apprise and ELF checks passed.')

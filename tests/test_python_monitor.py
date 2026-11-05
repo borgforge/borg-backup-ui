@@ -15,7 +15,8 @@ def inputs():
     pep = {'metadata': {'3.13': {'end_of_life': '2029-10-31'}},
            'releases': {'3.13': [{'stage': '3.13.1', 'state': 'actual', 'date': '2026-01-01'}]}}
     release = {'tag_name': '20260101', 'draft': False, 'prerelease': False, 'assets': [
-        {'name': 'cpython-3.13.1+20260101-x86_64-unknown-linux-gnu-pgo+lto-full.tar.zst'}]}
+        {'name': 'cpython-3.13.1+20260101-x86_64-unknown-linux-gnu-pgo+lto-full.tar.zst'},
+        {'name': 'cpython-3.13.1+20260101-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz'}]}
     return lock, pep, release
 
 
@@ -36,7 +37,8 @@ def test_patch_security_and_new_series_are_separate_reviews():
 def test_same_python_version_new_supplier_build_requires_review():
     lock, pep, release = inputs()
     release['tag_name'] = '20260102'
-    release['assets'][0]['name'] = release['assets'][0]['name'].replace('20260101', '20260102')
+    for asset in release['assets']:
+        asset['name'] = asset['name'].replace('20260101', '20260102')
     found = monitor.release_findings(lock, pep, release, date(2026, 1, 5))
     assert [f['key'] for f in found] == ['release:build-3.13.1-20260102']
 
@@ -107,6 +109,13 @@ def test_missing_supplier_platform_fails():
     lock, pep, release = inputs()
     release['assets'] = []
     with pytest.raises(ValueError, match='lacks'):
+        monitor.release_findings(lock, pep, release, date(2026, 1, 5))
+
+
+def test_missing_supplier_stripped_binary_fails():
+    lock, pep, release = inputs()
+    release['assets'].pop()
+    with pytest.raises(ValueError, match='stripped'):
         monitor.release_findings(lock, pep, release, date(2026, 1, 5))
 
 
@@ -187,3 +196,82 @@ def test_keyword_security_candidates_are_not_silently_discarded():
 def test_libedit_keyword_does_not_match_editorconfig(description, expected):
     cve = {'descriptions': [{'lang': 'en', 'value': description}]}
     assert monitor.keyword_mentions_component(cve, 'libedit') is expected
+
+
+def test_unanalysed_versioned_hit_requires_triage():
+    data = nvd()
+    cve = data['vulnerabilities'][0]['cve']
+    cve.pop('configurations')
+    cve['vulnStatus'] = 'Awaiting Analysis'
+    found = monitor.security_findings(inputs()[0], request=lambda _: data, pause=lambda _: None)
+    assert len(found) == 1
+    assert 'Classification: potential' in found[0]['text']
+
+
+@pytest.mark.parametrize('platform', ['windows', 'mac_os', 'android'])
+def test_target_platform_in_application_cpe_is_respected(platform):
+    data = nvd()
+    match = data['vulnerabilities'][0]['cve']['configurations'][0]['nodes'][0]['cpeMatch'][0]
+    fields = match['criteria'].split(':')
+    fields[10] = platform
+    match['criteria'] = ':'.join(fields)
+    assert monitor.security_findings(inputs()[0], request=lambda _: data, pause=lambda _: None) == []
+
+
+def test_nested_and_or_platform_conditions():
+    data = nvd()
+    config = data['vulnerabilities'][0]['cve']['configurations'][0]
+    windows = {'vulnerable': False, 'criteria': 'cpe:2.3:o:microsoft:windows:-:*:*:*:*:*:*:*'}
+    linux = {'vulnerable': False, 'criteria': 'cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*'}
+    nested = {'operator': 'OR', 'cpeMatch': [windows]}
+    config['nodes'] = [{'operator': 'AND', 'nodes': [*config['nodes'], nested]}]
+    scan = lambda: monitor.security_findings(inputs()[0], request=lambda _: data, pause=lambda _: None)
+    assert scan() == []
+    nested['cpeMatch'].append(linux)
+    assert len(scan()) == 1
+    nested['operator'] = 'AND'
+    assert scan() == []
+    nested['negate'] = True
+    assert len(scan()) == 1  # Unknown negation must not suppress a candidate.
+
+
+@pytest.mark.parametrize('bound,current,expected', [
+    ('versionStartIncluding', '3.5.2', True), ('versionStartExcluding', '3.5.2', False),
+    ('versionEndIncluding', '3.5.2', True), ('versionEndExcluding', '3.5.2', False)])
+def test_inclusive_and_exclusive_range_boundaries(bound, current, expected):
+    match = {'vulnerable': True, 'criteria': 'cpe:2.3:a:openssl:openssl:*:*:*:*:*:*:*:*', bound: '3.5.2'}
+    assert monitor.relevant_match(match, 'openssl:openssl', current) is expected
+
+
+@pytest.mark.parametrize('damage', ['overflow', 'changed_total', 'duplicate'])
+def test_inconsistent_pagination_never_reports_success(damage):
+    first = nvd()
+    second = nvd()
+    if damage == 'overflow':
+        first['totalResults'] = 0
+    else:
+        first['totalResults'] = 2
+        second.update(startIndex=1, totalResults=3 if damage == 'changed_total' else 2)
+    pages = iter([first, second])
+    with pytest.raises(ValueError, match='NVD'):
+        monitor.security_findings(inputs()[0], request=lambda _: next(pages), pause=lambda _: None)
+
+
+def test_reordered_advisory_facts_do_not_reopen_reviewed_issue():
+    data = nvd()
+    cve = data['vulnerabilities'][0]['cve']
+    cve['references'] = [{'url': 'https://example.test/a'}, {'url': 'https://example.test/b'}]
+    scan = lambda: monitor.security_findings(inputs()[0], request=lambda _: data, pause=lambda _: None)
+    first = scan()
+    cve['references'].reverse()
+    assert scan() == first
+    cve['references'].append({'url': 'https://example.test/new-fix'})
+    assert scan() != first
+
+
+def test_disappeared_finding_does_not_auto_close_or_claim_fix():
+    found = monitor.security_findings(inputs()[0], request=lambda _: nvd(), pause=lambda _: None)
+    action = monitor.monitor.plan_updates(found, [], namespace='python')[0][0]
+    issue = {'number': 12, 'user': {'login': 'borg-codex-bot'}, 'state': 'open',
+             'state_reason': None, 'labels': [], 'body': action['payload']['body']}
+    assert monitor.monitor.plan_updates([], [issue], namespace='python') == ([], 0)

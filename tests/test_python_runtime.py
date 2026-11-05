@@ -313,3 +313,27 @@ def test_control_page_renders_runtime_failure_without_claiming_account_loss(tmp_
     if running:
         restart = next(line for line in result.stdout.splitlines() if 'onclick="bbui_action(\'restart\')"' in line)
         assert 'disabled' not in restart
+
+
+@pytest.mark.parametrize('damage', [None, 'python', 'sqlite', 'openssl'])
+def test_executed_native_versions_must_match_inventory(tmp_path, monkeypatch, damage):
+    lock = json.loads((ROOT / 'runtime/python/runtime.lock.json').read_text())
+    facts = {'python': lock['version'], 'sqlite': lock['components']['sqlite']['version'],
+             'openssl': 'OpenSSL ' + lock['components']['openssl-3.5']['version'] + ' date',
+             'sqlite_compile_options': ['ENABLE_FTS5'], 'sqlite_session_symbol': False}
+    if damage:
+        facts[damage] = '0.0.0'
+    calls = []
+    def execute(command, **kwargs):
+        calls.append(command)
+        return json.dumps(facts)
+    monkeypatch.setattr(builder.subprocess, 'check_output', execute)
+    if damage:
+        with pytest.raises(ValueError, match='Executed native'):
+            builder.native_facts(tmp_path / 'python', lock)
+    else:
+        result = builder.native_facts(tmp_path / 'python', lock)
+        assert result['sqlite_cli'] is False
+        (tmp_path / 'sqlite3').touch()
+        assert builder.native_facts(tmp_path / 'python', lock)['sqlite_cli'] is True
+    assert calls[0][1:3] == ['-I', '-S']

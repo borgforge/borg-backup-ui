@@ -116,6 +116,9 @@ def release_findings(lock: dict, pep: dict, supplier: dict, today: date) -> list
     if not available:
         raise ValueError('Latest supplier release lacks the shipped platform/series')
     candidate = max(available)
+    stripped = f'cpython-{candidate}+{tag}-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz'
+    if stripped not in {asset['name'] for asset in supplier['assets']}:
+        raise ValueError('Latest supplier release lacks the stripped runtime artifact')
     if candidate > current or (candidate == current and tag > lock['build']):
         output.append(finding(f'release:build-{candidate}-{tag}', f'Review Python runtime build {candidate}+{tag}',
                               f'Monitored build: {current}+{lock["build"]}. Available: {candidate}+{tag}.\n'
@@ -158,21 +161,51 @@ def relevant_match(match: dict, product: str, version: str) -> bool:
     return True
 
 
-def linux_configuration(config: dict) -> bool:
-    """Reject an explicit mandatory Windows/macOS-only NVD context.
+def configuration_matches(node: dict, product: str, version: str) -> bool:
+    """Return whether an NVD expression can apply to this Linux/x86_64 build.
 
-    Unknown/complex contexts remain candidates for triage. This is deliberately
-    conservative and never treats absent platform data as Linux exclusion.
+    False requires a proven incompatible operand. Other products, negation and
+    unknown platform syntax remain possible, requiring human triage. Preserve
+    AND/OR grouping, including nested nodes; never flatten a mandatory context.
     """
-    if config.get('operator') != 'AND' or config.get('negate'):
+    if node.get('negate'):
         return True
-    for node in config['nodes']:
-        matches = node.get('cpeMatch', [])
-        if (matches and not node.get('negate') and node.get('operator', 'OR') == 'OR'
-                and all(not match['vulnerable'] and match['criteria'].startswith((
-                    'cpe:2.3:o:microsoft:windows', 'cpe:2.3:o:apple:mac_os')) for match in matches)):
-            return False
-    return True
+    values = []
+    for match in node.get('cpeMatch', []):
+        criteria = match['criteria']
+        fields = criteria.split(':')
+        if len(fields) != 13 or fields[:2] != ['cpe', '2.3']:
+            raise ValueError('Malformed NVD CPE')
+        incompatible = (criteria.startswith(('cpe:2.3:o:microsoft:windows', 'cpe:2.3:o:apple:mac_os'))
+                        or fields[10] in ('windows', 'mac_os', 'mac_os_x', 'android', 'ios')
+                        or fields[11] in ('aarch64', 'arm64', 'arm', 'x86', 'i686'))
+        if incompatible:
+            values.append(False)
+        elif criteria.startswith('cpe:2.3:a:' + product + ':'):
+            # Context entries constrain the version too, even if not vulnerable.
+            values.append(relevant_match({**match, 'vulnerable': True}, product, version))
+        else:
+            values.append(True)
+    values.extend(configuration_matches(child, product, version)
+                  for child in node.get('nodes', []))
+    operator = node.get('operator', 'OR')
+    if operator not in ('AND', 'OR'):
+        raise ValueError('Unknown NVD configuration operator')
+    return (all(values) if operator == 'AND' else any(values)) if values else True
+
+
+def vulnerable_matches(node: dict, product: str, version: str) -> list[dict]:
+    """Collect possible vulnerable operands only from compatible subexpressions."""
+    if node.get('negate'):
+        return [{'negated_configuration': product}]
+    if not configuration_matches(node, product, version):
+        return []
+    result = [match for match in node.get('cpeMatch', [])
+              if relevant_match(match, product, version)
+              and configuration_matches({'cpeMatch': [match]}, product, version)]
+    for child in node.get('nodes', []):
+        result.extend(vulnerable_matches(child, product, version))
+    return result
 
 
 def keyword_mentions_component(cve: dict, name: str) -> bool:
@@ -203,6 +236,8 @@ def security_findings(lock: dict, request=read_json, pause=time.sleep) -> list[d
         if not re.fullmatch(r'[0-9A-Za-z.+_-]{1,80}', version):
             raise ValueError('Invalid component version')
         start = 0
+        expected_total = None
+        seen = set()
         while True:
             if index or start:
                 pause(6.5)  # public NVD limit: five requests per rolling 30 seconds
@@ -219,37 +254,61 @@ def security_findings(lock: dict, request=read_json, pause=time.sleep) -> list[d
             rows = data['vulnerabilities']
             total = data['totalResults']
             if (data['startIndex'] != start or type(total) is not int or total < 0 or total > 10000
-                    or not isinstance(rows, list) or len(rows) > 2000 or (not rows and start < total)):
+                    or not isinstance(rows, list) or len(rows) > 2000 or (not rows and start < total)
+                    or start + len(rows) > total
+                    or (expected_total is not None and total != expected_total)):
                 raise ValueError('Incomplete NVD result')
+            expected_total = total
             for item in rows:
                 cve = item['cve']
                 identifier = cve['id']
                 if not re.fullmatch(r'CVE-\d{4}-\d{4,}', identifier):
                     raise ValueError('Malformed CVE identifier')
+                if identifier in seen:
+                    raise ValueError('Duplicate NVD result; pagination is unstable')
+                seen.add(identifier)
                 if cve['vulnStatus'] == 'Rejected':
                     continue
-                matches = [match for config in cve.get('configurations', []) if linux_configuration(config)
-                           for node in config['nodes']
-                           for match in node['cpeMatch'] if product and relevant_match(match, product, version)]
+                matches = [match for config in cve.get('configurations', [])
+                           for match in (vulnerable_matches(config, product, version) if product else [])]
+                if product and name != 'libedit' and not cve.get('configurations'):
+                    # A versioned API hit without analysis is not an all-clear.
+                    matches = [{'unclassified_candidate': name}]
                 if (product is None or (name == 'libedit' and not cve.get('configurations'))) and keyword_mentions_component(cve, name):
                     matches = [{'keyword_candidate': name}]
                 if matches:
                     record = by_cve.setdefault(identifier, {'components': set(), 'facts': []})
                     record['components'].add(f'{name} {version}')
-                    record['facts'].append({'matches': matches, 'modified': cve['lastModified'], 'metrics': cve.get('metrics', {})})
+                    record['facts'].append({'matches': matches, 'modified': cve['lastModified'],
+                                            'metrics': cve.get('metrics', {}),
+                                            'descriptions': cve.get('descriptions', []),
+                                            'references': cve.get('references', [])})
             start += len(rows)
             if start >= total:
                 break
     output = []
     for identifier, record in sorted(by_cve.items()):
-        digest = hashlib.sha256(json.dumps(record['facts'], sort_keys=True).encode()).hexdigest()
+        digest = facts_digest(record['facts'])
         output.append(finding(f'security:{identifier}', f'Review private Python runtime advisory {identifier}',
                               f'Monitored build: {lock["version"]}+{lock["build"]}.\n'
                               f'Potentially affected components: {", ".join(sorted(record["components"]))}.\n'
                               f'Source and affected/fixed version ranges: https://nvd.nist.gov/vuln/detail/{identifier}\n'
                               'Urgency: security triage now; confirm platform/feature applicability and supplier fixes.\n'
+                              'Classification: potential; version/CPE matches do not prove reachability or a fix. '
+                              'Review compile options and CLI presence separately.\n'
                               f'Advisory facts SHA256: {digest}', security=True))
     return output
+
+
+def facts_digest(value) -> str:
+    """Fingerprint advisory facts without treating API list order as a change."""
+    def normalize(item):
+        if isinstance(item, dict):
+            return {key: normalize(val) for key, val in item.items()}
+        if isinstance(item, list):
+            return sorted((normalize(val) for val in item), key=lambda val: json.dumps(val, sort_keys=True))
+        return item
+    return hashlib.sha256(json.dumps(normalize(value), sort_keys=True).encode()).hexdigest()
 
 
 def baselines(root=ROOT) -> list[tuple[str, dict]]:
@@ -318,6 +377,9 @@ def run(apply: bool = False) -> dict:
         for action in actions:
             monitor.write_issue(action, workflow='python-monitor.yml')
     return {'mode': 'apply' if apply else 'preview',
+            'scan_status': 'complete', 'release_authorized': False,
+            'security_candidates': sum(item['key'].startswith('security:') for item in found),
+            'security_scope': 'CPython and inventoried native libraries; separate from pip-audit',
             'baselines': [{'scope': scope, 'build': item['version'] + '+' + item['build']} for scope, item in versions],
             'components_scanned': sum(len(item['components']) for _, item in versions), 'findings': len(found), 'deferred': deferred,
             'creates': sum(a['method'] == 'POST' for a in actions), 'updates': sum(a['method'] == 'PATCH' for a in actions)}

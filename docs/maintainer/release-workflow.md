@@ -76,6 +76,12 @@ stable preparation and weekly. This short check is repeated because advisory
 information can change without a source change. Findings fail visibly; none are
 suppressed. This is different from repeating the expensive source test suite.
 
+The dependency audit covers the Python distributions in the Apprise lockfile,
+not CPython or native libraries linked into the private runtime. Native advisory
+triage and the [runtime release decision](python-runtime-security-audit.md) are
+separate requirements. Passing pip-audit/CI does not clear an open native-library
+release blocker.
+
 The daily [Apprise release monitor](apprise-monitor.md) (#699) complements these
 audits with deduplicated upstream-version and public-advisory issues. Its
 `dependency-monitor` environment requires separate maintainer setup and a live
