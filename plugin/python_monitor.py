@@ -174,11 +174,12 @@ def configuration_matches(node: dict, product: str, version: str) -> bool:
     for match in node.get('cpeMatch', []):
         criteria = match['criteria']
         fields = criteria.split(':')
-        if len(fields) != 13 or fields[:2] != ['cpe', '2.3']:
+        if (len(fields) != 13 or fields[:2] != ['cpe', '2.3']
+                or type(match['vulnerable']) is not bool):
             raise ValueError('Malformed NVD CPE')
         incompatible = (criteria.startswith(('cpe:2.3:o:microsoft:windows', 'cpe:2.3:o:apple:mac_os'))
                         or fields[10] in ('windows', 'mac_os', 'mac_os_x', 'android', 'ios')
-                        or fields[11] in ('aarch64', 'arm64', 'arm', 'x86', 'i686'))
+                        or fields[11] in ('aarch64', 'arm64', 'arm', 'i686'))
         if incompatible:
             values.append(False)
         elif criteria.startswith('cpe:2.3:a:' + product + ':'):
@@ -191,7 +192,9 @@ def configuration_matches(node: dict, product: str, version: str) -> bool:
     operator = node.get('operator', 'OR')
     if operator not in ('AND', 'OR'):
         raise ValueError('Unknown NVD configuration operator')
-    return (all(values) if operator == 'AND' else any(values)) if values else True
+    if not values:
+        raise ValueError('Empty NVD configuration')
+    return all(values) if operator == 'AND' else any(values)
 
 
 def vulnerable_matches(node: dict, product: str, version: str) -> list[dict]:

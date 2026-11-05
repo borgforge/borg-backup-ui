@@ -110,8 +110,8 @@ entrypoint and the real Unraid matrix. This review did not certify 3.15.
 
 The monitor now preserves nested AND/OR platform constraints, checks application
 CPE target OS/CPU qualifiers, and keeps unknown/negated conditions for triage.
-Versioned NVD hits without configurations remain potential findings. Unstable
-pagination (changed totals, duplicates, overflow) fails instead of reporting an
+Versioned NVD hits without configurations remain potential findings. Malformed empty configurations and unstable
+pagination (changed totals, duplicates, overflow) fail instead of reporting an
 incomplete success. Advisory descriptions/references are fingerprinted as data;
 list ordering alone does not change the fingerprint. No upstream prose is run
 or copied into issue instructions. Unknown components still fail coverage.
@@ -147,7 +147,7 @@ skips), including the added administrative recovery coverage; both the external
 3.12.3 and private 3.13.18 probes, packaged Apprise providers, host-path poisoning,
 offline extraction and shipped ELF glibc ceiling checks passed. The focused
 monitor/runtime/shared-issue suite passed 151 tests (3 skips); after adding the
-missing stripped-asset regression, all 39 monitor tests passed. Local skips do
+missing stripped-asset regression, all 42 monitor tests passed. Local skips do
 not replace the mandatory GitHub tool/browser checks or real Unraid acceptance.
 
 A complete read-only live scan covered all 12 inventoried components: 14 findings

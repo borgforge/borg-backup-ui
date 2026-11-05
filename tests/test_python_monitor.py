@@ -208,6 +208,14 @@ def test_unanalysed_versioned_hit_requires_triage():
     assert 'Classification: potential' in found[0]['text']
 
 
+@pytest.mark.parametrize('configuration', [{}, {'nodes': []}, {'nodes': [{'cpeMatch': []}]}])
+def test_malformed_configuration_cannot_silently_discard_a_candidate(configuration):
+    data = nvd()
+    data['vulnerabilities'][0]['cve']['configurations'] = [configuration]
+    with pytest.raises(ValueError, match='Empty NVD'):
+        monitor.security_findings(inputs()[0], request=lambda _: data, pause=lambda _: None)
+
+
 @pytest.mark.parametrize('platform', ['windows', 'mac_os', 'android'])
 def test_target_platform_in_application_cpe_is_respected(platform):
     data = nvd()
