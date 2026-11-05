@@ -198,6 +198,7 @@ measure_step python-runtime python3 "${SCRIPT_DIR}/python_runtime.py" \
 # Validate the shipped interpreter with the exact vendor tree, isolated from CI sites.
 PRIVATE_PYTHON="${BUILD_OUTPUT_DIR}/python-cache/unpacked/python/install/bin/python3"
 PYTHONDONTWRITEBYTECODE=1 "$PRIVATE_PYTHON" -E -s -S -B "${SCRIPT_DIR}/check_apprise_runtime.py" "${APPRISE_VENDOR_DIR}"
+measure_step bundle-notices python3 "${REPO_DIR}/api/bundle_notices.py" "${APP_DST}" "${APPRISE_VENDOR_DIR}"
 [ -f "${REPO_DIR}/build-provenance.json" ] && cp "${REPO_DIR}/build-provenance.json" "${APP_DST}/"
 # Legacy fallback packaging (older repo layout)
 [ -f "${REPO_DIR}/borg_restore_test.py" ] && install -m 0755 "${REPO_DIR}/borg_restore_test.py" "${APP_DST}/"

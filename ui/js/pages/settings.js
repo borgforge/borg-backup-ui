@@ -7245,14 +7245,41 @@ async function sendWeeklyReport() {
 
 // ── Settings-Formular-Hilfsfunktionen ─────────────────────────────────────────
 
+/**
+ * Render one packaged bundle and its original full notices, with escaped text.
+ * Python's shipped version is separate from the interpreter executing the API.
+ * @param {object} bundle Build-generated inventory and license texts.
+ * @param {object} runtime Actual server interpreter diagnostics.
+ * @returns {string} Bundle card HTML; no remote license content is loaded.
+ */
+function renderAboutBundle(bundle, runtime) {
+  const activePython = bundle.id === 'python' && runtime
+    ? `<p class="about-license-card-note">${escHtml(settingsT('forms.activePython'))}: ${escHtml(runtime.version)} · ${escHtml(settingsT(runtime.source === 'bundled' ? 'health.pythonBundled' : 'health.pythonExternal'))}<br><code>${escHtml(runtime.path)}</code></p>`
+    : '';
+  const components = (bundle.components || []).map(item => `<tr><td>${escHtml(item.name)}</td><td>${escHtml(item.version)}</td></tr>`).join('');
+  return `<section class="about-license-card" data-license-bundle="${escAttr(bundle.id)}">
+    <div class="about-license-card-head"><strong>${escHtml(bundle.name)}</strong></div>
+    <span class="about-license-card-meta">${escHtml(bundle.license)}</span>
+    <p class="about-license-card-note">${escHtml(settingsT('forms.bundledVersion'))}: ${escHtml(bundle.version)}${bundle.build ? ` · Build ${escHtml(bundle.build)}` : ''}</p>
+    ${activePython}
+    <details class="about-license-notices">
+      <summary>${escHtml(settingsT('forms.thirdPartyNoticeFile'))} — ${escHtml(bundle.name)}</summary>
+      ${components ? `<div class="about-markdown-viewer"><table><thead><tr><th>${escHtml(settingsT('forms.bundleComponent'))}</th><th>${escHtml(settingsT('forms.version'))}</th></tr></thead><tbody>${components}</tbody></table></div>` : ''}
+      ${bundle.id === 'python' ? `<p>${escHtml(settingsT('forms.pythonSupplierNotices'))}</p>` : ''}
+      ${(bundle.notices || []).map(item => `<details class="about-bundle-notice"><summary>${escHtml(item.name)}</summary><pre class="about-license-text">${escHtml(item.content)}</pre></details>`).join('')}
+    </details>
+  </section>`;
+}
+
 function renderSettingsAbout() {
   const info = settingsState.appInfo || _normalizeAppInfo('', '', '', '', '');
   const active = settingsState.aboutTab === 'third-party' ? 'third-party' : 'project';
   settingsState.aboutTab = active;
   const projectLicenseText = String(settingsState.aboutLicenses?.project?.content || '').trim();
-  const thirdPartyNotice = String(settingsState.aboutLicenses?.['third-party']?.content || '').trim();
+  const thirdPartyNotice = settingsState.aboutLicenses?.['third-party'] || {};
+  const bundles = thirdPartyNotice.bundles || [];
   const licenseError = String(settingsState.aboutLicensesError || '').trim();
-  const hasLicenseContent = !!projectLicenseText || !!thirdPartyNotice;
+  const hasLicenseContent = !!projectLicenseText || bundles.length > 0;
   const loadingText = (settingsState.aboutLicensesLoading || (!hasLicenseContent && !licenseError))
     ? settingsT('forms.licenseLoading')
     : settingsT('forms.licenseUnavailable');
@@ -7290,27 +7317,10 @@ function renderSettingsAbout() {
       </div>
       <div class="about-tab-panel ${active === 'third-party' ? '' : 'hidden'}" data-about-panel="third-party">
         <p class="about-license-note">${escHtml(settingsT('forms.thirdPartyIntro'))}</p>
+        ${licenseError ? `<div class="status-message error">${escHtml(licenseError)}</div>` : ''}
         <div class="about-license-cards">
-          <div class="about-license-card">
-            <div class="about-license-card-head">
-              <strong>BorgBackup</strong>
-              <a href="https://github.com/borgbackup/borg/blob/master/LICENSE" target="_blank" rel="noopener noreferrer" class="about-link">${settingsT('forms.originalLicense')}</a>
-            </div>
-            <span class="about-license-card-meta">BSD-3-Clause</span>
-            <p class="about-license-card-note">${escHtml(settingsT('forms.borgBackupSupportedVersion', { version: info.borgVersion || '—' }))}</p>
-          </div>
-          <div class="about-license-card">
-            <div class="about-license-card-head">
-              <strong>Apprise runtime</strong>
-              <a href="https://github.com/caronc/apprise/blob/master/LICENSE" target="_blank" rel="noopener noreferrer" class="about-link">${settingsT('forms.originalLicense')}</a>
-            </div>
-            <span class="about-license-card-meta">BSD-2-Clause + dependencies</span>
-          </div>
+          ${bundles.length ? bundles.map(bundle => renderAboutBundle(bundle, thirdPartyNotice.python_runtime)).join('') : `<p>${escHtml(loadingText)}</p>`}
         </div>
-        <details class="about-license-notices">
-          <summary>${escHtml(settingsT('forms.thirdPartyNoticeFile'))}</summary>
-          <div class="about-markdown-viewer">${thirdPartyNotice ? renderAboutMarkdown(thirdPartyNotice) : escHtml(licenseError || loadingText)}</div>
-        </details>
       </div>
     </div>`);
 }

@@ -438,11 +438,8 @@ def test_settings_about_and_sidebar_show_current_project_contact_metadata() -> N
     assert ".about-info-section h4" in css
     assert ".about-license-card" in css
     assert ".about-markdown-viewer table" in css
-    assert "BorgBackup" in script
-    assert "settingsT('forms.borgBackupSupportedVersion'" in script
-    assert "<strong>Apprise runtime</strong>" in script
-    assert "BSD-2-Clause + dependencies" in script
-    assert "https://github.com/caronc/apprise/blob/master/LICENSE" in script
+    assert "renderAboutBundle(bundle, thirdPartyNotice.python_runtime)" in script
+    assert "data-license-bundle" in script
     assert "settingsState.appInfo" in script
     assert "v.contact_email, v.repository_url" in bindings
 

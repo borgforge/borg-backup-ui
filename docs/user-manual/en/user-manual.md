@@ -141,6 +141,10 @@ General Unraid steps are covered by the official [Community Apps](https://docs.u
 
 Borg Backup UI is installed through **Unraid Community Apps**. It supports **Unraid 6.12.5 through 7.x**; Unraid 8 is not supported. The upcoming version includes a private Python runtime. Its first stable version number will be recorded here after successful Unraid testing and release approval. Until that release, **Python 3 for Unraid** remains necessary for older stable versions. BorgBackup itself is bundled with Borg Backup UI; no separate Borg or pip installation is required.
 
+Under **Settings > About > Third-party**, the bundled Python version and active interpreter are shown separately. Expand each bundle to read its full original license notices. Backup and restore-test logs identify the actual Python version, source and interpreter path.
+
+During installation and service startup, the plugin reports whether the private Python runtime is extracted or reused and displays the selected interpreter. The executable private runtime resides in its own directory under `/usr/local/lib/borg-backup-ui`; Unraid's `/run` is unsuitable because it is mounted with `noexec`.
+
 A compatible external Python 3.10-3.13 is used when available; otherwise the private runtime starts without another download. Installing another Python provider does not switch a running service. Restart Borg Backup UI to reconsider the selection. The selected source, version and path are visible under **Settings > System Health & Migration**. Remove Python 3 for Unraid only after checking whether other plugins need it. Future 7.x versions still require compatibility testing.
 
 1. Open **Apps** in Unraid.

@@ -27,9 +27,10 @@ def launcher(tmp_path):
     commands = tmp_path / 'bin'
     commands.mkdir()
     for name in ('dirname', 'install', 'flock', 'timeout', 'cat', 'sed', 'sha256sum',
-                 'tar', 'xz', 'mktemp', 'rm', 'touch', 'mv', 'readlink'):
+                 'tar', 'xz', 'mktemp', 'rm', 'touch', 'mv', 'readlink', 'chmod'):
         (commands / name).symlink_to(shutil.which(name))
     env = {**os.environ, 'PATH': str(commands), 'BBUI_RUNTIME_STATE': str(tmp_path / 'ram'),
+           'BBUI_RUNTIME_ROOT': str(tmp_path / 'executable-ram/python'),
            'BBUI_SERVICE_PIDFILE': str(tmp_path / 'service.pid')}
     def interpreter(path, version='3.13.18'):
         path.write_text('#!/bin/bash\nif [ "$1" = -E ]; then\n'
@@ -61,7 +62,7 @@ def test_selection_and_private_ram_layout(launcher, external):
     status = json.loads(result.stdout)
     assert status['source'] == ('external' if external == 'usable' else 'bundled')
     if external != 'usable':
-        assert status['path'].startswith(env['BBUI_RUNTIME_STATE'] + '/python/')
+        assert status['path'].startswith(env['BBUI_RUNTIME_ROOT'] + '/')
         assert not (runtime / 'bin').exists()
         before = Path(status['path']).stat().st_mtime_ns
         assert run().returncode == 0
@@ -88,14 +89,14 @@ def test_removed_active_external_does_not_silently_switch(launcher):
     Path(env['BBUI_SERVICE_PIDFILE']).write_text(str(os.getpid()))
     (commands / 'python3').unlink()
     result = run()
-    assert result.returncode != 0 and 'Reinstall' in result.stderr
+    assert result.returncode != 0 and 'Restart' in result.stderr
 
 
 def test_corrupt_bundle_fails_before_extracting(launcher):
     run, _, env, runtime, _ = launcher
     (runtime / 'python-runtime.tar.xz').write_bytes(b'corrupt')
     assert run().returncode != 0
-    assert not (Path(env['BBUI_RUNTIME_STATE']) / 'python').exists()
+    assert not Path(env['BBUI_RUNTIME_ROOT']).exists()
 
 
 def test_native_inventory_matches_committed_provenance():
@@ -231,3 +232,84 @@ def test_github_package_size_boundary(size, allowed):
     else:
         with pytest.raises(RuntimeError, match='100 MiB'):
             release.verify_package_size(package)
+
+
+def test_private_execution_is_separate_from_noexec_state_directory(launcher):
+    """Reject any interpreter placed below state, modelling Unraid's noexec /run."""
+    run, commands, env, _, _ = launcher
+    timeout = commands / 'timeout'
+    timeout.unlink()
+    timeout.write_text('#!/bin/bash\ncase "$2" in "$BBUI_RUNTIME_STATE"/*) exit 126;; esac\nexec '
+                       + shutil.which('timeout') + ' "$@"\n')
+    timeout.chmod(0o755)
+    first = run()
+    assert first.returncode == 0, first.stderr
+    assert 'extracting private Python' in first.stderr
+    status = json.loads(first.stdout)
+    assert Path(status['path']).is_relative_to(env['BBUI_RUNTIME_ROOT'])
+    assert not Path(status['path']).is_relative_to(env['BBUI_RUNTIME_STATE'])
+    assert not (Path(env['BBUI_RUNTIME_STATE']) / 'python').exists()
+    second = run()
+    assert second.returncode == 0
+    assert 'reusing the extracted private Python' in second.stderr
+    assert 'extracting private Python' not in second.stderr
+
+
+def test_denied_direct_execution_reports_reason_without_unpacking(launcher):
+    """Simulate denied execution of the staging check without mounting host filesystems."""
+    run, commands, env, _, _ = launcher
+    chmod = commands / 'chmod'
+    chmod.unlink()
+    chmod.write_text('#!/bin/sh\nexit 0\n')
+    chmod.chmod(0o755)
+    result = run()
+    assert result.returncode == 1
+    status = json.loads(result.stdout)
+    assert status['ok'] is False
+    assert 'noexec' in status['reason']
+    assert not list(Path(env['BBUI_RUNTIME_ROOT']).glob('staging.*'))
+    assert 'extracting private Python' not in result.stderr
+
+
+def test_private_defaults_and_uninstall_are_plugin_owned():
+    source = (ROOT / 'runtime/python/launch.sh').read_text()
+    assert 'BBUI_RUNTIME_ROOT:-/usr/local/lib/borg-backup-ui/python' in source
+    uninstall = release.rewrite_remove_handler((ROOT / 'borg-backup-ui.plg').read_text())
+    assert 'rm -rf /run/borg-backup-ui /usr/local/lib/borg-backup-ui' in uninstall
+
+
+def test_control_page_can_restart_missing_selected_runtime_and_explains_account_check():
+    source = (ROOT / 'plugin/borg-backup-ui.page').read_text()
+    assert "if ($action === 'start' && !$python_ok)" in source
+    restart = next(line for line in source.splitlines() if 'onclick="bbui_action(\'restart\')"' in line)
+    assert 'disabled' not in restart
+    assert 'Administrator accounts cannot be checked while the Python runtime is unavailable.' in source
+    assert "isset($status['reason'])" in source
+
+
+@pytest.mark.skipif(not shutil.which('php'), reason='Control page rendering is checked with PHP in GitHub CI')
+@pytest.mark.parametrize('running', [False, True])
+def test_control_page_renders_runtime_failure_without_claiming_account_loss(tmp_path, running):
+    import shlex
+    app = tmp_path / 'plugin'
+    launcher = app / 'runtime/python/launch.sh'
+    launcher.parent.mkdir(parents=True)
+    reason = 'Private Python filesystem does not permit execution. Check noexec mount options and permissions.'
+    payload = json.dumps({'ok': False, 'path': '', 'version': '', 'source': '', 'reason': reason, 'min_version': '3.10'})
+    launcher.write_text('printf "%s\\n" ' + shlex.quote(payload) + '\nexit 1\n')
+    pidfile = tmp_path / 'service.pid'
+    if running:
+        pidfile.write_text(str(os.getpid()))
+    source = (ROOT / 'plugin/borg-backup-ui.page').read_text()
+    source = '<?PHP' + source.split('<?PHP', 1)[1]
+    source = source.replace('"/boot/config/plugins/borg-backup-ui"', json.dumps(str(app)))
+    source = source.replace('"/var/run/borg_backup_ui.pid"', json.dumps(str(pidfile)))
+    page = tmp_path / 'page.php'
+    page.write_text(source)
+    result = subprocess.run(['php', str(page)], capture_output=True, text=True, check=True)
+    assert reason in result.stdout
+    assert 'Administrator accounts cannot be checked while the Python runtime is unavailable.' in result.stdout
+    assert 'No administrator account found.' not in result.stdout
+    if running:
+        restart = next(line for line in result.stdout.splitlines() if 'onclick="bbui_action(\'restart\')"' in line)
+        assert 'disabled' not in restart
