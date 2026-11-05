@@ -212,7 +212,11 @@ def _collect_job_health(config: dict, jobs_dir: Path) -> Dict[str, Any]:
     UD mounts are inspected without mounting devices or running hooks. Missing
     mounts produce localized warning details; mounted missing paths and inspection
     failures remain errors. Repository location still describes the target.
+    Unreadable/corrupt database inventories remain per-job errors so diagnostic
+    support exports can still include the unavailable-inventory status.
     """
+    from inventory_store import InventoryError
+
     items = []
     if jobs_dir.is_dir():
         job_files = sorted(jobs_dir.glob("*.json"))
@@ -250,8 +254,8 @@ def _collect_job_health(config: dict, jobs_dir: Path) -> Dict[str, Any]:
         warnings: list[str] = []
         warning_details: list[dict] = []
 
-        def add_error(code: str, message: str, **params: Any) -> None:
-            errors.append(message)
+        def add_error(code: str, text: str, **params: Any) -> None:
+            errors.append(text)
             error_details.append({"code": code, "params": params})
 
         try:
@@ -292,6 +296,9 @@ def _collect_job_health(config: dict, jobs_dir: Path) -> Dict[str, Any]:
                 warning_details.append({"code": "source_mounts_not_mounted", "params": {"paths": paths}})
             if missing:
                 add_error("source_paths_not_found", f"{len(missing)} source path(s) do not exist", count=len(missing))
+        except InventoryError:
+            message = "Database profile inventory is unavailable or corrupt"
+            add_error("source_paths_invalid", message, message=message)
         except ValueError as exc:
             add_error("source_paths_invalid", str(exc), message=str(exc))
         except OSError:

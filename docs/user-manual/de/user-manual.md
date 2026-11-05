@@ -1815,6 +1815,8 @@ Nein. Prüfen Sie zusätzlich Repository-Zustand, Benachrichtigungen, Restore-Te
 
 Nein. Es ist **sanitized**, aber nicht vollständig anonym. Secrets werden maskiert, technische Pfade, Namen oder Infrastrukturbezüge können trotzdem Rückschlüsse erlauben. Prüfen Sie das Paket vor jeder Weitergabe.
 
+Support-Pakete enthalten ein bereinigtes Datenbank-Profilinventar (`config/database-profiles.sanitized.json`). Es zeigt die aktuelle Konfiguration zum Exportzeitpunkt, einschließlich deaktivierter Profile. Zugangsdaten und Zugangsdaten-Dateien werden nicht aufgenommen. Namen, Datenbanknamen und technische Pfade können enthalten sein. Fehlende oder beschädigte Profildaten werden ausdrücklich gekennzeichnet; sie bedeuten keinen fehlgeschlagenen Dump. Das Inventar belegt weder die damalige Konfiguration eines älteren Laufs noch einen erfolgreichen Datenbank-Restore.
+
 ### Was wird beim Deinstallieren des Plugins entfernt?
 
 Die Deinstallation stoppt den Dienst und entfernt den plugin-eigenen Programmumfang unter `/boot/config/plugins/borg-backup-ui` sowie verbliebene alte Start- und Laufzeiteinträge. Nutzerdaten außerhalb dieses Plugin-Verzeichnisses bleiben erhalten, insbesondere Jobs, Historien, konfigurierte Datenpfade und Borg-Repositories. Eine Deinstallation ersetzt trotzdem kein geprüftes Konfigurations- und Repository-Backup.
