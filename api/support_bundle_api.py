@@ -184,6 +184,7 @@ def create_support_bundle(config: dict, *, app_version: str = "") -> dict:
     """
     from config_api import get_conf_file, read_expanded_conf
     from system_health_api import get_system_health_data
+    from support_database_inventory import support_database_inventory
 
     created_at = datetime.now().isoformat(timespec="seconds")
     root = _root_from_config(config)
@@ -220,6 +221,12 @@ def create_support_bundle(config: dict, *, app_version: str = "") -> dict:
                 _record_added(arcname)
             else:
                 _record_skipped(source, "not_found_or_unreadable")
+        database_inventory = support_database_inventory(config)
+        database_arcname = "config/database-profiles.sanitized.json"
+        _add_json(zf, database_arcname, database_inventory)
+        _record_added(database_arcname)
+        if database_inventory["status"] != "available":
+            _record_skipped(Path("config/database-profiles.json"), database_inventory["status"])
         migration_log = root / "config" / "migrations.log.jsonl"
         if _add_jsonl_file(zf, "config/migrations.log.sanitized.jsonl", migration_log, max_bytes=262144):
             _record_added("config/migrations.log.sanitized.jsonl")

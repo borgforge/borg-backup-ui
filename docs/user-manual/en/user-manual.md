@@ -1784,6 +1784,8 @@ No. Also verify repository health, notifications, restore tests, and a real rest
 
 No. It is **sanitized**, not fully anonymous. Secrets are masked, but technical paths, names, and infrastructure references may still identify the environment. Review the bundle before sharing it.
 
+Support bundles include a sanitized database profile inventory (`config/database-profiles.sanitized.json`). It describes current configuration at export time, including disabled profiles. Credentials and credential files are excluded. Names, database names and technical paths may be included. Missing or corrupt profile data is explicitly identified; it does not mean a dump failed. The inventory establishes neither the configuration of a historical run nor a successful database restore.
+
 ### What Is Removed When the Plugin Is Uninstalled?
 
 Uninstallation stops the service and removes the plugin-owned program payload under `/boot/config/plugins/borg-backup-ui` together with remaining legacy startup and runtime entries. User data outside that plugin directory remains intact, including jobs, histories, configured data paths, and Borg repositories. Uninstallation still does not replace a verified configuration and repository backup.
