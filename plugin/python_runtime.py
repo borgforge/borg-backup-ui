@@ -73,6 +73,32 @@ def inventory(metadata: dict, downloads: dict, lock: dict) -> dict:
     return components
 
 
+def native_facts(interpreter: Path, lock: dict) -> dict:
+    """Execute the isolated supplier binary and verify native versions against pins.
+
+    Return SQLite options/source identity, session-symbol and shell presence,
+    plus OpenSSL identity. Mismatch or a failed probe aborts the build. No SQL
+    from files or user input is executed; evidence is not a CVE-free guarantee.
+    """
+    code = '''import ctypes,json,sqlite3,ssl,sys
+with sqlite3.connect(':memory:') as db:
+    facts = {'python': '.'.join(map(str, sys.version_info[:3])),
+             'sqlite': sqlite3.sqlite_version, 'openssl': ssl.OPENSSL_VERSION,
+             'sqlite_source_id': db.execute('select sqlite_source_id()').fetchone()[0],
+             'sqlite_compile_options': sorted(row[0] for row in db.execute('pragma compile_options')),
+             'sqlite_session_symbol': hasattr(ctypes.CDLL(None), 'sqlite3changeset_apply')}
+print(json.dumps(facts))
+'''
+    facts = json.loads(subprocess.check_output([str(interpreter.resolve()), '-I', '-S', '-c', code],
+                                              text=True, timeout=30))
+    if (facts['python'] != lock['version']
+            or facts['sqlite'] != lock['components']['sqlite']['version']
+            or facts['openssl'].split()[:2] != ['OpenSSL', lock['components']['openssl-3.5']['version']]):
+        raise ValueError('Executed native library versions differ from locked provenance')
+    facts['sqlite_cli'] = any(interpreter.parent.glob('sqlite*'))
+    return facts
+
+
 def build(destination: Path, cache: Path, root: Path = ROOT) -> dict:
     """Verify upstream provenance and create a deterministic portable bundle.
 
@@ -149,7 +175,8 @@ def build(destination: Path, cache: Path, root: Path = ROOT) -> dict:
     shutil.copy2(license_path, install / 'licenses/PYTHON-BUILD-STANDALONE.txt')
     shutil.copy2(metadata_path, install / 'PYTHON.json')
     shutil.copy2(downloads_path, install / 'supplier-downloads.json')
-    provenance = {**lock, 'components': components}
+    native = native_facts(install / 'bin' / ('python' + metadata['python_major_minor_version']), lock)
+    provenance = {**lock, 'components': components, 'native_facts': native}
     (install / 'provenance.json').write_text(json.dumps(provenance, indent=2, sort_keys=True) + '\n')
     bundle = destination / 'python-runtime.tar.xz'
     subprocess.run(['tar', '--create', '--xz', '--file', str(bundle.resolve()),
