@@ -18,6 +18,7 @@ from packaging.version import Version, InvalidVersion
 
 import apprise_monitor as monitor
 import release_workflow as release
+import python_fix_monitor as fix_monitor
 
 ROOT = monitor.ROOT
 PEPS = 'https://peps.python.org/api/python-releases.json'
@@ -375,12 +376,27 @@ def run(apply: bool = False) -> dict:
         found += security_findings(lock, request=cached_request)
         scoped.append((scope, found))
     found = merge_findings(scoped)
-    actions, deferred = monitor.plan_updates(found, monitor.existing_issues(), namespace='python', checklist=CHECKLIST)
+    issues = monitor.existing_issues()
+    actions, deferred = monitor.plan_updates(found, issues, namespace='python', checklist=CHECKLIST)
+
+    def fix_request(url):
+        """Rate-limit additional CVE lookups and reuse complete source responses."""
+        if url not in cache:
+            time.sleep(6.5)
+        return cached_request(url)
+
+    fixes = fix_monitor.discover(versions, supplier, pep, issues, fix_request, sys.modules[__name__])
+    notice = fix_monitor.notification(fixes, issues)
+    notified = 0
     if apply:
         for action in actions:
             monitor.write_issue(action, workflow='python-monitor.yml')
+        if notice:
+            notified = fix_monitor.publish(fixes)
     return {'mode': 'apply' if apply else 'preview',
             'scan_status': 'complete', 'release_authorized': False,
+            'fix_candidates': len(fixes), 'new_fix_notifications': notice['count'] if notice else 0,
+            'notified_fixes': notified,
             'security_candidates': sum(item['key'].startswith('security:') for item in found),
             'security_scope': 'CPython and inventoried native libraries; separate from pip-audit',
             'baselines': [{'scope': scope, 'build': item['version'] + '+' + item['build']} for scope, item in versions],

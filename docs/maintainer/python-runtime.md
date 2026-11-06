@@ -162,6 +162,54 @@ completed security issue while the shipped version remains affected. Review
 initial preview findings before the first apply; the monitor does not suppress
 pre-existing advisories or automatically close resolved issues.
 
+### Targeted fix notifications (#720)
+
+The same daily workflow compares newer supplier builds with open bot-managed
+runtime CVE issues. It stays within each monitored Python series, the ordinary
+GIL x86_64 GNU `pgo+lto` build and the locked glibc ceiling. Both the full and
+stripped release assets need published SHA256 identities. The monitor downloads
+and hashes the full archive, reads only its bounded `PYTHON.json` as data, and
+resolves linked library versions from the release tag's immutable source commit.
+No supplier binary or source code is installed or executed. The runner needs
+`zstd`; missing tools, incomplete metadata or failed scans fail the workflow.
+
+A notification requires positive NVD evidence: an analysed/modified CVE affects
+a monitored component version, the candidate contains a newer version beyond an
+explicit affected-range upper bound, and no affected component remains unresolved.
+An empty search result, missing CPE analysis, exact-version-only match, negation,
+keyword candidate or removed component is not proof of a fix. These cases remain
+manual triage. The result is a **version-based fix candidate**, not verification
+of the new executable, application reachability or a release approval. NVD delays
+or missing version bounds can delay notifications even when an upstream fix exists.
+
+When new fix candidates exist, the bot posts **one consolidated comment mentioning
+`@TheTwist76`** on the lowest-numbered eligible security issue, linking all affected
+issues and the supplier builds and recording component versions and provenance
+hashes. GitHub delivers the mention according to the maintainer's notification
+settings; the monitor does not change those personal settings or send email itself.
+Closed issues and `status::waiting`/not-planned deferrals receive no new fix alerts.
+The monitor never automatically closes issues or updates runtime pins.
+
+Bot-authored comments contain durable per-fix markers. All managed security issue
+histories, including closed issues, are checked before posting. The identity
+includes the CVE, Python series, affected baseline component versions and fixed
+range boundaries; it excludes timestamps, wording, scope labels and later builds
+carrying the same fix. Thus unchanged daily runs, retried posts after a lost API
+response and later rebuilds do not repeat the mention. New affected baselines or
+changed fixed boundaries can create a new actionable notification. Do not delete
+or edit these marker comments: they are the notification ledger. History lookup
+failures abort instead of risking duplicate alerts. Scheduled/manual runs share
+the existing workflow concurrency group, and posting rechecks current issue state,
+history, protected-main identity and bot identity before verifying the saved author
+and body. Preview mode reports counts without posting comments.
+
+This enhancement becomes active only after PR #719 is merged to `main`. Verify two
+protected runs, including unchanged second-run notification counts, in #720. Before
+merge, focused fixtures cover positive/negative fix correlation and interrupted
+notification retries; the current supplier metadata can be verified read-only.
+No new plugin test package or stable release is needed for this internal monitor
+extension; the existing Unraid candidate remains separate from monitor activation.
+
 After merge, dispatch the monitor twice on main. Verify successful source scans,
 actual bot identity, issue authors/contents where findings exist and unchanged
 second-run counts. Record run links in #548. A local preview is not activation.
