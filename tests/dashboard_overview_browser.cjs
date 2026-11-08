@@ -28,10 +28,11 @@ const { chromium } = require('playwright');
     window.resolveJobIcon = () => 'archive'; window.resolveJobIconColor = () => '';
     window.isStaleDate = () => false; window.calcNextRun = () => new Date();
     window.demoIdle = true;
+    window.demoRuns = [{job_key:'1', operation:'restore_test', activity_state:'running'}];
     const group = {id:'demo', job_key:'1', cpu_percent:12, memory_bytes:1.3*1024**3, memory_limit_bytes:2*1024**3};
     window.fetch = async () => ({ok:true, json:async () => ({available:true, stale:false,
       host:{cpu_percent:1.3, memory_available_bytes:36.5*1024**3, memory_total_bytes:62.7*1024**3},
-      runs_available:true, runs:demoIdle ? [] : [{job_key:'1', operation:'restore_test'}],
+      runs_available:true, runs:demoIdle ? [] : demoRuns,
       protected_tests:demoIdle ? [] : [group], configured_reserve_bytes:1024**3,
       history:Array.from({length:121}, (_,i) => ({timestamp:Date.now()/1000-600+i*5,
         host:{cpu_percent:1.3+.4*Math.sin(i*.5), memory_available_bytes:(36.5+Math.sin(i*.2)*.2)*1024**3},
@@ -297,6 +298,35 @@ const { chromium } = require('playwright');
   await page.locator('#dashboard-location-filter').selectOption('all');
   await page.evaluate(()=>{demoIdle=false;BBUI.resourceMonitor.stop();BBUI.resourceMonitor.start();});
   await page.waitForSelector('#resource-tests .resource-test');
+  // Four admitted tests mean one worker plus three queued supervisors (#722).
+  for (const lang of ['de', 'en']) for (const theme of ['light', 'dark']) {
+    await page.evaluate(({lang, theme}) => {
+      window.lang = lang; translate(); document.documentElement.dataset.theme = theme;
+      demoRuns = ['1', '0', '3', '2'].map((job_key, i) => ({job_key, operation:'restore_test', activity_state:i ? 'waiting' : 'running'}));
+      BBUI.resourceMonitor.stop(); BBUI.resourceMonitor.start();
+    }, {lang, theme});
+    await page.waitForFunction(() => document.querySelectorAll('.management-run-state.waiting').length === 3);
+    const expected = lang === 'de' ? '1 läuft · 3 warten' : '1 running · 3 waiting';
+    assert.equal(await page.locator('.management-activity-summary').innerText(), expected);
+    assert.equal(await page.locator('#resource-active').innerText(), expected);
+    assert.equal(await page.locator('.management-run-state.running').count(), 1);
+    assert.equal(await page.locator('#resource-tests .resource-test').count(), 1);
+    for (const width of [1920, 768, 390]) {
+      await page.setViewportSize({width, height:1080});
+      assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+      assert(await page.locator('.management-activity-summary').isVisible());
+      if (width === 1920) {
+        const list = await page.locator('.management-active-list').boundingBox();
+        const last = await page.locator('.management-active-list button').last().boundingBox();
+        assert(last.y + last.height <= list.y + list.height + 1, 'All four statuses fit without scrolling');
+      }
+      if (width === 1920 && process.env.BBUI_SCREENSHOT_DIR) {
+        await page.locator('.dashboard-summary-pair').screenshot({path:`${process.env.BBUI_SCREENSHOT_DIR}/restore-queue-${lang}-${theme}.png`});
+      }
+    }
+  }
+  await page.setViewportSize({width:1920, height:1080});
+  await page.evaluate(() => {window.lang='de';translate();document.documentElement.dataset.theme='light';});
   const full=await page.locator('#resource-activity').boundingBox();
   const summary=await page.locator('.dashboard-summary-pair').boundingBox();
   assert(Math.abs(full.width-summary.width)<2);

@@ -3955,6 +3955,16 @@
     "unsupportedProfiles": "Diese Profile aus einer früheren Testversion werden nicht mehr unterstützt. Profile, Secrets und Sicherungen bleiben erhalten. Entferne ihre Zuordnung aus betroffenen Jobs; neue Sicherungen sind damit nicht möglich."
   },
   "resources": {
+    "stateRunning": "Läuft",
+    "stateWaiting": "Wartet auf Testplatz",
+    "stateUnknown": "Status unbekannt",
+    "runningCountOne": "{count} läuft",
+    "runningCountMany": "{count} laufen",
+    "waitingCountOne": "{count} wartet",
+    "waitingCountMany": "{count} warten",
+    "unknownCountOne": "{count} Status unbekannt",
+    "unknownCountMany": "{count} Status unbekannt",
+
     "activeCount": "{count} aktive Läufe",
     "title": "Server-Auslastung",
     "live": "Live · alle {seconds} s",

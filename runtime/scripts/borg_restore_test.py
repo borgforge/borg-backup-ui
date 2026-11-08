@@ -631,6 +631,7 @@ class RestoreTest:
         locks = ResourceLockSet(resolve_resource_lock_dir(config), repo["job_key"],
                                 operation="restore_test", log_file=str(getattr(self, "log_path", "")),
                                 run_id=os.environ.get("BORG_UI_RUN_ID", ""))
+        locks.set_activity_state("running")
         resources = [f"repo:{repo['path']}"]
         if repo.get("location") == "smb" and repo.get("profile_key"):
             resources.append(f"smb-mount:{repo['profile_key']}")
@@ -647,7 +648,7 @@ class RestoreTest:
             if str(self.conf.get("RESTORE_TEST_MEMORY_LIMIT_MIB", "2048")).strip() == "0":
                 self.log("Memory protection explicitly disabled (RESTORE_TEST_MEMORY_LIMIT_MIB=0)")
                 return self._test_repo_locked(repo)
-            return self._test_repo_guarded(repo, resolve_resource_lock_dir(config))
+            return self._test_repo_guarded(repo, resolve_resource_lock_dir(config), locks.set_activity_state)
         except ResourceGuardError as exc:
             if not exc.cancelled:
                 raise
@@ -655,8 +656,12 @@ class RestoreTest:
         finally:
             locks.release()
 
-    def _test_repo_guarded(self, repo: dict, lock_dir: Path) -> int:
-        """Supervise one limited worker; keep locks, mount cleanup and failure reporting outside it."""
+    def _test_repo_guarded(self, repo: dict, lock_dir: Path, on_state=None) -> int:
+        """Supervise one limited worker, publishing queue transitions via on_state.
+
+        Locks, mount cleanup and failure reporting remain outside the worker.
+        The optional callback accepts running/waiting and must not raise.
+        """
         from restore_test_resources import ResourceGuardError, run_guarded
         started = time.time()
         mounted = False
@@ -675,6 +680,8 @@ class RestoreTest:
             env = dict(os.environ, BORG_UI_RESTORE_LOG=str(self.log_path), BORG_UI_RESTORE_RESULT=str(pending),
                        BORG_UI_DATA_ROOT=str(_repository_data_root()))
             options = {"cancel_requested": self.cancel_requested} if getattr(self, "control", None) else {}
+            if on_state is not None:
+                options["on_state"] = on_state
             rc = run_guarded(command, env, lock_dir, limit, reserve, self.log, **options)
             if not pending.exists():
                 raise ResourceGuardError("RT_WORKER_INTERRUPTED", "Restore-test worker ended without a new report; see the run log")
@@ -701,6 +708,8 @@ class RestoreTest:
                            failure_code=code, reason=message, log_file=str(self.log_path))
             return 1
         finally:
+            if on_state is not None:
+                on_state("running")
             pending.unlink(missing_ok=True)
             self._cleanup_smb_mount(repo, mounted)
 

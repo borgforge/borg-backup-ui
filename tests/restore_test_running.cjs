@@ -14,7 +14,7 @@ function fixture(language = 'en') {
   let confirmed = true;
   let cancelError = false;
   const messages = [];
-  const withRuns = value => ({...value, active_jobs: value.active_jobs || (value.active_job_keys || []).map(job_key => ({job_key, run_id: 'run-' + job_key, run_key: 'restore_test_' + job_key, cancel_allowed: true, cancel_requested: false}))});
+  const withRuns = value => ({...value, active_jobs: value.active_jobs || (value.active_job_keys || []).map(job_key => ({job_key, run_id: 'run-' + job_key, run_key: 'restore_test_' + job_key, cancel_allowed: true, cancel_requested: false, activity_state: 'running'}))});
   const plan = { jobs: ['alpha', 'beta', 'disabled'].map(job_key => ({
     job_key, name: job_key, display_name: job_key, location: job_key === 'beta' ? 'usb' : 'local',
     enabled: job_key !== 'disabled', scheduler_state: 'active', policy: { mode: 'scheduled', level: 2 },
@@ -240,4 +240,21 @@ test('cancelled report links only to server-confirmed retained evidence, never a
   assert.doesNotMatch(f.context.renderRTReportRow({...cancelled,test_date:'2026-10-01 12:00:00'},0),/data-rt-action="evidence"/);
   f.state.data=[cancelled];
   assert.doesNotMatch(f.context.renderRTReportRow(cancelled,0),/data-rt-action="evidence"/);
+});
+
+for (const language of ['de', 'en']) test(`${language}: waiting test keeps cancellation and changes to running`, async () => {
+  const f = fixture(language);
+  const run = {job_key: 'alpha', run_id: 'run-alpha', run_key: 'restore_test_alpha', cancel_allowed: true, activity_state: 'waiting'};
+  f.setSnapshot({active_job_keys: ['alpha'], active_jobs: [run]});
+  await f.context.refreshRestoreTests();
+  assert.match(f.row('alpha'), language === 'de' ? /Wartet auf Testplatz/ : /Waiting for test slot/);
+  assert.match(f.row('alpha'), /data-rt-plan-action="cancel"/);
+  assert.match(f.row('alpha'), /rt-plan-running-label waiting/);
+  f.setSnapshot({active_job_keys: ['alpha'], active_jobs: [{...run, activity_state: 'running'}]});
+  await f.context._pollRTRunning();
+  assert.match(f.row('alpha'), /rt-plan-running-label running/);
+  f.setSnapshot({active_job_keys: ['alpha'], active_jobs: [{...run, activity_state: undefined}]});
+  await f.context._pollRTRunning();
+  assert.match(f.row('alpha'), language === 'de' ? /Status unbekannt/ : /Status unknown/);
+  assert.doesNotMatch(f.row('alpha'), /rt-plan-running-label waiting/);
 });

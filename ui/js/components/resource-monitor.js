@@ -141,7 +141,7 @@
       <div class="resource-value"><span>${escHtml(t('ram'))}</span><strong>${escHtml(gib(host.memory_available_bytes))}<small> / ${escHtml(gib(host.memory_total_bytes))}</small></strong>
       ${ramRatio === null ? '' : `<progress class="resource-ram-capacity" max="100" value="${ramRatio}" aria-label="${escHtml(t('ramTotal', {total: gib(host.memory_total_bytes)}))}"></progress>`}</div>`;
     if (typeof renderDashboardActiveRuns === 'function') renderDashboardActiveRuns(runs);
-    el('resource-active').textContent = runs === null ? `${t('active')}: ${t('unavailable')}` : t('activeCount', {count: runs.length});
+    el('resource-active').textContent = runs === null ? `${t('active')}: ${t('unavailable')}` : runActivitySummary(runs);
     el('resource-activity').hidden = !tests.length;
     el('resource-tests').hidden = !tests.length;
     el('resource-tests').innerHTML = tests.map(test => {

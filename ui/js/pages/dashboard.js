@@ -916,7 +916,8 @@ function renderManagementLocations(rows) {
   }).join('')}</tbody></table>`);
 }
 
-/** Receive live telemetry, retaining unknown/unavailable rather than claiming zero runs. */
+/** Render live runs with explicit queue states and a location-filtered summary.
+ * Unknown metadata and unavailable telemetry never imply waiting or zero runs. */
 function renderDashboardActiveRuns(runs) {
   dashboardLiveRuns = runs;
   const el = document.getElementById('dashboard-active-runs');
@@ -924,10 +925,12 @@ function renderDashboardActiveRuns(runs) {
   const backups = window.BBUI.core.state.data?.backups || [];
   const visible = runs?.filter(run => dashboardSelectedLocation === 'all' || backups.some(b => b.key === run.job_key && dashboardLocationKey(b) === dashboardSelectedLocation));
   el.innerHTML = `<div class="dashboard-summary-primary"><strong>${visible?.length ?? '—'}</strong><span>${escHtml(dashboardT(runs === null ? 'resources.unavailable' : 'management.activeRuns'))}</span></div>
+    ${visible?.length ? `<p class="management-activity-summary">${escHtml(runActivitySummary(visible))}</p>` : ''}
     <div class="management-active-list">${visible?.length ? visible.map(run => {
       const job = backups.find(b => b.key === run.job_key);
       const test = run.operation === 'restore_test';
-      return `<button class="dashboard-details-toggle" ${test ? 'data-dashboard-page="restore-tests"' : run.operation === 'backup' ? `data-dashboard-jobs="${escHtml(run.job_key || '')}"` : 'data-dashboard-page="restore"'}>${escHtml(job?.name || job?.display_name || run.job_key || '—')} · ${escHtml(dashboardT(test ? 'management.restoreTest' : run.operation === 'backup' ? 'management.backup' : 'management.restore'))}</button>`;
+      const activity = runActivityState(run);
+      return `<button class="dashboard-details-toggle" ${test ? 'data-dashboard-page="restore-tests"' : run.operation === 'backup' ? `data-dashboard-jobs="${escHtml(run.job_key || '')}"` : 'data-dashboard-page="restore"'}><span class="management-run-label">${escHtml(job?.name || job?.display_name || run.job_key || '—')} · ${escHtml(dashboardT(test ? 'management.restoreTest' : run.operation === 'backup' ? 'management.backup' : 'management.restore'))}</span>${test ? `<span class="management-run-state ${activity}">${escHtml(dashboardT(`resources.state${capitalize(activity)}`))}</span>` : ''}</button>`;
     }).join('') : `<span>${escHtml(dashboardT(runs === null ? 'management.liveUnknown' : 'management.noActive'))}</span>`}</div>`;
 }
 

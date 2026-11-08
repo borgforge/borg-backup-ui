@@ -417,7 +417,7 @@ def test_supervisor_retains_oom_failure_and_releases_repository_lock(tmp_path, m
     from test_restore_test_scheduling import _tester
     tester, repo = _tester(tmp_path, monkeypatch)
     tester.conf["RESTORE_TEST_MEMORY_LIMIT_MIB"] = "2048"
-    def oom(*_args):
+    def oom(*_args, **_kwargs):
         raise resources.ResourceGuardError("RT_MEMORY_LIMIT", "Budget exceeded")
     monkeypatch.setattr(resources, "run_guarded", oom)
     try:
@@ -438,7 +438,7 @@ def test_worker_success_is_published_only_after_supervisor_accepts_it(tmp_path, 
     tester, repo = _tester(tmp_path, monkeypatch)
     tester.conf["RESTORE_TEST_MEMORY_LIMIT_MIB"] = "2048"
     latest = tester.status_dir / f"{repo['job_key']}.test"
-    def worker(_command, env, *_args):
+    def worker(_command, env, *_args, **_kwargs):
         # Stage exactly the result format emitted by the worker.
         monkeypatch.setenv("BORG_UI_RESTORE_RESULT", env["BORG_UI_RESTORE_RESULT"])
         tester.args.resource_worker = True
@@ -645,3 +645,21 @@ while p.exists():
         for reaper in reapers:
             reaper.terminate()
             reaper.wait(timeout=5)
+
+
+def test_queue_state_is_explicit_and_changes_before_worker_start(tmp_path, guard_fakes):
+    """Only actual slot contention reports waiting; release changes state before work."""
+    import fcntl
+
+    states = []
+    with (tmp_path / "restore-test-memory.lock").open("a") as occupied:
+        fcntl.flock(occupied, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        def state_changed(state):
+            assert not guard_fakes["started"]
+            states.append(state)
+            if state == "waiting":
+                fcntl.flock(occupied, fcntl.LOCK_UN)
+        assert resources.run_guarded(["worker"], {}, tmp_path, 2048, 1024,
+                                     lambda _: None, on_state=state_changed) == 0
+    assert states == ["waiting", "running"]
+    assert guard_fakes["started"]

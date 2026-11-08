@@ -172,6 +172,8 @@ class ResourceLockSet:
         self.run_id = str(run_id or "").strip()
         self.operation = str(operation or "backup").strip().lower() or "backup"
         self.file_activity = file_activity
+        self._activity_state = ""
+        self._metadata_lock = threading.Lock()
         self._owned: list[Path] = []
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -193,6 +195,8 @@ class ResourceLockSet:
             "updated_at": now,
             "ttl_seconds": self.ttl_seconds,
         }
+        if self._activity_state:
+            payload["activity_state"] = self._activity_state
         if self.log_file:
             payload["log_file"] = self.log_file
         if self.run_id:
@@ -283,21 +287,44 @@ class ResourceLockSet:
         self._start_heartbeat()
         return True, ""
 
+    def set_activity_state(self, state: str) -> None:
+        """Publish running/waiting state on owned locks, or seed future locks.
+
+        Invalid states raise ValueError. Updates are atomic per file and serialized
+        with the heartbeat; filesystem errors are best effort, as for heartbeats.
+        This metadata does not acquire, release or change any resource lock.
+        """
+        if state not in {"running", "waiting"}:
+            raise ValueError("Unsupported activity state")
+        with self._metadata_lock:
+            self._activity_state = state
+            self._refresh_owned_metadata()
+
+    def _refresh_owned_metadata(self) -> None:
+        """Refresh owned lock timestamps/state while holding _metadata_lock.
+
+        Atomically replace each matching PID's metadata; ignore filesystem errors.
+        """
+        now = datetime.now(timezone.utc).isoformat()
+        for path in list(self._owned):
+            try:
+                data = self._read_lock(path)
+                if int(data.get("pid") or 0) != os.getpid():
+                    continue
+                data["updated_at"] = now
+                if self._activity_state:
+                    data["activity_state"] = self._activity_state
+                temporary = path.with_suffix(f".heartbeat-{os.getpid()}")
+                temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+                temporary.replace(path)
+            except OSError:
+                continue
+
     def _start_heartbeat(self) -> None:
         def _loop() -> None:
             while not self._stop.wait(self.heartbeat_seconds):
-                now = datetime.now(timezone.utc).isoformat()
-                for path in list(self._owned):
-                    try:
-                        data = self._read_lock(path)
-                        if int(data.get("pid") or 0) != os.getpid():
-                            continue
-                        data["updated_at"] = now
-                        temporary = path.with_suffix(f".heartbeat-{os.getpid()}")
-                        temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-                        temporary.replace(path)
-                    except OSError:
-                        continue
+                with self._metadata_lock:
+                    self._refresh_owned_metadata()
 
         self._thread = threading.Thread(target=_loop, daemon=True, name=f"lock-heartbeat-{self.job_key}")
         self._thread.start()

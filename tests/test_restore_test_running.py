@@ -23,7 +23,7 @@ def test_running_job_ids_combine_managed_runs_and_current_batch_locks(monkeypatc
         'backup': {'running': True},
     }
     locks = [
-        {'operation': 'restore_test', 'job_key': 'first'},
+        {'operation': 'restore_test', 'job_key': 'first', 'activity_state': 'waiting'},
         {'operation': 'restore_test', 'job_key': 'batch-current'},
         {'operation': 'restore_test', 'job_key': 'batch-current'},
         {'operation': 'backup', 'job_key': 'backup'},
@@ -34,6 +34,8 @@ def test_running_job_ids_combine_managed_runs_and_current_batch_locks(monkeypatc
     handler.config = {}
     snapshot = handler._get_rt_running()
     assert snapshot['active_job_keys'] == ['batch-current', 'first', 'second']
+    assert next(run for run in snapshot['active_jobs'] if run['job_key'] == 'first')['activity_state'] == 'waiting'
+    assert next(run for run in snapshot['active_jobs'] if run['job_key'] == 'second')['activity_state'] == 'unknown'
     assert snapshot['running'] is True
     assert snapshot['run_key'] == 'restore_test_second'
     assert len(snapshot['runs']) == 4

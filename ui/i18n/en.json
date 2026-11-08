@@ -3955,6 +3955,16 @@
     "unsupportedProfiles": "These profiles from an earlier test version are no longer supported. Profiles, Secrets and backups are preserved. Remove their assignments from affected jobs; they cannot create new backups."
   },
   "resources": {
+    "stateRunning": "Running",
+    "stateWaiting": "Waiting for test slot",
+    "stateUnknown": "Status unknown",
+    "runningCountOne": "{count} running",
+    "runningCountMany": "{count} running",
+    "waitingCountOne": "{count} waiting",
+    "waitingCountMany": "{count} waiting",
+    "unknownCountOne": "{count} status unknown",
+    "unknownCountMany": "{count} status unknown",
+
     "activeCount": "{count} active runs",
     "title": "Server resources",
     "live": "Live · every {seconds} s",

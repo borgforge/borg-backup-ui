@@ -111,7 +111,11 @@ class ResourceSampler:
             self.reserve = None
 
     def sample(self) -> dict:
-        """Collect a snapshot, updating bounded history; called by one thread."""
+        """Collect a snapshot and explicit runner activity, updating bounded history.
+
+        Called by one thread. Queue state is independent of cgroup measurements;
+        missing runner metadata remains unknown.
+        """
         from jobs_api import active_resource_locks
         from restore_test_resources import cgroup_root
         now = time.monotonic()
@@ -132,7 +136,8 @@ class ResourceSampler:
                 identity = (row["pid"], row["job_key"], row["operation"], row["run_id"])
                 if identity not in seen:
                     seen.add(identity)
-                    runs.append({key: row[key] for key in ("pid", "job_key", "operation", "run_id")})
+                    runs.append({**{key: row[key] for key in ("pid", "job_key", "operation", "run_id")},
+                                 "activity_state": row.get("activity_state", "unknown")})
         except (OSError, ValueError):
             runs_available = False
         groups = []
