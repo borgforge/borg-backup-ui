@@ -157,3 +157,20 @@ def test_authenticated_endpoint_and_shipped_dashboard(monkeypatch, tmp_path):
 
 def test_resource_monitor_browser_behaviour():
     subprocess.run(['node', '--test', 'tests/resource_monitor.cjs'], cwd=Path(__file__).resolve().parents[1], check=True)
+
+
+def test_queue_states_do_not_depend_on_cgroup_measurements(sampler, monkeypatch):
+    service, _, _, _, runs = sampler
+    runs[0]["activity_state"] = "running"
+    for index in range(3):
+        runs.append({"pid": 50 + index, "operation": "restore_test", "job_key": f"waiting-{index}",
+                     "run_id": str(index), "activity_state": "waiting"})
+    snapshot = service.sample()
+    assert [run["activity_state"] for run in snapshot["runs"]] == ["running", "waiting", "waiting", "waiting"]
+    assert len(snapshot["protected_tests"]) == 1
+    monkeypatch.setattr(metrics, "protected_groups", lambda *_: [])
+    runs[1]["activity_state"] = "running"
+    del runs[2]["activity_state"]
+    snapshot = service.sample()
+    assert [run["activity_state"] for run in snapshot["runs"]] == ["running", "running", "unknown", "waiting"]
+    assert not snapshot["protected_tests"]

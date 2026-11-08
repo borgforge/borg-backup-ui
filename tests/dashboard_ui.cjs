@@ -12,7 +12,7 @@ function dashboard(language = 'de') {
     return typeof label === 'string' ? label.replace(/\{(\w+)\}/g, (all, key) => params[key] ?? all) : key;
   };
   const elements = new Map();
-  for (const id of ['summary-bar', 'restore-summary-bar', 'dashboard-attention', 'backup-grid', 'dashboard-location-list']) {
+  for (const id of ['summary-bar', 'restore-summary-bar', 'dashboard-attention', 'backup-grid', 'dashboard-location-list', 'dashboard-active-runs']) {
     elements.set(id, {innerHTML: '', querySelector: () => null, querySelectorAll: () => []});
   }
   const context = vm.createContext({
@@ -26,6 +26,8 @@ function dashboard(language = 'de') {
     isStaleDate: () => false,
     calcNextRun: () => new Date('2026-10-25T10:00:00Z'),
   });
+  vm.runInContext(fs.readFileSync('ui/js/utils/format.js', 'utf8'), context);
+  context.locationIcon = location => `<svg data-location-icon="${location}"></svg>`;
   vm.runInContext(fs.readFileSync('ui/js/pages/dashboard.js', 'utf8'), context);
   return {context, elements, t};
 }
@@ -183,4 +185,33 @@ test('management history discards obsolete responses and clears statistics on fa
   await c.refreshDashboardOverview();
   assert.equal(vm.runInContext('dashboardOverview', c),null);
   assert.match(elements.get('dashboard-trends').innerHTML,/could not be loaded/);
+});
+
+for (const language of ['de', 'en']) test(`${language}: queue counts, per-test states and location filtering`, () => {
+  const {context: c, elements} = dashboard(language);
+  const runs = ['running', 'waiting', 'waiting', 'waiting'].map((activity_state, i) => ({
+    job_key: `job${i}`, operation: 'restore_test', activity_state,
+  }));
+  c.window.BBUI.core.state.data = {backups: runs.map((run, i) => ({key: run.job_key, name: i === 0 ? '<unsafe>' : 'Appdata', location: i === 0 ? 'local' : 'usb'}))};
+  c.renderDashboardActiveRuns(runs);
+  let html = elements.get('dashboard-active-runs').innerHTML;
+  assert.ok(html.includes(language === 'de' ? '1 läuft · 3 warten' : '1 running · 3 waiting'));
+  assert.equal((html.match(/management-run-state waiting/g) || []).length, 3);
+  assert.equal((html.match(/management-run-state running/g) || []).length, 1);
+  assert.match(html, /&lt;unsafe&gt;/);
+  assert.doesNotMatch(html, /<unsafe>/);
+  vm.runInContext("dashboardSelectedLocation = 'usb'", c);
+  c.renderDashboardActiveRuns(runs);
+  html = elements.get('dashboard-active-runs').innerHTML;
+  assert.match(html, /<strong>3<\/strong>/);
+  assert.doesNotMatch(html, /management-run-state running/);
+  vm.runInContext("dashboardSelectedLocation = 'all'", c);
+  c.renderDashboardActiveRuns([{operation: 'restore_test', job_key: 'old'}, {operation: 'backup'}, {operation: 'restore'}]);
+  html = elements.get('dashboard-active-runs').innerHTML;
+  assert.ok(html.includes(language === 'de' ? '2 laufen · 1 Status unbekannt' : '2 running · 1 status unknown'));
+  assert.match(html, /management-run-state unknown/);
+  c.renderDashboardActiveRuns(null);
+  assert.doesNotMatch(elements.get('dashboard-active-runs').innerHTML, /management-activity-summary|management-run-state/);
+  c.renderDashboardActiveRuns([]);
+  assert.match(elements.get('dashboard-active-runs').innerHTML, /<strong>0<\/strong>/);
 });

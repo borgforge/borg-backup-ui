@@ -166,7 +166,10 @@ def _pid_alive(pid: int) -> bool:
 
 
 def active_resource_locks(config: dict) -> List[dict]:
-    """Read live runner locks without mutating or recovering them."""
+    """Read live runner locks and optional activity state without mutating them.
+
+    Missing/unsupported activity metadata is unknown, including older runners.
+    """
     lock_dir = resolve_resource_lock_dir(config)
     if not lock_dir.is_dir():
         return []
@@ -196,6 +199,7 @@ def active_resource_locks(config: dict) -> List[dict]:
             "log_file": str(raw.get("log_file") or "").strip(),
             "run_id": str(raw.get("run_id") or "").strip(),
             "file_activity": raw.get("file_activity") is True,
+            "activity_state": raw.get("activity_state") if raw.get("activity_state") in ("running", "waiting") else "unknown",
         })
     return rows
 

@@ -39,6 +39,7 @@ function harness(lang = 'de') {
     setTimeout: (fn, delay) => {timers.set(++timerId, {fn, delay}); return timerId;},
     clearTimeout: id => timers.delete(id),
     fetch: (url, options) => {requests.push({url, options}); return next();}});
+  vm.runInContext(fs.readFileSync('ui/js/utils/format.js', 'utf8'), context);
   vm.runInContext(fs.readFileSync('ui/js/components/resource-monitor.js', 'utf8'), context);
   return {elements, timers, window, document, listeners, requests, get graphs() {return graphs;}, monitor: window.BBUI.resourceMonitor,
     setResponse: callback => {next = callback;}, tick: delay => {const [id, task] = [...timers].find(([, t]) => t.delay === delay); timers.delete(id); task.fn();}};
@@ -141,4 +142,22 @@ test('visibility/navigation abort in-flight requests and discard obsolete respon
   h.window.BBUI.core.state.currentPage = 'jobs'; h.monitor.stop();
   h.monitor.start(); await flush(); assert.equal(h.requests.length, 2);
   assert.equal(h.timers.size, 0);
+});
+
+for (const lang of ['de', 'en']) test(`${lang}: queue summary survives missing cgroup measurements and transitions`, async () => {
+  const h = harness(lang);
+  const data = sample();
+  data.runs = ['running', 'waiting', 'waiting', 'waiting'].map((activity_state, i) => ({job_key: `test-${i}`, operation: 'restore_test', activity_state}));
+  data.protected_tests = [];
+  h.setResponse(async () => ({ok: true, json: async () => data}));
+  h.monitor.start(); await flush();
+  assert.equal(h.elements.get('resource-active').textContent, lang === 'de' ? '1 läuft · 3 warten' : '1 running · 3 waiting');
+  assert.equal(h.elements.get('resource-tests').hidden, true);
+  data.runs.shift(); data.runs[0].activity_state = 'running';
+  h.tick(2000); await flush();
+  assert.equal(h.elements.get('resource-active').textContent, lang === 'de' ? '1 läuft · 2 warten' : '1 running · 2 waiting');
+  delete data.runs[0].activity_state;
+  h.tick(2000); await flush();
+  assert.equal(h.elements.get('resource-active').textContent, lang === 'de' ? '2 warten · 1 Status unbekannt' : '2 waiting · 1 status unknown');
+  h.monitor.stop();
 });

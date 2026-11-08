@@ -174,7 +174,7 @@ def check_cancelled(cancel_requested=None) -> None:
 
 
 def run_guarded(command: list[str], env: dict, lock_dir: Path, limit_mib: int,
-                reserve_mib: int, log, *, cancel_requested=None) -> int:
+                reserve_mib: int, log, *, cancel_requested=None, on_state=None) -> int:
     """Serialize protected tests and supervise a separately executed worker.
 
     Limit applies to worker and children together; the small supervisor remains
@@ -183,6 +183,8 @@ def run_guarded(command: list[str], env: dict, lock_dir: Path, limit_mib: int,
     Unsupported enforcement, insufficient memory and OOM raise ResourceGuardError.
     The optional cancellation predicate is checked while queued and running;
     cancellation kills/reaps the worker group before releasing the queue lock.
+    Optional on_state receives "waiting" on contention and "running" after
+    acquiring the slot. It must not raise; it only publishes display metadata.
     """
     limit, reserve = limit_mib * 1024**2, reserve_mib * 1024**2
     if limit_mib < 256 or reserve_mib < 256:
@@ -204,10 +206,14 @@ def run_guarded(command: list[str], env: dict, lock_dir: Path, limit_mib: int,
                     break
                 except BlockingIOError:
                     if not waiting:
+                        if on_state is not None:
+                            on_state("waiting")
                         log("Waiting for the other memory-limited restore test to finish")
                         waiting = True
                     time.sleep(0.1)
             try:
+                if on_state is not None:
+                    on_state("running")
                 if available_memory() < limit + reserve:
                     raise ResourceGuardError("RT_HOST_MEMORY_LOW",
                                              f"Insufficient available RAM for {limit_mib} MiB test budget plus {reserve_mib} MiB host reserve")

@@ -839,7 +839,7 @@
 .management-chart-line { fill:none; stroke:var(--ui-color-accent); stroke-width:2; vector-effect:non-scaling-stroke; }
 .management-no-chart { height:150px; display:grid; place-items:center; color:var(--ui-color-text-muted); font-size:var(--ui-font-size-xs); }
 .management-location-name { display:flex; align-items:center; gap:12px; white-space:nowrap; }
-.management-active-list { display:flex; flex-direction:column; gap:8px; margin-top:12px; max-height:120px; overflow:auto; font-size:var(--ui-font-size-xs); color:var(--ui-color-text-muted); }
+.management-active-list { display:flex; flex-direction:column; gap:8px; margin-top:12px; max-height:180px; overflow:auto; font-size:var(--ui-font-size-xs); color:var(--ui-color-text-muted); }
 .management-active-list button { text-align:left; overflow-wrap:anywhere; }
 
 .job-saved-message { grid-column:1/-1; min-width:0; }
@@ -999,3 +999,8 @@
 
 .jobs-redesign-row .job-meta .feature-badge { background: var(--ui-color-surface-subtle); color: var(--ui-color-text-muted); border: 0; font-weight: 400; }
 .jobs-redesign-row .job-meta .feature-badge svg { flex: 0 0 12px; }
+
+.management-activity-summary { margin: 8px 0 0; font-size: var(--ui-font-size-sm); }
+.management-run-state { display: inline-block; margin-left: 4px; padding: 2px 8px; border-radius: 999px; color: var(--ui-state-running-fg); background: var(--ui-state-running-bg); }
+.management-run-state.waiting { color: var(--ui-state-warning-fg); background: var(--ui-state-warning-bg); }
+.management-run-state.unknown { color: var(--ui-color-text-muted); background: var(--ui-color-surface); }

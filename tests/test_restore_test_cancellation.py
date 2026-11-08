@@ -101,13 +101,15 @@ def test_cancellation_kills_real_borg_descendants_without_waiting_for_timeout(tm
 
 
 def test_cancel_while_queued_does_not_launch_worker_or_release_other_lock(tmp_path, guard_fakes):
+    states = []
     started = time.monotonic()
     with (tmp_path / 'restore-test-memory.lock').open('a') as occupied:
         fcntl.flock(occupied, fcntl.LOCK_EX)
         with pytest.raises(resources.ResourceGuardError) as error:
             resources.run_guarded(['worker'], {}, tmp_path, 2048, 1024, lambda _: None,
-                                  cancel_requested=lambda: time.monotonic() - started > .15)
+                                  cancel_requested=lambda: time.monotonic() - started > .15, on_state=states.append)
         assert error.value.cancelled
+        assert states == ['waiting']
         assert not guard_fakes['started']
         with (tmp_path / 'restore-test-memory.lock').open('a') as other:
             with pytest.raises(BlockingIOError):

@@ -296,3 +296,6 @@
 
 .rt-plan-running-label { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; color: var(--ui-state-running-fg); background: var(--ui-state-running-bg); font-weight: 400; }
 .rt-plan-running-label svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2; }
+
+.rt-plan-running-label.waiting { color: var(--ui-state-warning-fg); background: var(--ui-state-warning-bg); }
+.rt-plan-running-label.unknown { color: var(--ui-color-text-muted); background: var(--ui-color-surface); }

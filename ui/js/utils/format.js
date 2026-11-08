@@ -84,6 +84,27 @@ function renderDescriptionMarkdown(text) {
   return out.join('');
 }
 
+/** Return an explicit restore-test activity state; missing metadata is unknown.
+ * Other tracked operations retain their existing running semantics. */
+function runActivityState(run) {
+  if (run.operation !== 'restore_test') return 'running';
+  return ['running', 'waiting'].includes(run.activity_state) ? run.activity_state : 'unknown';
+}
+
+/** Format known running/waiting counts and explicitly preserve unknown states.
+ * Empty input reports no active runs. Counts include all supplied operations. */
+function runActivitySummary(runs) {
+  const t = (key, params) => window.BBUI.components.i18n.t(`resources.${key}`, params);
+  const counts = {running: 0, waiting: 0, unknown: 0};
+  runs.forEach(run => counts[runActivityState(run)]++);
+  const parts = [];
+  for (const state of ['running', 'waiting', 'unknown']) {
+    const count = counts[state];
+    if (count) parts.push(t(`${state}Count${count === 1 ? 'One' : 'Many'}`, {count}));
+  }
+  return parts.join(' · ') || t('activeCount', {count: 0});
+}
+
 window.BBUI.utils.format.capitalize = capitalize;
 window.BBUI.utils.format.truncate = truncate;
 window.BBUI.utils.format.escHtml = escHtml;
@@ -97,3 +118,8 @@ window.escHtml = escHtml;
 window.locLabel = locLabel;
 window.locationIcon = locationIcon;
 window.renderDescriptionMarkdown = renderDescriptionMarkdown;
+
+window.BBUI.utils.format.runActivityState = runActivityState;
+window.BBUI.utils.format.runActivitySummary = runActivitySummary;
+window.runActivityState = runActivityState;
+window.runActivitySummary = runActivitySummary;

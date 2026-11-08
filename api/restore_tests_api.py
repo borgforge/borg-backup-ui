@@ -16,6 +16,7 @@ def restore_test_runtime(config: dict) -> dict:
     Locks identify the current job of a batch and survive UI restarts. Managed
     single-job runs cover startup. Cancellation requires a runner-owned control
     record; older runners remain visible but are not advertised as cancellable.
+    Activity state comes from runner locks; missing state remains unknown.
     """
     from jobs_api import JobManager, active_resource_locks, _control_state_for_run
     from job_control import read_control_state
@@ -38,7 +39,8 @@ def restore_test_runtime(config: dict) -> dict:
             run_key = ""
         active.append({"job_key": lock["job_key"], "run_key": run_key, "run_id": run_id,
                        "cancel_allowed": bool(run_key and control.get("cancel_allowed") and not control.get("finished")),
-                       "cancel_requested": bool(control.get("cancel_requested"))})
+                       "cancel_requested": bool(control.get("cancel_requested")),
+                       "activity_state": lock.get("activity_state", "unknown")})
     for run in runs:
         if not run.get("running") or not run["run_key"].startswith("restore_test_"):
             continue
@@ -48,7 +50,8 @@ def restore_test_runtime(config: dict) -> dict:
         control = _control_state_for_run(run.get("run_id", ""))
         active.append({"job_key": job_key, "run_key": run["run_key"], "run_id": run.get("run_id", ""),
                        "cancel_allowed": bool(control.get("cancel_allowed")),
-                       "cancel_requested": bool(control.get("cancel_requested"))})
+                       "cancel_requested": bool(control.get("cancel_requested")),
+                       "activity_state": "unknown"})
     active = list({(row["job_key"], row["run_id"]): row for row in active}.values())
     return {**(runs[0] if runs else {"running": False}), "runs": runs,
             "active_job_keys": sorted({row["job_key"] for row in active}), "active_jobs": active}
