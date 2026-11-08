@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.11.03.1237">
+<!ENTITY version   "2026.11.08.1742">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -16,10 +16,33 @@
         launch="Settings/borg-backup-ui"
         pluginURL="&pluginURL;"
         description="Web UI for Borg Backup – Dashboard, Jobs, Storage, History, Restore Tests and Settings. No pip required, pure Python 3."
-        icon="plugin-icon.png">
+        icon="plugin-icon.png" Min="6.12.5" Max="7.99.99">
 
 <CHANGES>
 <![CDATA[
+###2026.11.08.1742###
+### Migration and compatibility
+
+- Include an isolated private Python runtime for Unraid 6.12.5 through 7.x. Python 3 for Unraid is no longer required by Borg Backup UI in this release. A compatible external interpreter remains preferred; the private fallback works without a Python download at boot. Other plugins may still need their own Python provider. Unraid 8 is not supported. Existing jobs, configuration, secrets and repositories are preserved. (#548)
+
+### Bug Fixes
+
+- Distinguish running restore tests from tests waiting for the shared memory-protected execution slot. Show running/waiting counts and per-test status in the dashboard and test plan, with unknown states explicitly identified and dashboard status badges aligned in a right-hand column. (#722)
+
+### Security
+
+- Include upstream Apprise YAML configuration parser hardening for GHSA-cfp4-m43r-v9q4. Borg Backup UI uses notification URLs rather than Apprise YAML configuration imports. (#721)
+
+### Improvements
+
+- Show the selected Python runtime source, version and path in system health. Keep service, backup, restore and administrative helpers on the selected interpreter, with packaged dependencies isolated from host Python packages. (#548)
+
+- Show bundled CPython and the active interpreter separately under Settings > About > Third-party. Group full original license notices by bundle and log the actual Python version, source and executable in backup and restore-test runs. (#548)
+
+- Fix private Python startup on Unraid systems mounting `/run` with `noexec`: keep executable files in the plugin-owned `/usr` overlay. Show extraction/reuse and the selected Python interpreter during installation and service start; distinguish BorgBackup from the application interpreter and report unavailable account checks accurately. (#548)
+- Include a sanitized database profile inventory in support bundles so diagnostic tools can resolve profile IDs and current backup settings. Exclude credentials and distinguish unavailable profile data from an empty inventory or a failed backup. (#703)
+- Update bundled Apprise to 2.2.0 with 170 available notification providers, including 12 new services. Burst SMS is now listed as Kudosity; existing URLs, profiles and secrets remain supported without migration. (#721)
+
 ###2026.11.03.1237###
 ### Bug Fixes
 
@@ -54,30 +77,6 @@
 - Open Docker start and stop guidance from a compact link in the job wizard, reducing scrolling while keeping the full explanation available in a dialog. (#674)
 - Bring expanded Job and Restore Test cards into view when necessary, matching repository cards. Keep keyboard focus and respect reduced motion; background refreshes do not move the page. (#681)
 
-###2026.10.30.1734###
-### Bug Fixes
-
-- Show profile names, storage paths and specific errors when local database dumps cannot be listed. Keep readable profiles visible and distinguish unavailable storage from an empty backup history. (#596)
-- Accept normal Unraid permissions for database dump storage, including nobody:users and 0777, without changing existing owners or modes. New dump files use 0644 and run directories use 0755; credentials remain separately protected. (#652)
-- Make profile save status and errors clear for database, Local, USB, SMB and SSH profiles. Successful saves clear pending edits; failed saves keep the draft, and switching settings areas resolves outstanding changes. (#654)
-- Accept database backup folder paths ending in a slash and explain invalid input at the relevant field. Keep save feedback beside the form. (#656)
-- Treat folders that have not been created yet as an initial state, not a failed backup. Show clearly that local backup history covers all saved profiles. (#656)
-- Show archive ranges and paging controls above and below the repository archive list so additional backups are easy to find in short windows. Fit more entries on taller displays and retain the current archive range when resizing. (#658)
-- Keep the selected location when opening Jobs from the Dashboard, including USB on the first visit. Remove the duplicate Jobs button from the locations heading. (#658)
-- Keep repository tabs at the same compact height when switching or loading archives. Avoid the large blank area after returning to Overview; fit archive pages to the available space and scroll longer content inside the tab. (#662)
-- Fit repository management into the compact workspace with clearly separated action columns on wide screens, aligned buttons and single-line repository IDs. (#662)
-- Refresh repository job links automatically when returning to Repositories. Deleted jobs no longer appear as technical IDs or leave stale removal/deletion blockers that require a manual Refresh click. (#664)
-- Keep completed repository maintenance results within the compact workspace using two columns on wide screens. Expanded execution details scroll within their result area while Start buttons retain their position and alignment. (#666)
-
-### Improvements
-
-- Add explicit profile workflow guidance and feedback beside the form. Database discovery now clearly states that it saves the connection before loading database names. (#654)
-- Create missing backup subfolders automatically on the first test dump or backup, with shorter input guidance. (#656)
-- Show the current database, phase, elapsed time and exported/compressed data size during large test dumps. (#656)
-- Scroll expanded repositories into view and make the overview more compact, with smaller statistics and maintenance results arranged in two columns on wider screens. (#660)
-- Show the file count of the newest archive. Clarify "Refresh statistics" and place its fetch timestamp beside the figures, including when automatic refresh is off. (#660)
-- Give archive names more horizontal space and keep them on one line. Full names remain available on hover and after opening an archive. (#660)
-
 ]]>
 </CHANGES>
 
@@ -103,8 +102,8 @@ PLUGIN_DIR="/boot/config/plugins/${NAME}"
 PACKAGE_FILE="${PLUGIN_DIR}/${NAME}-${VERSION}.txz"
 PACKAGE_TMP="${PACKAGE_FILE}.tmp"
 PACKAGE_URL="&pkgurl;"
-EXPECTED_MD5="0f8e7b1c7f003f0cd17115bff7f38d64"
-EXPECTED_SHA256="e703b076eabc5d8718018b17f6cd6455153a38dd7091330ac86b820a6f3d1666"
+EXPECTED_MD5="99f623a695e14891d851f90b1b2daf8f"
+EXPECTED_SHA256="e9c1233aec63bfc400db4d6ef84bb76ade4ce3112a61e92a05e2f78452639847"
 INSTALLED_MD5_FILE="${PLUGIN_DIR}/.installed-package-md5"
 VENDOR_DIR="${PLUGIN_DIR}/runtime/vendor"
 VENDOR_BUNDLE_DIR="${PLUGIN_DIR}/runtime/vendor-bundles"
@@ -440,6 +439,7 @@ fi
 # Remove runtime files installed outside the persistent plugin directory.
 rm -f "${RC_SCRIPT}" 2>/dev/null || true
 rm -rf "${EMHTTP_DIR}" 2>/dev/null || true
+rm -rf /run/borg-backup-ui /usr/local/lib/borg-backup-ui 2>/dev/null || true
 rm -f "${PIDFILE}" "${WAIT_PIDFILE}" "${LOGFILE}" "${CLIENT_LOGFILE}" 2>/dev/null || true
 
 # Remove plugin-owned payload from the USB flash. User data outside this
