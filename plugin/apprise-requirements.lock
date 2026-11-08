@@ -1,9 +1,9 @@
-# Hash-pinned base runtime dependencies, resolved for Apprise 2.1.0 (#672).
+# Hash-pinned base runtime dependencies, resolved for Apprise 2.2.0 (#721).
 # Build-time only; no pip installation or downloads on Unraid.
 # Optional all-plugins dependencies remain outside the existing package scope.
 
-apprise==2.1.0 \
-    --hash=sha256:f743f4bc81dc5a68bddab53d420071b45541630dfea8c907a5e8b2b38555c681
+apprise==2.2.0 \
+    --hash=sha256:deac7647c02463f5398f3f5dbba965031a1507adf1b4348ccf5e53e8f0528f51
 certifi==2026.10.23 \
     --hash=sha256:e9b54de76e530bb6cf0ccd036787103acb58fd42ba930ea8bf948ddbaa2f61d1
 charset-normalizer==3.5.1 \

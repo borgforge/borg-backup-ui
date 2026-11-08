@@ -1,6 +1,6 @@
 {
-  "version": "2.1.0",
-  "provider_count": 158,
+  "version": "2.2.0",
+  "provider_count": 170,
   "providers": [
     {
       "service_name": "46elks",
@@ -92,12 +92,6 @@
       ]
     },
     {
-      "service_name": "Burst SMS",
-      "schemas": [
-        "burstsms"
-      ]
-    },
-    {
       "service_name": "Chanify",
       "schemas": [
         "chanify"
@@ -120,6 +114,12 @@
       "service_name": "ClickSend",
       "schemas": [
         "clicksend"
+      ]
+    },
+    {
+      "service_name": "CM.com",
+      "schemas": [
+        "cm"
       ]
     },
     {
@@ -200,6 +200,12 @@
       ]
     },
     {
+      "service_name": "FireHydrant",
+      "schemas": [
+        "firehydrant"
+      ]
+    },
+    {
       "service_name": "Flock",
       "schemas": [
         "flock"
@@ -266,6 +272,12 @@
       ]
     },
     {
+      "service_name": "Groundmail",
+      "schemas": [
+        "groundmail"
+      ]
+    },
+    {
       "service_name": "GroupMe",
       "schemas": [
         "groupme"
@@ -275,6 +287,12 @@
       "service_name": "Guilded",
       "schemas": [
         "guilded"
+      ]
+    },
+    {
+      "service_name": "Gupshup",
+      "schemas": [
+        "gupshup"
       ]
     },
     {
@@ -316,6 +334,12 @@
       ]
     },
     {
+      "service_name": "Infobip",
+      "schemas": [
+        "infobip"
+      ]
+    },
+    {
       "service_name": "IRC",
       "schemas": [
         "irc",
@@ -349,6 +373,20 @@
       ]
     },
     {
+      "service_name": "KakaoTalk",
+      "schemas": [
+        "kakao",
+        "kakaotalk"
+      ]
+    },
+    {
+      "service_name": "Kaleyra",
+      "schemas": [
+        "kaleyra",
+        "klr"
+      ]
+    },
+    {
       "service_name": "Kavenegar",
       "schemas": [
         "kavenegar"
@@ -367,6 +405,13 @@
       "service_name": "Kook",
       "schemas": [
         "kook"
+      ]
+    },
+    {
+      "service_name": "Kudosity",
+      "schemas": [
+        "burstsms",
+        "kudosity"
       ]
     },
     {
@@ -479,6 +524,12 @@
       "schemas": [
         "nctalk",
         "nctalks"
+      ]
+    },
+    {
+      "service_name": "Nostr",
+      "schemas": [
+        "nostr"
       ]
     },
     {
@@ -805,13 +856,19 @@
       ]
     },
     {
+      "service_name": "SMSTunnel",
+      "schemas": [
+        "smstunnel"
+      ]
+    },
+    {
       "service_name": "SMTP2Go",
       "schemas": [
         "smtp2go"
       ]
     },
     {
-      "service_name": "Société Française du Radiotéléphone",
+      "service_name": "Soci\u00e9t\u00e9 Fran\u00e7aise du Radiot\u00e9l\u00e9phone",
       "schemas": [
         "sfr"
       ]
@@ -885,6 +942,12 @@
       ]
     },
     {
+      "service_name": "Telesign",
+      "schemas": [
+        "telesign"
+      ]
+    },
+    {
       "service_name": "Telnyx",
       "schemas": [
         "telnyx"
@@ -955,6 +1018,12 @@
       ]
     },
     {
+      "service_name": "Whapi.Cloud",
+      "schemas": [
+        "whapi"
+      ]
+    },
+    {
       "service_name": "WhatsApp",
       "schemas": [
         "whatsapp"
@@ -970,6 +1039,12 @@
       "service_name": "WxPusher",
       "schemas": [
         "wxpusher"
+      ]
+    },
+    {
+      "service_name": "xMatters",
+      "schemas": [
+        "xmatters"
       ]
     },
     {

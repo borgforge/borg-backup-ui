@@ -1,11 +1,11 @@
-# Apprise 2.1.0 providers / Anbieter (#672)
+# Apprise 2.2.0 providers / Anbieter (#721)
 
-This package exposes **158 providers** through Settings > Notifications. The
+This package exposes **170 providers** through Settings > Notifications. The
 existing base-package strategy is retained; optional dependencies from
 `all-plugins` are not added. Search by provider name or URL scheme to select a
 provider. The generic URL entry remains available.
 
-Dieses Paket bietet **158 Anbieter** unter Einstellungen > Benachrichtigungen.
+Dieses Paket bietet **170 Anbieter** unter Einstellungen > Benachrichtigungen.
 Die bisherige Paketstrategie bleibt bestehen; optionale Abhängigkeiten aus
 `all-plugins` werden nicht ergänzt. Suche nach Anbietername oder URL-Schema,
 um einen Anbieter auszuwählen. Die generische URL-Eingabe bleibt verfügbar.
@@ -13,6 +13,16 @@ um einen Anbieter auszuwählen. Die generische URL-Eingabe bleibt verfügbar.
 New since 1.13.1 / Neu seit 1.13.1: **AMQP, Better Stack, Delta Chat, GitHub,
 GoAlert, Gorush, LFG Alarm, Mobile Message, OneBot, Simplepush, Squadcast, Telnyx,
 WPUSH, YouLMK, Zalo, Zoho Cliq, ilert, incident.io**.
+
+New in 2.2.0 / Neu in 2.2.0: **CM.com, FireHydrant, Groundmail, Gupshup,
+Infobip, KakaoTalk, Kaleyra, Nostr, SMSTunnel, Telesign, Whapi.Cloud and xMatters**.
+**Burst SMS** is now displayed as **Kudosity**; existing `burstsms://` URLs remain
+supported, with `kudosity://` available as an additional alias. Existing profiles
+and secrets do not need migration.
+
+**Burst SMS** wird jetzt als **Kudosity** angezeigt. Bestehende `burstsms://`-URLs
+bleiben gültig; `kudosity://` kommt als zusätzliches Schema hinzu. Bestehende
+Profile und Secrets benötigen keine Migration.
 
 Removed in 2.1.0 / In 2.1.0 entfallen: **Amazon Chime** (`chime://`). Existing
 profiles show a reconfiguration warning; saved settings and secrets are kept.
@@ -55,7 +65,8 @@ Source / Quelle: runtime discovery against the hash-pinned bundle; version-bound
 inventory in `plugin/apprise-providers.json`. No external service credentials are
 used to produce this inventory. Compatibility changes: upstream releases
 [v2.0.0](https://github.com/caronc/apprise/releases/tag/v2.0.0) and
-[v2.1.0](https://github.com/caronc/apprise/releases/tag/v2.1.0).
+[v2.1.0](https://github.com/caronc/apprise/releases/tag/v2.1.0) and
+[v2.2.0](https://github.com/caronc/apprise/releases/tag/v2.2.0).
 
 | Provider / Anbieter | URL schemes / URL-Schemata |
 | --- | --- |
@@ -73,11 +84,11 @@ used to produce this inventory. Compatibility changes: upstream releases
 | Brevo | `brevo://` |
 | BulkSMS | `bulksms://` |
 | BulkVS | `bulkvs://` |
-| Burst SMS | `burstsms://` |
 | Chanify | `chanify://` |
 | Cisco Webex Teams | `webex://`, `wxteams://` |
 | Clickatell | `clickatell://` |
 | ClickSend | `clicksend://` |
+| CM.com | `cm://` |
 | D7 Networks | `d7sms://` |
 | Dapnet | `dapnet://` |
 | Delta Chat | `deltachat://`, `deltachats://` |
@@ -90,6 +101,7 @@ used to produce this inventory. Compatibility changes: upstream releases
 | Evolution API | `evolution://`, `evolutions://` |
 | Exotel | `exotel://` |
 | Feishu | `feishu://` |
+| FireHydrant | `firehydrant://` |
 | Flock | `flock://` |
 | Flowtriq | `flowtriq://`, `flowtriqs://` |
 | Fluxer | `fluxer://`, `fluxers://` |
@@ -100,22 +112,28 @@ used to produce this inventory. Compatibility changes: upstream releases
 | Google Chat | `gchat://` |
 | Gorush | `gorush://`, `gorushs://` |
 | Gotify | `gotify://`, `gotifys://` |
+| Groundmail | `groundmail://` |
 | GroupMe | `groupme://` |
 | Guilded | `guilded://` |
+| Gupshup | `gupshup://` |
 | HomeAssistant | `hassio://`, `hassios://` |
 | httpSMS | `httpsms://` |
 | HumHub | `humhub://`, `humhubs://` |
 | IFTTT | `ifttt://` |
 | ilert | `ilert://` |
 | incident.io | `incidentio://` |
+| Infobip | `infobip://` |
 | IRC | `irc://`, `ircs://` |
 | Jellyfin | `jellyfin://`, `jellyfins://` |
 | Jira | `jira://` |
 | Join | `join://` |
 | JSON | `json://`, `jsons://` |
+| KakaoTalk | `kakao://`, `kakaotalk://` |
+| Kaleyra | `kaleyra://`, `klr://` |
 | Kavenegar | `kavenegar://` |
 | Kodi/XBMC | `kodi://`, `kodis://`, `xbmc://`, `xbmcs://` |
 | Kook | `kook://` |
+| Kudosity | `burstsms://`, `kudosity://` |
 | Kumulos | `kumulos://` |
 | LaMetric | `lametric://`, `lametrics://` |
 | Lark (Feishu) | `lark://` |
@@ -133,6 +151,7 @@ used to produce this inventory. Compatibility changes: upstream releases
 | MSG91 | `msg91://` |
 | Nextcloud | `ncloud://`, `nclouds://` |
 | Nextcloud Talk | `nctalk://`, `nctalks://` |
+| Nostr | `nostr://` |
 | Notica | `notica://`, `noticas://` |
 | Notifiarr | `notifiarr://` |
 | Notifico | `notifico://`, `notificos://` |
@@ -184,6 +203,7 @@ used to produce this inventory. Compatibility changes: upstream releases
 | SMS Eagle | `smseagle://`, `smseagles://` |
 | SMS Manager | `smsmanager://`, `smsmgr://` |
 | SMSC | `smsc://` |
+| SMSTunnel | `smstunnel://` |
 | SMTP2Go | `smtp2go://` |
 | Société Française du Radiotéléphone | `sfr://` |
 | SparkPost | `sparkpost://` |
@@ -197,6 +217,7 @@ used to produce this inventory. Compatibility changes: upstream releases
 | Syslog | `syslog://` |
 | Techulus Push | `push://` |
 | Telegram | `tgram://` |
+| Telesign | `telesign://` |
 | Telnyx | `telnyx://` |
 | Threema Gateway | `threema://` |
 | Trigv | `trigv://`, `trigvs://` |
@@ -208,9 +229,11 @@ used to produce this inventory. Compatibility changes: upstream releases
 | Vonage | `nexmo://`, `vonage://` |
 | WeChat (WeCom) | `wechat://` |
 | WeCom Bot | `wecombot://` |
+| Whapi.Cloud | `whapi://` |
 | WhatsApp | `whatsapp://` |
 | WPUSH | `wpush://` |
 | WxPusher | `wxpusher://` |
+| xMatters | `xmatters://` |
 | XML | `xml://`, `xmls://` |
 | YouLMK | `youlmk://` |
 | Zalo | `zalo://` |

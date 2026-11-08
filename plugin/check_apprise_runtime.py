@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Offline contract checks for the exact vendor tree to be packaged (#269/#672).
+"""Offline contract checks for the exact vendor tree to be packaged (#269/#672/#721).
 
 Run with python3 -S so host site-packages cannot supply missing dependencies.
 All transport calls are mocked; no notification leaves the build machine.
@@ -141,6 +141,33 @@ def check_oauth_and_tls(requests, vendor: Path) -> None:
     assert context.cert_store_stats()["x509_ca"] > 0
 
 
+def check_yaml_hardening(adapter, vendor: Path) -> None:
+    """Verify upstream alias limits and the adapter's URL-only configuration path.
+
+    Uses bounded synthetic YAML and no files or network I/O. Raises AssertionError
+    if cyclic/oversized aliases are accepted or normal URL use invokes YAML.
+    """
+    from apprise.config.base import ConfigBase
+
+    valid = 'version: 1\ntag: [backup]\nurls: ["json://example.test/notify"]\n'
+    services, configs = ConfigBase.config_parse_yaml(valid)
+    assert len(services) == 1 and not configs
+    cycle = 'version: 1\ntag: &loop [*loop]\nurls: ["json://example.test/notify"]\n'
+    lines = ['version: 1', 'a0: &a0 [backup]']
+    lines.extend(f'a{i}: &a{i} [*a{i - 1}, *a{i - 1}]' for i in range(1, 18))
+    expanded = '\n'.join([*lines, 'tag: *a17', 'urls: ["json://example.test/notify"]'])
+    for content in (cycle, expanded):
+        with patch.object(ConfigBase.logger, "error"):
+            assert ConfigBase.config_parse_yaml(content) == ([], [])
+
+    with patch.object(ConfigBase, "config_parse_yaml", side_effect=AssertionError("Unexpected YAML parsing")) as parse:
+        assert adapter.validate_url("json://example.test/notify", vendor_dir=vendor).ok
+        assert not adapter.validate_url("file:///nonexistent-apprise-config.yml", vendor_dir=vendor).ok
+        # Apprise may recognize embedded notification URLs, but never reads YAML here.
+        adapter.validate_url(cycle, vendor_dir=vendor)
+        parse.assert_not_called()
+
+
 def check(vendor: Path) -> None:
     """Reject incomplete/incompatible vendor trees before package publication."""
     if not sys.flags.no_site:
@@ -152,8 +179,8 @@ def check(vendor: Path) -> None:
     assert Path(module.__file__).resolve().is_relative_to(vendor)
     expected = json.loads((ROOT / "plugin" / "apprise-providers.json").read_text())
     actual = adapter.supported_providers(vendor_dir=vendor)
-    assert actual["version"] == expected["version"] == "2.1.0"
-    assert actual["provider_count"] == expected["provider_count"] == 158
+    assert actual["version"] == expected["version"] == "2.2.0"
+    assert actual["provider_count"] == expected["provider_count"] == 170
     inventory = {row["service_name"]: sorted(row["schemas"]) for row in actual["providers"]}
     assert inventory == {row["service_name"]: row["schemas"] for row in expected["providers"]}
     for row in actual["providers"]:
@@ -175,6 +202,12 @@ def check(vendor: Path) -> None:
     urls = ("ntfy://example.test/bbui", "json://example.test/notify")
     # Block accidental transport additions which the mocks below do not cover.
     with patch("socket.socket.connect", side_effect=AssertionError("Unexpected network access")):
+        check_yaml_hardening(adapter, vendor)
+        # The upstream Burst SMS display-name change must not invalidate URLs.
+        for scheme in ("burstsms", "kudosity"):
+            assert adapter.validate_url(
+                f"{scheme}://fakekey:fakesecret@BBUI/+15555550123", vendor_dir=vendor,
+            ).ok
         check_ntfy(adapter, requests, vendor, response)
         check_oauth_and_tls(requests, vendor)
         for url in urls:
@@ -230,8 +263,8 @@ def check(vendor: Path) -> None:
         check_deadlines(adapter, requests, vendor, response)
 
     print(f"Apprise {actual['version']}: {actual['provider_count']} providers; vendor imports, metadata, "
-          "ntfy token/basic auth, HTTP/SMTP delivery/rejection, OAuth/TLS, result cleanup "
-          "and main/worker deadlines passed (offline).")
+          "ntfy token/basic auth, HTTP/SMTP delivery/rejection, OAuth/TLS, result cleanup, "
+          "main/worker deadlines, YAML alias limits and legacy Burst SMS URLs passed (offline).")
 
 
 if __name__ == "__main__":

@@ -1096,7 +1096,7 @@ Borg Backup UI manages notification channels under **Settings > Notifications**.
 - email/SMTP
 - Apprise notification profiles
 
-Apprise profiles can be created, edited, duplicated, enabled/disabled, tested, and removed. The plugin bundles Apprise `2.1.0` with 158 available providers. Provider URL forms come from Apprise metadata; saved URLs remain write-only secrets. The [provider inventory](../apprise-providers.md) lists the complete set available in this package. Optional providers requiring additional packages, such as MQTT and XMPP, remain outside the existing package scope.
+Apprise profiles can be created, edited, duplicated, enabled/disabled, tested, and removed. The plugin bundles Apprise `2.2.0` with 170 available providers. Provider URL forms come from Apprise metadata; saved URLs remain write-only secrets. The [provider inventory](../apprise-providers.md) lists the complete set available in this package. Optional providers requiring additional packages, such as MQTT and XMPP, remain outside the existing package scope.
 
 **Apprise 2 upgrade:** Existing profiles and secrets are preserved. Amazon Chime (`chime://`) is no longer supported; affected profiles show a warning and need reconfiguration for another provider. URL options are validated more strictly. The [provider inventory](../apprise-providers.md) documents further changes, including replaced PGP email options. With an explicit ntfy host, `ntfy://` still uses HTTP and `ntfys://` uses HTTPS. For token-authenticated ntfy.sh use `ntfys://{token}@ntfy.sh/{topic}`.
 

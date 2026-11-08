@@ -1110,7 +1110,7 @@ Borg Backup UI verwaltet Benachrichtigungskanäle in **Einstellungen > Benachric
 - E-Mail/SMTP
 - Apprise-Benachrichtigungsprofile
 
-Apprise-Profile können angelegt, bearbeitet, dupliziert, aktiviert/deaktiviert, getestet und entfernt werden. Das Plugin bündelt Apprise `2.1.0` mit 158 verfügbaren Anbietern. Die URL-Formulare entstehen aus Apprise-Metadaten; gespeicherte URLs bleiben ausschließlich schreibbare Secrets. Die [Anbieterliste](../apprise-providers.md) enthält alle im Paket verfügbaren Anbieter. Optionale Anbieter mit zusätzlichen Paketabhängigkeiten, etwa MQTT und XMPP, bleiben außerhalb des bisherigen Paketumfangs.
+Apprise-Profile können angelegt, bearbeitet, dupliziert, aktiviert/deaktiviert, getestet und entfernt werden. Das Plugin bündelt Apprise `2.2.0` mit 170 verfügbaren Anbietern. Die URL-Formulare entstehen aus Apprise-Metadaten; gespeicherte URLs bleiben ausschließlich schreibbare Secrets. Die [Anbieterliste](../apprise-providers.md) enthält alle im Paket verfügbaren Anbieter. Optionale Anbieter mit zusätzlichen Paketabhängigkeiten, etwa MQTT und XMPP, bleiben außerhalb des bisherigen Paketumfangs.
 
 **Upgrade auf Apprise 2:** Bestehende Profile und Secrets bleiben erhalten. Amazon Chime (`chime://`) wird nicht mehr unterstützt; betroffene Profile zeigen einen Hinweis und müssen für einen anderen Anbieter neu eingerichtet werden. URL-Optionen werden strenger geprüft. Die [Anbieterliste](../apprise-providers.md) dokumentiert weitere Änderungen, darunter die ersetzten PGP-Mail-Optionen. Für ntfy mit explizitem Host gilt weiterhin: `ntfy://` verwendet HTTP, `ntfys://` verwendet HTTPS. Verwenden Sie für ntfy.sh mit Token `ntfys://{token}@ntfy.sh/{topic}`.
 

@@ -23,7 +23,7 @@ system only when the bundled version or SHA256 changes.
 
 | Component | Version | License | Notice |
 | --- | --- | --- | --- |
-| apprise | 2.1.0 | BSD-2-Clause | See `runtime/licenses/apprise/LICENSE`. |
+| apprise | 2.2.0 | BSD-2-Clause | See `runtime/licenses/apprise/LICENSE`. |
 | certifi | 2026.10.23 | MPL-2.0 | Python package dependency of Apprise. |
 | charset-normalizer | 3.5.1 | MIT | Python package dependency of Apprise. |
 | click | 8.5.0 | BSD-3-Clause | Python package dependency of Apprise. |
