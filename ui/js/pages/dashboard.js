@@ -930,7 +930,7 @@ function renderDashboardActiveRuns(runs) {
       const job = backups.find(b => b.key === run.job_key);
       const test = run.operation === 'restore_test';
       const activity = runActivityState(run);
-      return `<button class="dashboard-details-toggle" ${test ? 'data-dashboard-page="restore-tests"' : run.operation === 'backup' ? `data-dashboard-jobs="${escHtml(run.job_key || '')}"` : 'data-dashboard-page="restore"'}>${escHtml(job?.name || job?.display_name || run.job_key || '—')} · ${escHtml(dashboardT(test ? 'management.restoreTest' : run.operation === 'backup' ? 'management.backup' : 'management.restore'))}${test ? ` <span class="management-run-state ${activity}">${escHtml(dashboardT(`resources.state${capitalize(activity)}`))}</span>` : ''}</button>`;
+      return `<button class="dashboard-details-toggle" ${test ? 'data-dashboard-page="restore-tests"' : run.operation === 'backup' ? `data-dashboard-jobs="${escHtml(run.job_key || '')}"` : 'data-dashboard-page="restore"'}><span class="management-run-label">${escHtml(job?.name || job?.display_name || run.job_key || '—')} · ${escHtml(dashboardT(test ? 'management.restoreTest' : run.operation === 'backup' ? 'management.backup' : 'management.restore'))}</span>${test ? `<span class="management-run-state ${activity}">${escHtml(dashboardT(`resources.state${capitalize(activity)}`))}</span>` : ''}</button>`;
     }).join('') : `<span>${escHtml(dashboardT(runs === null ? 'management.liveUnknown' : 'management.noActive'))}</span>`}</div>`;
 }
 
