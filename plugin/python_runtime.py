@@ -3,16 +3,24 @@
 from __future__ import annotations
 
 import argparse
+import errno
+import http.client
 import hashlib
 import json
 from pathlib import Path
 import shutil
+import socket
 import subprocess
+import sys
 import tarfile
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
+DOWNLOAD_RETRY_DELAYS = (5, 10, 20, 40)
+TRANSIENT_HTTP_STATUS = {408, 429, 500, 502, 503, 504}
 # Every linked non-system library must map to supplier provenance. Preserve all
 # upstream licenses, including libraries not used by the application's modules.
 LIBRARIES = {
@@ -33,16 +41,56 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _retryable_download_error(error: Exception) -> bool:
+    """Identify temporary transport failures without retrying TLS or local I/O errors."""
+    if isinstance(error, urllib.error.HTTPError):
+        return error.code in TRANSIENT_HTTP_STATUS
+    if isinstance(error, urllib.error.URLError):
+        return isinstance(error.reason, Exception) and _retryable_download_error(error.reason)
+    if isinstance(error, (TimeoutError, ConnectionError, http.client.IncompleteRead)):
+        return True
+    if isinstance(error, socket.gaierror):
+        return error.errno == socket.EAI_AGAIN
+    return isinstance(error, OSError) and error.errno in {errno.ENETUNREACH, errno.EHOSTUNREACH}
+
+
 def fetch(url: str, destination: Path, expected: str) -> None:
-    """Cache an upstream input only after matching its committed SHA256 pin."""
-    if not destination.is_file() or sha256(destination) != expected:
-        temporary = destination.with_suffix('.download')
-        with urllib.request.urlopen(url, timeout=60) as response, temporary.open('wb') as out:
-            shutil.copyfileobj(response, out)
-        if sha256(temporary) != expected:
-            temporary.unlink()
-            raise ValueError('Python supplier input checksum mismatch')
-        temporary.replace(destination)
+    """Cache an input from url only after matching its expected SHA256 pin.
+
+    Reuse a verified destination. Otherwise allow five attempts with 5/10/20/40s
+    delays for transient HTTP/network errors or truncated Content-Length bodies.
+    Each request retains its 60s socket timeout. Partial files are removed after
+    each attempt; failed downloads never replace an existing destination. Permanent
+    errors, including checksum/TLS/local filesystem failures, propagate immediately.
+    Retry diagnostics go to stderr without URLs, response bodies or exception text.
+    """
+    if destination.is_file() and sha256(destination) == expected:
+        return
+    temporary = destination.with_suffix('.download')
+    attempts = len(DOWNLOAD_RETRY_DELAYS) + 1
+    for attempt in range(attempts):
+        try:
+            with urllib.request.urlopen(url, timeout=60) as response, temporary.open('wb') as out:
+                shutil.copyfileobj(response, out)
+                length = getattr(response, 'headers', {}).get('Content-Length')
+                if length is not None and out.tell() < int(length):
+                    raise http.client.IncompleteRead(b'', int(length) - out.tell())
+            if sha256(temporary) != expected:
+                raise ValueError('Python supplier input checksum mismatch')
+            temporary.replace(destination)
+            return
+        except Exception as error:
+            if isinstance(error, urllib.error.HTTPError):
+                error.close()
+            if not _retryable_download_error(error) or attempt == attempts - 1:
+                raise
+            reason = f'HTTP {error.code}' if isinstance(error, urllib.error.HTTPError) else type(error).__name__
+            delay = DOWNLOAD_RETRY_DELAYS[attempt]
+            print(f'Python supplier download attempt {attempt + 1}/{attempts} failed ({reason}); '
+                  f'retrying in {delay}s.', file=sys.stderr, flush=True)
+        finally:
+            temporary.unlink(missing_ok=True)
+        time.sleep(delay)
 
 
 def inventory(metadata: dict, downloads: dict, lock: dict) -> dict:

@@ -81,6 +81,25 @@ runtime; insufficient RAM, missing/corrupt payload or failed probes fail with a
 repair message. The control page can stage the runtime for recovery while the
 service is stopped.
 
+## Build-time download retries (#728)
+
+Supplier archives, source inventory and license downloads share the same pinned
+cache downloader. A valid cached SHA256 is reused without a request. Otherwise,
+transient HTTP 408/429/500/502/503/504 responses, temporary DNS failures, connection
+failures/timeouts and interrupted transfers are retried at most four times after
+5, 10, 20 and 40 seconds (five attempts total). Each request keeps its 60-second
+socket timeout; this is not a total wall-clock deadline for a large download.
+Truncated responses with a declared Content-Length are treated as interrupted
+transfers. Retry diagnostics report the attempt, error category and delay to
+stderr without URLs, server bodies or exception details.
+
+Each retry starts a fresh temporary file. Failed/partial downloads are removed;
+the destination is replaced only after its exact SHA256 matches the committed
+pin. Checksum mismatches, certificate errors, permanent HTTP errors and local
+filesystem failures are not retried. Exhausting retries still fails CI/build;
+this does not change URLs, provenance, pins or publication approval. There are
+no runtime downloads on Unraid.
+
 ## Selection and isolation
 
 The Bash launcher works without Python and serializes staging with flock. It
