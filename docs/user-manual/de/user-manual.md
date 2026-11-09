@@ -1278,6 +1278,10 @@ Bestehende Profil- und Repository-Pfade bleiben unverändert; ein erneuter Impor
 
 SMB-Profile definieren Netzwerkfreigaben. Passwörter werden als Secrets behandelt.
 
+**Repository anlegen oder importieren:** Im Einrichtungswizard und in der Repository-Verwaltung wird die SMB-Freigabe für die Zielprüfung sowie für das Anlegen oder Importieren automatisch eingebunden. „Automatisch mounten“ und „Eingebunden lassen“ müssen dafür nicht aktiviert sein. Während des Anlegens oder Imports bleibt die Freigabe bis einschließlich der Borg-Informationsabfrage eingebunden. Schlägt das Einbinden fehl, wird kein Repository im lokalen Mount-Verzeichnis angelegt. Bereits vorhandene Mounts bleiben bestehen; nur von der jeweiligen Aktion erzeugte temporäre Mounts werden anschließend ausgehängt, sofern „Eingebunden lassen“ deaktiviert ist.
+
+**Bereits lokal angelegte Repositories:** Ältere Versionen konnten bei nicht eingebundener Freigabe ein Repository lokal unter dem Mountpunkt anlegen. Beim Einbinden wird es verdeckt und ist nicht automatisch auf dem NAS vorhanden. Prüfen Sie den tatsächlichen Inhalt direkt im Dateimanager des NAS. Das Update verschiebt oder löscht solche lokalen Repositories nicht. Vor einer Bereinigung muss geklärt sein, ob sie erfolgreiche Backups enthalten; Daten und Schlüssel müssen erhalten bleiben, bis eine Wiederherstellung oder ausdrücklich freigegebene Bereinigung geklärt ist.
+
 Wichtige Felder:
 
 - Profilname

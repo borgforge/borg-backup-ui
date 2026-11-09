@@ -1262,6 +1262,10 @@ Existing profile and repository paths remain unchanged; no reimport or file move
 
 SMB profiles define network shares. Passwords are treated as secrets.
 
+**Creating or importing repositories:** Both initial setup and repository management mount the SMB share for target validation and for repository creation or import. Neither automatic startup mounting nor Keep mounted needs to be enabled. During creation/import, the share remains mounted through the Borg information query. If mounting fails, no repository is created in the local mount-point directory. Pre-existing mounts are preserved; only temporary mounts created by that operation are subsequently unmounted, unless Keep mounted is enabled.
+
+**Repositories previously created locally:** Earlier versions could create a repository locally underneath an unmounted SMB mount point. Mounting the share hides it; it does not place those files on the NAS. Check the actual contents directly in the NAS file manager. This update does not move or delete such local repositories. Before cleanup, establish whether they contain successful backups; preserve data and keys until recovery or explicitly authorized cleanup has been determined.
+
 Important fields:
 
 - profile name
