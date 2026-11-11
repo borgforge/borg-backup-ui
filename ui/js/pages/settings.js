@@ -6998,6 +6998,13 @@ function stopSmbMountStatusWatch() {
  * HTTP/auth-file reads. Closed or stale streams cannot update another selection.
  */
 function refreshSelectedSmbProfileMountStatus(row = null) {
+  if (!settingsState.smbMountVisibilityBound) {
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) stopSmbMountStatusWatch();
+      else refreshSelectedSmbProfileMountStatus();
+    });
+    settingsState.smbMountVisibilityBound = true;
+  }
   stopSmbMountStatusWatch();
   const selected = row || document.querySelector('#smb-profiles-rows .smb-profile-row:not(.hidden)');
   if (document.hidden || settingsState.activeTab !== 'smb' || settingsState.profileEditing === 'smb'
@@ -7022,11 +7029,6 @@ function refreshSelectedSmbProfileMountStatus(row = null) {
     updateSmbMountStatus(selected, 'unknown');
   });
 }
-
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden) stopSmbMountStatusWatch();
-  else refreshSelectedSmbProfileMountStatus();
-});
 
 /** Perform one explicit saved-profile action and then resume passive observation.
  * Disable duplicate manual actions while pending; errors remain visible to the user.

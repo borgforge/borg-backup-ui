@@ -49,7 +49,7 @@ const {chromium} = require('playwright');
       const settings=fs.readFileSync('ui/js/pages/settings.js','utf8');
       await page.addScriptTag({content:settings.match(/function settingsFmtBytes[\s\S]*?\n}/)[0]});
       await page.addScriptTag({content:settings.match(/function settingsCard[\s\S]*?\n}/)[0] + settings.match(/function settingsMenuIcon[\s\S]*?\n}/)[0]});
-      for(const name of ['settingsFormSignature','_updateUnsavedChangesUi','canLeaveSettingsPage']) await page.addScriptTag({content:settings.match(new RegExp('(?:async )?function '+name+'[\\s\\S]*?\\n}'))[0]});
+      for(const name of ['settingsFormSignature','_updateUnsavedChangesUi','canLeaveSettingsPage','stopSmbMountStatusWatch']) await page.addScriptTag({content:settings.match(new RegExp('(?:async )?function '+name+'[\\s\\S]*?\\n}'))[0]});
       await page.addScriptTag({content:settings.match(/function _openSettingsDialog[\s\S]*?\n}/)[0]});
       await page.addScriptTag({content:fs.readFileSync('ui/js/pages/databases.js','utf8')});
       await page.addScriptTag({content:settings.match(/async function activateSettingsTab[\s\S]*?\n}/)[0]});
