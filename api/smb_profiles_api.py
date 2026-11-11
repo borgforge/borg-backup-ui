@@ -21,6 +21,25 @@ from smb_protocol import (
 SMB_MANAGED_MOUNT_BASE = Path("/mnt/borg-backup-ui/smb")
 
 
+def observe_smb_mount_status(mount_path: str) -> Dict[str, Any]:
+    """Observe a supplied path using only the kernel mount table.
+
+    Accept an absolute /mnt path (up to 4096 characters), without resolving or
+    accessing it or loading profiles/credentials. Invalid paths raise ValueError;
+    unreadable mount information returns unknown. This is not a NAS health test.
+    """
+    from storage_objects_api import observe_storage_mount_states
+
+    if (not isinstance(mount_path, str) or len(mount_path) > 4096
+            or not mount_path.startswith("/mnt/") or "\x00" in mount_path
+            or ".." in Path(mount_path).parts):
+        raise ValueError("An absolute mount_path below /mnt is required")
+    observed = observe_storage_mount_states([{"location": "smb", "mount_path": mount_path}])[0]
+    state = observed["mount_state"]
+    return {"mount_path": mount_path, "mount_state": state,
+            "is_mounted": None if state == "unknown" else state in {"mounted", "read_only"}}
+
+
 def _smb_secret_path(profile_key: str) -> Path:
     safe_key = re.sub(r"[^a-z0-9_-]+", "-", str(profile_key or "").strip().lower()).strip("-")
     if not safe_key:

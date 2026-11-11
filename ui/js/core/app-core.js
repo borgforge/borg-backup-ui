@@ -144,6 +144,7 @@ function navigate(page) {
   if (page === 'storage')  runCoreAction('refreshStorage');
   if (page === 'berichte') runCoreAction('berichtInit');
   if (page === 'settings') runCoreAction('refreshSettings');
+  else runCoreAction('stopSmbMountStatusWatch');
   if (page === 'history')  runCoreAction('refreshHistory');
   if (page === 'hilfe')    runCoreAction('helpInit');
   updateSidebarSystemHealth();

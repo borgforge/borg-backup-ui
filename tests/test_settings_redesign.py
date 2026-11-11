@@ -310,17 +310,17 @@ def test_smb_profiles_expose_mount_workflow_controls() -> None:
     assert "dataset.smbProfileAutoPath" in script
     assert "onSmbProfileInputChanged(event)" in script
     assert "refreshSelectedSmbProfileMountStatus" in script
-    assert "profiles.mountStatusNow" in script
+    assert "profiles.mountStatusNow" not in script
     assert "${slug}-smb-${cleanSuffix}" in script
-    assert "data-settings-action=\"smb-profile-status\"" in script
+    assert "data-settings-action=\"smb-profile-status\"" not in script
     assert "data-settings-action=\"smb-profile-mount\"" in script
     assert "data-settings-action=\"smb-profile-unmount\"" in script
     assert "data-smb-profile-mount-status" in script
     assert "data-smb-profile-mount-at-start" in script
     assert "data-smb-profile-keep-mounted" in script
     assert "await loadSettings()" not in script
-    assert german["settings"]["profiles"]["mountStatusNow"] == "Mountstatus aktualisieren"
-    assert english["settings"]["profiles"]["mountStatusNow"] == "Refresh mount status"
+    assert german["settings"]["profiles"]["mountNow"] == "Laufwerk einhängen"
+    assert english["settings"]["profiles"]["unmountNow"] == "Unmount drive"
     assert german["settings"]["profiles"]["mountAtStart"]
     assert english["settings"]["profiles"]["keepMounted"]
 

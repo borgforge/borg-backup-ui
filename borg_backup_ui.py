@@ -948,6 +948,8 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             self._handle_direct_api(lambda: self._handle_sse(self._restore_test_log_key(parsed.query)))
         elif path == "/api/restore/download":
             self._handle_direct_api(lambda: self._handle_restore_download(parsed))
+        elif path == "/api/storage/smb-mount-status":
+            self._handle_direct_api(lambda: self._handle_smb_mount_status_stream(parsed.query))
         elif path == "/api/storage/check/stream":
             self._handle_direct_api(self._handle_check_sse)
         else:
@@ -2013,6 +2015,67 @@ class BackupUIHandler(BaseHTTPRequestHandler):
     def _get_storage(self) -> dict:
         from config_api import get_repositories_data
         return get_repositories_data(self.config)
+
+    def _get_smb_mount_status(self, query: str) -> dict:
+        """Return passive kernel state for mount_path, without reading profile files."""
+        from urllib.parse import parse_qs
+        from smb_profiles_api import observe_smb_mount_status
+
+        values = parse_qs(query).get("mount_path", [])
+        if len(values) != 1:
+            raise ValueError("Exactly one mount_path is required")
+        return observe_smb_mount_status(values[0])
+
+    def _handle_smb_mount_status_stream(self, query: str) -> None:
+        """Stream passive mount observations after normal request authorization.
+
+        Read only kernel mount data while connected; session revocation/expiry
+        uses the in-memory session store. Token-only connections expire after
+        five minutes. Invalid paths return 400 before streaming; disconnected
+        clients stop at the next heartbeat. No session lifetime is extended here.
+        """
+        from smb_profiles_api import observe_smb_mount_status
+
+        try:
+            initial = self._get_smb_mount_status(query)
+        except ValueError as exc:
+            self._send_api_error(400, "bad_request", str(exc), request_id=self._current_request_id)
+            return
+        sid = str(_parse_cookie_header(self.headers.get("Cookie") or "").get("bbui_session") or "")
+        token_deadline = time.monotonic() + 300
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Accel-Buffering", "no")
+        self._send_refreshed_session_header()
+        self.end_headers()
+        previous = None
+        observation = initial
+        try:
+            self.wfile.write(b"retry: 15000\n\n")
+            while True:
+                if sid:
+                    with type(self)._UI_SESSIONS_LOCK:
+                        session = dict(type(self)._UI_SESSIONS.get(sid) or {})
+                    now = time.time()
+                    created = float(session.get("created_at", 0))
+                    active = (float(session.get("expires_at", 0)) > now
+                              and (created <= 0 or now - created < self._session_absolute_timeout_seconds()))
+                else:
+                    active = time.monotonic() < token_deadline
+                if not active:
+                    self.wfile.write(b"event: expired\ndata: {}\n\n")
+                    self.wfile.flush()
+                    return
+                payload = json.dumps(observation)
+                chunk = f"data: {payload}\n\n" if payload != previous else ": mount-status heartbeat\n\n"
+                self.wfile.write(chunk.encode("utf-8"))
+                self.wfile.flush()
+                previous = payload
+                time.sleep(5)
+                observation = observe_smb_mount_status(initial["mount_path"])
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
     def _get_repositories(self) -> dict:
         from repositories_api import read_repository_store_for_api

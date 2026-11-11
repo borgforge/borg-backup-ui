@@ -1354,3 +1354,9 @@
 .database-progress { padding: var(--ui-space-3); border: 1px solid var(--ui-color-border); border-radius: var(--ui-radius-md); margin-top: var(--ui-space-3); }
 .database-progress progress { display: block; width: 100%; margin-block: var(--ui-space-2); }
 .database-progress-values { display: flex; gap: var(--ui-space-3); flex-wrap: wrap; font-variant-numeric: tabular-nums; }
+
+/* Manual SMB actions remain compact beside the passive mount indication. */
+.smb-mount-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.smb-mount-state { font-weight: 600; }
+.smb-mount-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.smb-mount-controls > small { flex-basis: 100%; }

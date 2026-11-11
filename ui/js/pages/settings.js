@@ -33,6 +33,7 @@ window.BBUI.settingsState = window.BBUI.settingsState || {
   storageDeployPollTimer: null,
   storageDeployCloseSnapshot: '',
   storageboxProfileKey: '',
+  smbMountStatusSource: null,
   smbCleanupKeys: [],
   smbSecretCleanupKeys: [],
   authStatus: null,
@@ -133,6 +134,7 @@ function settingsMenuIcon(key) {
 
 /** Load settings and system health before rendering the selected settings tab. */
 async function refreshSettings() {
+  stopSmbMountStatusWatch();
   hideEl('settings-message');
   _renderSettingsLoading();
   try {
@@ -401,6 +403,7 @@ async function activateSettingsTab(tabKey) {
   }
   if (previousTab !== active.key) settingsState.databaseDirty = false;
   if (previousTab !== active.key) window.BBUI?.utils?.dom?.clearPageFeedback?.();
+  stopSmbMountStatusWatch();
   settingsState.activeTab = active.key;
   settingsState.profileEditing = '';
 
@@ -619,8 +622,10 @@ function syncSettingsProfileManager(type, selectLast = false) {
   });
   const footer = manager.querySelector('.settings-profile-editor > footer');
   if (footer) footer.classList.toggle('hidden', !editing);
-  if (type === 'smb' && selectedRow && !editing && settingsState.activeTab === 'smb') {
-    refreshSelectedSmbProfileMountStatus(selectedRow);
+  if (type === 'smb') {
+    stopSmbMountStatusWatch();
+    rows.forEach(row => updateSmbMountStatus(row, 'unknown'));
+    if (selectedRow && !editing && settingsState.activeTab === 'smb') refreshSelectedSmbProfileMountStatus(selectedRow);
   }
 }
 
@@ -1172,13 +1177,11 @@ function addSmbProfileRow(row = {}) {
       <input class="form-input" type="text" data-smb-profile-name placeholder="${settingsT('profiles.profileNamePlaceholder')}" value="${escHtml(name)}" onchange="onSmbProfileInputChanged(event)" oninput="onSmbProfileInputChanged(event)">
       <input class="form-input mono" type="text" data-smb-profile-server placeholder="${settingsT('profiles.hostPlaceholder')}" value="${escHtml(server)}" onchange="onSmbProfileInputChanged(event)" oninput="onSmbProfileInputChanged(event)">
       <input class="form-input mono" type="text" data-smb-profile-share placeholder="${settingsT('profiles.sharePlaceholder')}" value="${escHtml(share)}" onchange="onSmbProfileInputChanged(event)" oninput="onSmbProfileInputChanged(event)">
-      <input class="form-input mono" type="text" data-smb-profile-path placeholder="/mnt/user/borg-backup-ui/remotes/nas-a-backup" value="${escHtml(path)}" onchange="onSmbProfileInputChanged(event)" oninput="onSmbProfileInputChanged(event)">
+      <input class="form-input mono" type="text" data-smb-profile-path placeholder="/mnt/borg-backup-ui/smb/nas-a" value="${escHtml(path)}" onchange="onSmbProfileInputChanged(event)" oninput="onSmbProfileInputChanged(event)">
       <input class="form-input mono" type="text" data-smb-profile-username placeholder="${settingsT('profiles.usernamePlaceholder')}" value="${escHtml(username)}" onchange="onSmbProfileInputChanged(event)" oninput="onSmbProfileInputChanged(event)">
       <input class="form-input mono" type="password" data-smb-profile-password placeholder="${passwordSet ? settingsT('profiles.passwordSetPlaceholder') : settingsT('profiles.passwordPlaceholder')}" value="" onchange="onSmbProfileInputChanged(event)" oninput="onSmbProfileInputChanged(event)">
       <button type="button" class="btn btn-secondary btn-sm" data-settings-action="smb-profile-toggle-options">${settingsT('profiles.options')}</button>
-      <button type="button" class="btn btn-secondary btn-sm" data-settings-action="smb-profile-status">${settingsT('profiles.mountStatusNow')}</button>
-      <button type="button" class="btn btn-secondary btn-sm" data-settings-action="smb-profile-mount">${settingsT('profiles.mountNow')}</button>
-      <button type="button" class="btn btn-secondary btn-sm" data-settings-action="smb-profile-unmount">${settingsT('profiles.unmountNow')}</button>
+      ${renderSmbMountControls()}
       <button type="button" class="btn btn-danger btn-sm" data-settings-action="smb-profile-remove">${settingsT('common.remove')}</button>
       <span class="text-muted" style="font-size:12px">${settingsT('common.jobsCount', { count: jobsCount })}</span>
     </div>
@@ -1202,15 +1205,12 @@ function renderSettingsSmbProfiles(rows) {
         <input class="form-input" type="text" data-smb-profile-name placeholder="${settingsT('profiles.profileNamePlaceholder')}" value="${escHtml(r.name || '')}" onchange="onSmbProfileInputChanged(event)" oninput="onSmbProfileInputChanged(event)">
         <input class="form-input mono" type="text" data-smb-profile-server placeholder="${settingsT('profiles.hostPlaceholder')}" value="${escHtml(r.server || '')}" onchange="onSmbProfileInputChanged(event)" oninput="onSmbProfileInputChanged(event)">
         <input class="form-input mono" type="text" data-smb-profile-share placeholder="${settingsT('profiles.sharePlaceholder')}" value="${escHtml(r.share || '')}" onchange="onSmbProfileInputChanged(event)" oninput="onSmbProfileInputChanged(event)">
-        <input class="form-input mono" type="text" data-smb-profile-path placeholder="/mnt/user/borg-backup-ui/remotes/nas-a-backup" value="${escHtml(r.mount_path || '')}" onchange="onSmbProfileInputChanged(event)" oninput="onSmbProfileInputChanged(event)">
+        <input class="form-input mono" type="text" data-smb-profile-path placeholder="/mnt/borg-backup-ui/smb/nas-a" value="${escHtml(r.mount_path || '')}" onchange="onSmbProfileInputChanged(event)" oninput="onSmbProfileInputChanged(event)">
         <input class="form-input mono" type="text" data-smb-profile-username placeholder="${settingsT('profiles.usernamePlaceholder')}" value="${escHtml(r.username || '')}" onchange="onSmbProfileInputChanged(event)" oninput="onSmbProfileInputChanged(event)">
         <input class="form-input mono" type="password" data-smb-profile-password placeholder="${r.password_set ? settingsT('profiles.passwordSetPlaceholder') : settingsT('profiles.passwordPlaceholder')}" value="" onchange="onSmbProfileInputChanged(event)" oninput="onSmbProfileInputChanged(event)">
         <button type="button" class="btn btn-secondary btn-sm" data-settings-action="smb-profile-toggle-options">${settingsT('profiles.options')}</button>
-        <button type="button" class="btn btn-secondary btn-sm" data-settings-action="smb-profile-status">${settingsT('profiles.mountStatusNow')}</button>
-        <button type="button" class="btn btn-secondary btn-sm" data-settings-action="smb-profile-mount">${settingsT('profiles.mountNow')}</button>
-        <button type="button" class="btn btn-secondary btn-sm" data-settings-action="smb-profile-unmount">${settingsT('profiles.unmountNow')}</button>
+        ${renderSmbMountControls()}
         <button type="button" class="btn btn-danger btn-sm" data-settings-action="smb-profile-remove">${settingsT('common.remove')}</button>
-        <span class="text-muted" data-smb-profile-mount-status style="font-size:12px">${r.is_mounted ? settingsT('profiles.mounted') : settingsT('profiles.notMounted')}</span>
         <span class="text-muted" style="font-size:12px">${settingsT('common.jobsCount', { count: Number(r.jobs_count || 0) })}</span>
       </div>
       <div class="smb-profile-optional hidden" data-smb-profile-optional>
@@ -1234,7 +1234,7 @@ function renderSettingsSmbProfiles(rows) {
       </div>
       <input type="hidden" id="smb-profiles-json" value='${escHtml(JSON.stringify(normalized))}'>
       <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:10px">
-        <button type="button" class="btn btn-secondary btn-sm" data-settings-action="smb-profile-check">${settingsT('common.checkStatus')}</button>
+        <button type="button" class="btn btn-secondary btn-sm" data-settings-action="smb-profile-check">${settingsT('profiles.connectionTest')}</button>
         <button type="button" class="btn btn-secondary btn-sm" data-settings-action="smb-profile-add">${settingsT('profiles.addSmb')}</button>
       </div>
       <div id="smb-profiles-msg" class="status-message hidden" style="margin-top:10px"></div>
@@ -6578,11 +6578,9 @@ async function onSettingsContentClick(event) {
     return;
   }
   if (action === 'smb-profile-check') return checkSmbProfilesStatus();
-  if (action === 'smb-profile-status' || action === 'smb-profile-mount' || action === 'smb-profile-unmount') {
+  if (action === 'smb-profile-mount' || action === 'smb-profile-unmount') {
     const row = event.target.closest('.smb-profile-row');
-    const smbAction = action === 'smb-profile-mount'
-      ? 'mount'
-      : (action === 'smb-profile-unmount' ? 'unmount' : 'status');
+    const smbAction = action === 'smb-profile-mount' ? 'mount' : 'unmount';
     return runSmbProfileAction(row, smbAction);
   }
   if (action === 'smb-profile-toggle-options') {
@@ -6960,49 +6958,106 @@ async function checkSmbProfilesStatus() {
   }
 }
 
-function refreshSelectedSmbProfileMountStatus(row = null) {
-  const selectedRow = row || document.querySelector('#smb-profiles-rows .smb-profile-row:not(.hidden)');
-  if (!selectedRow || settingsState.profileEditing === 'smb') return;
-  const profileKey = String(selectedRow.dataset?.profileKey || '').trim().toLowerCase();
-  if (!profileKey) return;
-  runSmbProfileAction(selectedRow, 'status', { silent: true });
+/** Render manual actions separately from the automatically observed mount state. */
+function renderSmbMountControls() {
+  return `<div class="smb-mount-controls">
+    <span class="smb-mount-state text-muted" data-smb-profile-mount-status role="status">${settingsT('profiles.mountStatusUnknown')}</span>
+    <div class="smb-mount-actions">
+      <button type="button" class="btn btn-secondary btn-sm" data-settings-action="smb-profile-mount">${settingsT('profiles.mountNow')}</button>
+      <button type="button" class="btn btn-secondary btn-sm" data-settings-action="smb-profile-unmount">${settingsT('profiles.unmountNow')}</button>
+    </div>
+    <small class="text-muted">${settingsT('profiles.passiveMountHint')}</small>
+  </div>`;
 }
 
+/** Update only status and action availability, preserving profile form values. */
+function updateSmbMountStatus(row, state) {
+  const mounted = state === 'mounted' || state === 'read_only';
+  const label = state === 'read_only' ? 'mountedReadOnly'
+    : mounted ? 'mounted' : state === 'not_mounted' ? 'notMounted' : 'mountStatusUnknown';
+  const status = row.querySelector('[data-smb-profile-mount-status]');
+  if (status) {
+    status.textContent = settingsT(`profiles.${label}`);
+    status.className = `smb-mount-state ${mounted ? 'text-success' : 'text-muted'}`;
+  }
+  const unavailable = !row.dataset.profileKey || settingsState.profileEditing === 'smb' || row.dataset.smbMountBusy === 'true';
+  const mount = row.querySelector('[data-settings-action="smb-profile-mount"]');
+  const unmount = row.querySelector('[data-settings-action="smb-profile-unmount"]');
+  if (mount) mount.disabled = unavailable || mounted;
+  if (unmount) unmount.disabled = unavailable || state === 'not_mounted';
+}
+
+/** Close the passive stream on navigation, editing or hidden browser tabs. */
+function stopSmbMountStatusWatch() {
+  settingsState.smbMountStatusSource?.close();
+  settingsState.smbMountStatusSource = null;
+}
+
+/** Subscribe to the selected saved path while its panel is visible.
+ * One authenticated connection carries kernel observations without repeated
+ * HTTP/auth-file reads. Closed or stale streams cannot update another selection.
+ */
+function refreshSelectedSmbProfileMountStatus(row = null) {
+  if (!settingsState.smbMountVisibilityBound) {
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) stopSmbMountStatusWatch();
+      else refreshSelectedSmbProfileMountStatus();
+    });
+    settingsState.smbMountVisibilityBound = true;
+  }
+  stopSmbMountStatusWatch();
+  const selected = row || document.querySelector('#smb-profiles-rows .smb-profile-row:not(.hidden)');
+  if (document.hidden || settingsState.activeTab !== 'smb' || settingsState.profileEditing === 'smb'
+      || window.BBUI.core?.getCurrentPage?.() !== 'settings' || !selected?.isConnected
+      || !selected.getClientRects().length || !selected.dataset.profileKey || selected.dataset.smbMountBusy === 'true') return;
+  const path = selected.querySelector('[data-smb-profile-path]')?.value || '';
+  if (!path) return;
+  const source = new EventSource(`/api/storage/smb-mount-status?mount_path=${encodeURIComponent(path)}`);
+  settingsState.smbMountStatusSource = source;
+  const current = () => settingsState.smbMountStatusSource === source && selected.isConnected;
+  source.onmessage = event => {
+    if (!current()) return;
+    try {
+      const data = JSON.parse(event.data);
+      updateSmbMountStatus(selected, data.mount_path === path ? data.mount_state : 'unknown');
+    } catch (_) { updateSmbMountStatus(selected, 'unknown'); }
+  };
+  source.onerror = () => { if (current()) updateSmbMountStatus(selected, 'unknown'); };
+  source.addEventListener('expired', () => {
+    if (!current()) return;
+    stopSmbMountStatusWatch();
+    updateSmbMountStatus(selected, 'unknown');
+  });
+}
+
+/** Perform one explicit saved-profile action and then resume passive observation.
+ * Disable duplicate manual actions while pending; errors remain visible to the user.
+ */
 async function runSmbProfileAction(row, action, options = {}) {
   const profileKey = String(row?.dataset?.profileKey || '').trim().toLowerCase();
   if (!profileKey) {
     if (!options.silent) showMsg('smb-profiles-msg', 'warning', settingsT('profiles.saveBeforeMountAction'));
     return;
   }
-  const statusEl = row.querySelector('[data-smb-profile-mount-status]');
-  const requestId = `${profileKey}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  row.dataset.smbMountStatusRequest = requestId;
-  if (action === 'status' && statusEl) {
-    statusEl.textContent = settingsT('profiles.mountStatusChecking');
-  }
+  if (row.dataset.smbMountBusy === 'true') return;
+  stopSmbMountStatusWatch();
+  row.dataset.smbMountBusy = 'true';
+  updateSmbMountStatus(row, 'unknown');
   try {
     const res = await fetch('/api/storage/smb-action', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ profile_key: profileKey, action }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || data.ok === false) throw new Error(apiErrorMessage(data, res.status));
-    const label = action === 'mount'
-      ? settingsT('profiles.mountActionOk')
-      : (action === 'unmount' ? settingsT('profiles.unmountActionOk') : settingsT('profiles.statusActionOk'));
-    if (!options.silent) showMsg('smb-profiles-msg', 'success', apiMessage(data, label));
-    const mounted = action === 'mount'
-      ? true
-      : (action === 'unmount' ? false : (typeof data.is_mounted === 'boolean' ? data.is_mounted : null));
-    if (mounted !== null && row.isConnected && row.dataset.smbMountStatusRequest === requestId) {
-      if (statusEl) statusEl.textContent = mounted ? settingsT('profiles.mounted') : settingsT('profiles.notMounted');
-    }
+    const label = settingsT(action === 'mount' ? 'profiles.mountActionOk' : 'profiles.unmountActionOk');
+    if (row.isConnected && !options.silent) showMsg('smb-profiles-msg', 'success', apiMessage(data, label));
   } catch (err) {
-    if (statusEl && action === 'status' && row.isConnected && row.dataset.smbMountStatusRequest === requestId) {
-      statusEl.textContent = settingsT('profiles.mountStatusUnknown');
-    }
-    if (!options.silent) showMsg('smb-profiles-msg', 'error', settingsT('profiles.mountActionFailed', { message: err.message }));
+    if (row.isConnected && !options.silent) showMsg('smb-profiles-msg', 'error', settingsT('profiles.mountActionFailed', { message: err.message }));
+  } finally {
+    delete row.dataset.smbMountBusy;
+    if (row.isConnected) updateSmbMountStatus(row, 'unknown');
+    refreshSelectedSmbProfileMountStatus();
   }
 }
 

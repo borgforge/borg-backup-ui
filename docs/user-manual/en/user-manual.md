@@ -1262,6 +1262,15 @@ Existing profile and repository paths remain unchanged; no reimport or file move
 
 SMB profiles define network shares. Passwords are treated as secrets.
 
+**Mount status and manual actions:** Mount drive and Unmount drive are manual actions. While the SMB page is visible, Mounted, Not mounted or Mount status unknown is refreshed every five seconds from the local kernel mount table and delivered over one open status connection. Authentication runs when connecting, without repeated HTTP status requests. This does not read NAS files or run a connection test. Refresh pauses in hidden browser tabs, on other pages and while editing a profile. Mounted does not confirm NAS reachability; Test connection and write access runs the active test only on request.
+
+**Mount path:** `/mnt/borg-backup-ui/smb/<profile>` is the attachment point for the remote share. It is separate from the configured persistent plugin data directory (for example `/mnt/user/borg_backup_ui`) and is not additional array storage. With the share mounted, repository data written there resides on the NAS. Without the mount, no repository may be created there; an empty directory alone is not an available backup target. The status display changes neither mount paths nor boot configuration.
+
+
+**Creating or importing repositories:** Both initial setup and repository management mount the SMB share for target validation and for repository creation or import. Neither automatic startup mounting nor Keep mounted needs to be enabled. During creation/import, the share remains mounted through the Borg information query. If mounting fails, no repository is created in the local mount-point directory. Pre-existing mounts are preserved; only temporary mounts created by that operation are subsequently unmounted, unless Keep mounted is enabled.
+
+**Repositories previously created locally:** Earlier versions could create a repository locally underneath an unmounted SMB mount point. Mounting the share hides it; it does not place those files on the NAS. Check the actual contents directly in the NAS file manager. This update does not move or delete such local repositories. Before cleanup, establish whether they contain successful backups; preserve data and keys until recovery or explicitly authorized cleanup has been determined.
+
 Important fields:
 
 - profile name

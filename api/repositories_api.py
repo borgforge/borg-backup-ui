@@ -210,7 +210,12 @@ def _looks_like_borg_repository(path: Path) -> bool:
 
 
 def validate_repository_target(config: dict, payload: dict[str, Any]) -> dict[str, Any]:
-    """Classify a repository target without modifying it or writing secrets."""
+    """Classify a target on its storage without changing repository data or secrets.
+
+    Temporarily mounts SMB storage independently of startup/keep-mounted settings.
+    Mount failures abort inspection; owned temporary mounts are released on exit.
+    Raises ValueError or RepositoryTargetConflict for invalid/inaccessible targets.
+    """
     if not isinstance(payload, dict):
         raise ValueError("Invalid repository payload")
     action = str(payload.get("action") or "import").strip().lower()
@@ -220,6 +225,17 @@ def validate_repository_target(config: dict, payload: dict[str, Any]) -> dict[st
     storage = _storage_by_key(config).get(storage_key)
     if not storage:
         raise ValueError("Storage target not found")
+    with _mounted_repository_storage(config, storage):
+        return _validate_repository_target_mounted(config, payload, storage)
+
+
+def _validate_repository_target_mounted(config: dict, payload: dict, storage: dict) -> dict:
+    """Classify a resolved target while the caller holds its storage mount.
+
+    Reads repository inventory/files only; propagates target validation errors.
+    """
+    action = str(payload.get("action") or "import").strip().lower()
+    storage_key = str(payload.get("storage_key") or "").strip()
     relative_path = _safe_relative_path(str(payload.get("relative_path") or payload.get("repository_name") or ""))
     repo_path = effective_repository_path(storage, relative_path)
 
@@ -684,6 +700,24 @@ def _mount_smb_storage_if_needed(
     if not mounted.get("ok"):
         raise error_type(str(mounted.get("message") or "SMB mount failed"))
     return _smb_storage_cleanup(config, storage, mounted)
+
+
+@contextmanager
+def _mounted_repository_storage(config: dict, storage: dict):
+    """Hold SMB storage for target validation or repository creation/import.
+
+    Local/SSH storage needs no mount. Existing mounts and keep-mounted preferences
+    are preserved. Mount errors abort before the operation; cleanup also runs on
+    errors and reports an unsuccessful unmount instead of silently succeeding.
+    """
+    cleanup = _mount_smb_storage_if_needed(config, storage, error_type=ValueError)
+    try:
+        yield
+    finally:
+        if cleanup:
+            result = cleanup()
+            if not result.get("ok"):
+                raise RuntimeError("SMB repository operation cleanup failed: could not unmount storage")
 
 
 @contextmanager
@@ -2452,8 +2486,11 @@ def apply_repository_lifecycle(
 def create_or_import_repository(config: dict, payload: dict[str, Any]) -> dict[str, Any]:
     """Create/import a repository object, optionally running borg init.
 
-    The command is intentionally scoped to repository management. Backup jobs
-    should only select existing repository objects.
+    Acquires SMB storage before validation, secret writes and Borg commands, and
+    holds it through metadata reads and inventory persistence. Mount failures
+    abort creation; only owned temporary mounts are released, also on errors.
+    Existing misplaced local repositories are never moved or deleted. Backup jobs
+    should only select existing repository objects. Validation/Borg errors propagate.
     """
     if not isinstance(payload, dict):
         raise ValueError("Invalid repository payload")
@@ -2466,6 +2503,18 @@ def create_or_import_repository(config: dict, payload: dict[str, Any]) -> dict[s
     if not storage:
         raise ValueError("Storage target not found")
 
+    with _mounted_repository_storage(config, storage):
+        return _create_or_import_repository_mounted(config, payload, storage)
+
+
+def _create_or_import_repository_mounted(config: dict, payload: dict, storage: dict) -> dict:
+    """Create/import on already acquired storage and persist its repository record.
+
+    The caller owns the mount lifetime. Borg/validation failures propagate; secret
+    rollback follows the existing creation/import error handling.
+    """
+    action = str(payload.get("action") or "import").strip().lower()
+    storage_key = str(payload.get("storage_key") or "").strip()
     display_name = str(payload.get("display_name") or "").strip()
     repo_name = _normalize_repo_segment(str(payload.get("repository_name") or display_name or "repository"))
     relative_path = _safe_relative_path(str(payload.get("relative_path") or repo_name))
@@ -2497,7 +2546,7 @@ def create_or_import_repository(config: dict, payload: dict[str, Any]) -> dict[s
     ), None)
 
     if action == "create":
-        validate_repository_target(config, payload)
+        _validate_repository_target_mounted(config, payload, storage)
 
     passphrase_ref = str((existing or {}).get("passphrase_ref") or "").strip()
     passphrase_file: Path | None = None
