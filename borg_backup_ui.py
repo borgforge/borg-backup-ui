@@ -972,6 +972,7 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                 "/api/jobs/running": self._get_running,
                 "/api/schedules": self._get_schedules,
                 "/api/storage": self._get_storage,
+                "/api/storage/smb-mount-status": lambda: self._get_smb_mount_status(parsed.query),
                 "/api/repositories": self._get_repositories,
                 "/api/notification-profiles": lambda: self._get_apprise_profiles(parsed.query),
                 "/api/notification-profiles/providers": self._get_apprise_profile_providers,
@@ -2013,6 +2014,16 @@ class BackupUIHandler(BaseHTTPRequestHandler):
     def _get_storage(self) -> dict:
         from config_api import get_repositories_data
         return get_repositories_data(self.config)
+
+    def _get_smb_mount_status(self, query: str) -> dict:
+        """Return passive kernel state for mount_path, without reading profile files."""
+        from urllib.parse import parse_qs
+        from smb_profiles_api import observe_smb_mount_status
+
+        values = parse_qs(query).get("mount_path", [])
+        if len(values) != 1:
+            raise ValueError("Exactly one mount_path is required")
+        return observe_smb_mount_status(values[0])
 
     def _get_repositories(self) -> dict:
         from repositories_api import read_repository_store_for_api

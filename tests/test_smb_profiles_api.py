@@ -261,3 +261,98 @@ def test_smb_profile_usage_blocks_delete_when_job_references_profile(tmp_path: P
 
     with pytest.raises(ValueError, match="SMB profile cannot be deleted"):
         validate_smb_profile_usage_before_save(config, [])
+
+
+@pytest.mark.parametrize("filesystem,options,expected", [
+    ("cifs", "rw", "mounted"), ("cifs", "ro", "read_only"),
+    ("xfs", "rw", "not_mounted"), ("tmpfs", "rw", "not_mounted"),
+])
+def test_passive_smb_status_reads_only_kernel_table(monkeypatch, filesystem, options, expected):
+    from smb_profiles_api import observe_smb_mount_status
+    from borg_backup_ui import BackupUIHandler
+    import subprocess
+
+    reads = []
+
+    def read_kernel(path, **kwargs):
+        assert str(path) == "/proc/self/mountinfo"
+        reads.append(str(path))
+        return ("1 0 0:1 / / rw - rootfs rootfs rw\n"
+                f"2 1 0:2 / /mnt/borg-backup-ui/smb/NAS\\040Backup {options} - {filesystem} //nas/share {options}\n")
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Passive status must not touch targets, config or subprocesses")
+
+    handler = BackupUIHandler.__new__(BackupUIHandler)
+    with monkeypatch.context() as guard:
+        guard.setattr(Path, 'read_text', read_kernel)
+        guard.setattr(Path, 'stat', forbidden)
+        guard.setattr(Path, 'mkdir', forbidden)
+        guard.setattr(Path, 'resolve', forbidden)
+        guard.setattr(subprocess, 'run', forbidden)
+        result = handler._get_smb_mount_status('mount_path=%2Fmnt%2Fborg-backup-ui%2Fsmb%2FNAS%20Backup')
+        missing = observe_smb_mount_status('/mnt/borg-backup-ui/smb/missing')
+    assert result['mount_state'] == expected
+    assert missing['mount_state'] == 'not_mounted'
+    assert len(reads) == 2
+
+
+def test_passive_smb_status_unreadable_table_is_unknown(monkeypatch):
+    from smb_profiles_api import observe_smb_mount_status
+    from runtime.lib import usb_storage
+
+    def unavailable():
+        raise OSError("unavailable")
+
+    monkeypatch.setattr(usb_storage, '_read_mounts', unavailable)
+    assert observe_smb_mount_status('/mnt/borg-backup-ui/smb/nas')['is_mounted'] is None
+
+
+@pytest.mark.parametrize('path', ['', 'relative', '/etc/passwd', '/mnt/../etc', '/mnt/a\x00b', '/mnt/' + 'a' * 4096])
+def test_passive_smb_status_rejects_invalid_paths(path):
+    from smb_profiles_api import observe_smb_mount_status
+    with pytest.raises(ValueError):
+        observe_smb_mount_status(path)
+
+
+def test_passive_smb_status_http_auth_and_validation(monkeypatch, tmp_path):
+    import http.client
+    import threading
+    import borg_backup_ui
+    from borg_backup_ui import BackupUIHandler, ThreadedHTTPServer
+
+    monkeypatch.setattr(borg_backup_ui, '_log', lambda *_: None)
+
+    class Handler(BackupUIHandler):
+        def _auth_store_failure(self): return ''
+        def _ui_auth_enabled(self): return False
+        def _get_api_token(self): return 'smb-status-test'
+        def _get_current_role(self): return 'viewer'
+        def _security_audit(self, *_args, **_kwargs): pass
+
+    Handler.config = {'BACKUP_SCRIPTS_DIR': str(tmp_path)}
+    handler = Handler.__new__(Handler)
+    assert not handler._should_log_api_success('GET', '/api/storage/smb-mount-status', 1, 100)
+    server = ThreadedHTTPServer(('127.0.0.1', 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        for query, token, status in [
+            ('mount_path=/mnt/borg-backup-ui/smb/missing', '', 401),
+            ('mount_path=/mnt/borg-backup-ui/smb/missing', 'smb-status-test', 200),
+            ('', 'smb-status-test', 400),
+            ('mount_path=/mnt/a&mount_path=/mnt/b', 'smb-status-test', 400),
+        ]:
+            conn = http.client.HTTPConnection('127.0.0.1', server.server_port)
+            conn.request('GET', '/api/storage/smb-mount-status?' + query,
+                         headers={'Authorization': 'Bearer ' + token} if token else {})
+            response = conn.getresponse()
+            body = json.loads(response.read())
+            assert response.status == status
+            if status == 200:
+                assert body['mount_state'] == 'not_mounted'
+            conn.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()

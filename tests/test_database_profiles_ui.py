@@ -24,3 +24,4 @@ def test_storage_profile_save_workflow_browser():
     if available.returncode:
         pytest.skip('Playwright and Chromium are required for profile workflow checks')
     subprocess.run(['node', 'tests/profile_save_workflow_ui.cjs'], cwd=Path(__file__).resolve().parents[1], check=True)
+    subprocess.run(['node', 'tests/smb_mount_status_ui.cjs'], cwd=Path(__file__).resolve().parents[1], check=True)
