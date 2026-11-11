@@ -312,6 +312,11 @@ Publication still requires a passing audit against current advisory data.
 
 - **Missing/expired CI evidence:** request testing, or run CI on main with the
   selected exact SHA. The resolver starts at most one CI and waits up to 45 min.
+- **Transient Python supplier download failure:** the downloader retries HTTP
+  408/429/500/502/503/504 and temporary connection/transfer failures with
+  5/10/20/40-second delays (five attempts total). If the source remains unavailable,
+  CI still fails. Restore upstream reachability, rerun all CI jobs and retry testing;
+  checksum/certificate failures require investigation and are never bypassed.
 - **Failed CI:** fix the change or use **Re-run all jobs**, then retry testing.
   Evidence belongs to a complete run attempt; mixing successful jobs across
   partial reruns is not a reusable proof.
