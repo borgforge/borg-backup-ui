@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.11.08.1742">
+<!ENTITY version   "2026.11.11.1135">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -20,6 +20,15 @@
 
 <CHANGES>
 <![CDATA[
+###2026.11.11.1135###
+### Bug Fixes
+
+- Mount SMB storage before repository target validation, creation and import in initial setup and repository management, even when automatic mounting and Keep mounted are disabled. Keep the mount through Borg metadata reads, abort on mount failure and preserve pre-existing mounts. Previously misplaced local repositories are not automatically moved or deleted. (#726)
+
+### Improvements
+
+- Show SMB mount status automatically while the settings page is visible, using passive local mount observations over one live connection without repeated authentication-file reads. Keep Mount drive and Unmount drive as compact manual actions and distinguish the explicit connection/write test. No mount paths are changed. (#730)
+
 ###2026.11.08.1742###
 ### Migration and compatibility
 
@@ -56,27 +65,6 @@
 - Explain manual versus automatic local-dump retention beside the profile setting and show the policy recorded at creation in each run's details, in German and English. (#691)
 - Match Browse & Restore and Restore History width to Jobs. Reports and Browse & Restore now start with Choose job and load job-specific data only after an explicit selection, in German and English. (#692)
 
-###2026.11.02.1337###
-### Migration and compatibility
-
-- Upgrade Apprise from 1.13.1 to 2.1.0 with 158 available base providers. Existing profiles and secrets are preserved. Amazon Chime is retired; affected profiles show a warning and need another provider. URL options are validated more strictly, and legacy PGP email options have changed; see the provider inventory. No credentials or saved URLs are automatically converted. (#672)
-
-### Bug Fixes
-
-- Honor notification timeouts in worker threads and profile tests. Timeouts count as failed attempts, but already running requests may still arrive later and retries can cause duplicate notifications. Keep late provider logs private. (#672)
-- Show overdue backups directly in collapsed job cards alongside the last run outcome. Keep only the overdue count in Latest backup runs; the detailed job list remains under Needs attention. (#679)
-- Keep the Jobs location selector in normal scroll flow so it no longer overlaps job headings and cards. (#680)
-
-### Security
-
-- Update bundled certifi, OAuthlib and urllib3 to address the upstream certificate-trust, OAuth and HTTP/TLS advisories reported by dependency scanning. (#672)
-
-### Improvements
-
-- **Docker start and stop order per job:** Drag containers or use the arrows in the Order list of the job wizard's Docker step. After the backup they start from top to bottom, and before the backup they stop one by one in reverse order, so a database at the top stops last and starts first. A custom order replaces the backup.start.priority groups and their pauses for the listed containers, and no mode waits for application readiness. Without changes, jobs keep the previous behavior with the labels. Contributed by [JonaxScript](https://github.com/JonaxScript). (#670)
-- Open Docker start and stop guidance from a compact link in the job wizard, reducing scrolling while keeping the full explanation available in a dialog. (#674)
-- Bring expanded Job and Restore Test cards into view when necessary, matching repository cards. Keep keyboard focus and respect reduced motion; background refreshes do not move the page. (#681)
-
 ]]>
 </CHANGES>
 
@@ -102,8 +90,8 @@ PLUGIN_DIR="/boot/config/plugins/${NAME}"
 PACKAGE_FILE="${PLUGIN_DIR}/${NAME}-${VERSION}.txz"
 PACKAGE_TMP="${PACKAGE_FILE}.tmp"
 PACKAGE_URL="&pkgurl;"
-EXPECTED_MD5="99f623a695e14891d851f90b1b2daf8f"
-EXPECTED_SHA256="e9c1233aec63bfc400db4d6ef84bb76ade4ce3112a61e92a05e2f78452639847"
+EXPECTED_MD5="b9e9a9c949e0ff17e6f415aec46595ba"
+EXPECTED_SHA256="6070d7f06d8968b16d08d156644be12ec302124d526c7b12137ec5f7ace61469"
 INSTALLED_MD5_FILE="${PLUGIN_DIR}/.installed-package-md5"
 VENDOR_DIR="${PLUGIN_DIR}/runtime/vendor"
 VENDOR_BUNDLE_DIR="${PLUGIN_DIR}/runtime/vendor-bundles"
