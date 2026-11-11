@@ -362,7 +362,7 @@
     c.setAction('stopRTPolling', typeof stopRTPolling === 'function' ? stopRTPolling : null);
     c.setAction('refreshStorage', typeof refreshStorage === 'function' ? refreshStorage : null);
     c.setAction('berichtInit', typeof berichtInit === 'function' ? berichtInit : null);
-    c.setAction('stopSmbMountStatusPolling', typeof stopSmbMountStatusPolling === 'function' ? stopSmbMountStatusPolling : null);
+    c.setAction('stopSmbMountStatusWatch', typeof stopSmbMountStatusWatch === 'function' ? stopSmbMountStatusWatch : null);
     c.setAction('refreshSettings', typeof refreshSettings === 'function' ? refreshSettings : null);
     c.setAction('refreshHistory', typeof refreshHistory === 'function' ? refreshHistory : null);
     c.setAction('helpInit', typeof helpInit === 'function' ? helpInit : null);

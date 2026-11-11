@@ -347,12 +347,63 @@ def test_passive_smb_status_http_auth_and_validation(monkeypatch, tmp_path):
             conn.request('GET', '/api/storage/smb-mount-status?' + query,
                          headers={'Authorization': 'Bearer ' + token} if token else {})
             response = conn.getresponse()
-            body = json.loads(response.read())
             assert response.status == status
             if status == 200:
+                assert response.getheader('Content-Type').startswith('text/event-stream')
+                assert response.readline().startswith(b'retry:')
+                assert response.readline() == b'\n'
+                body = json.loads(response.readline().removeprefix(b'data: '))
                 assert body['mount_state'] == 'not_mounted'
+            else:
+                response.read()
             conn.close()
     finally:
         server.shutdown()
         server.server_close()
         thread.join()
+
+
+@pytest.mark.parametrize('expired', [False, True])
+def test_passive_stream_does_not_reauthenticate_or_read_stores(monkeypatch, expired):
+    import io
+    import time
+    from types import SimpleNamespace
+    import borg_backup_ui as app
+    import smb_profiles_api
+
+    handler = app.BackupUIHandler.__new__(app.BackupUIHandler)
+    handler.headers = {'Cookie': 'bbui_session=mount-stream-test'}
+    handler._current_request_id = 'test'
+    handler._refreshed_session_cookie = ''
+    handler.wfile = io.BytesIO()
+    handler.send_response = lambda *_: None
+    handler.send_header = lambda *_: None
+    handler.end_headers = lambda: None
+    reads = []
+
+    def observe(path):
+        reads.append(path)
+        if len(reads) > 2:
+            raise BrokenPipeError()
+        return {'mount_path': path, 'mount_state': 'mounted', 'is_mounted': True}
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError('A connected stream must not read authentication files')
+
+    monkeypatch.setattr(smb_profiles_api, 'observe_smb_mount_status', observe)
+    monkeypatch.setattr(app, '_read_users_store', forbidden)
+    monkeypatch.setattr(app, '_read_sessions_store', forbidden)
+    monkeypatch.setattr(app, 'time', SimpleNamespace(time=time.time, monotonic=time.monotonic, sleep=lambda _: None))
+    monkeypatch.setattr(app.BackupUIHandler, '_UI_SESSIONS', {'mount-stream-test': {
+        'expires_at': time.time() + (-10 if expired else 100), 'created_at': time.time(),
+    }})
+    handler._handle_smb_mount_status_stream('mount_path=/mnt/borg-backup-ui/smb/nas')
+    output = handler.wfile.getvalue()
+    if expired:
+        assert b'event: expired' in output
+        assert b'mount_state' not in output
+        assert len(reads) == 1
+    else:
+        assert output.count(b'data: ') == 1
+        assert b': mount-status heartbeat' in output
+        assert len(reads) == 3

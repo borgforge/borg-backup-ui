@@ -33,8 +33,7 @@ window.BBUI.settingsState = window.BBUI.settingsState || {
   storageDeployPollTimer: null,
   storageDeployCloseSnapshot: '',
   storageboxProfileKey: '',
-  smbMountStatusTimer: null,
-  smbMountStatusRequest: null,
+  smbMountStatusSource: null,
   smbCleanupKeys: [],
   smbSecretCleanupKeys: [],
   authStatus: null,
@@ -135,7 +134,7 @@ function settingsMenuIcon(key) {
 
 /** Load settings and system health before rendering the selected settings tab. */
 async function refreshSettings() {
-  stopSmbMountStatusPolling();
+  stopSmbMountStatusWatch();
   hideEl('settings-message');
   _renderSettingsLoading();
   try {
@@ -404,7 +403,7 @@ async function activateSettingsTab(tabKey) {
   }
   if (previousTab !== active.key) settingsState.databaseDirty = false;
   if (previousTab !== active.key) window.BBUI?.utils?.dom?.clearPageFeedback?.();
-  stopSmbMountStatusPolling();
+  stopSmbMountStatusWatch();
   settingsState.activeTab = active.key;
   settingsState.profileEditing = '';
 
@@ -624,7 +623,7 @@ function syncSettingsProfileManager(type, selectLast = false) {
   const footer = manager.querySelector('.settings-profile-editor > footer');
   if (footer) footer.classList.toggle('hidden', !editing);
   if (type === 'smb') {
-    stopSmbMountStatusPolling();
+    stopSmbMountStatusWatch();
     rows.forEach(row => updateSmbMountStatus(row, 'unknown'));
     if (selectedRow && !editing && settingsState.activeTab === 'smb') refreshSelectedSmbProfileMountStatus(selectedRow);
   }
@@ -6988,50 +6987,44 @@ function updateSmbMountStatus(row, state) {
   if (unmount) unmount.disabled = unavailable || state === 'not_mounted';
 }
 
-/** Cancel passive refresh on navigation, editing or hidden browser tabs. */
-function stopSmbMountStatusPolling() {
-  clearTimeout(settingsState.smbMountStatusTimer);
-  settingsState.smbMountStatusTimer = null;
-  settingsState.smbMountStatusRequest?.abort();
-  settingsState.smbMountStatusRequest = null;
+/** Close the passive stream on navigation, editing or hidden browser tabs. */
+function stopSmbMountStatusWatch() {
+  settingsState.smbMountStatusSource?.close();
+  settingsState.smbMountStatusSource = null;
 }
 
-/** Observe the selected saved path every five seconds while its panel is visible.
- * Reads only a passive API; never invokes the SMB action or connection test API.
- * Aborted/stale responses cannot overwrite a new selection or manual action.
+/** Subscribe to the selected saved path while its panel is visible.
+ * One authenticated connection carries kernel observations without repeated
+ * HTTP/auth-file reads. Closed or stale streams cannot update another selection.
  */
-async function refreshSelectedSmbProfileMountStatus(row = null) {
-  stopSmbMountStatusPolling();
+function refreshSelectedSmbProfileMountStatus(row = null) {
+  stopSmbMountStatusWatch();
   const selected = row || document.querySelector('#smb-profiles-rows .smb-profile-row:not(.hidden)');
   if (document.hidden || settingsState.activeTab !== 'smb' || settingsState.profileEditing === 'smb'
       || window.BBUI.core?.getCurrentPage?.() !== 'settings' || !selected?.isConnected
       || !selected.getClientRects().length || !selected.dataset.profileKey || selected.dataset.smbMountBusy === 'true') return;
   const path = selected.querySelector('[data-smb-profile-path]')?.value || '';
   if (!path) return;
-  const controller = new AbortController();
-  settingsState.smbMountStatusRequest = controller;
-  const timeout = setTimeout(() => controller.abort(), 8000);
-  const current = () => settingsState.smbMountStatusRequest === controller && selected.isConnected;
-  try {
-    const res = await fetch(`/api/storage/smb-mount-status?mount_path=${encodeURIComponent(path)}`, {
-      signal: controller.signal, cache: 'no-store',
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    if (current()) updateSmbMountStatus(selected, data.mount_path === path ? data.mount_state : 'unknown');
-  } catch (_) {
-    if (current()) updateSmbMountStatus(selected, 'unknown');
-  } finally {
-    clearTimeout(timeout);
-    if (current()) {
-      settingsState.smbMountStatusRequest = null;
-      settingsState.smbMountStatusTimer = setTimeout(() => refreshSelectedSmbProfileMountStatus(), 5000);
-    }
-  }
+  const source = new EventSource(`/api/storage/smb-mount-status?mount_path=${encodeURIComponent(path)}`);
+  settingsState.smbMountStatusSource = source;
+  const current = () => settingsState.smbMountStatusSource === source && selected.isConnected;
+  source.onmessage = event => {
+    if (!current()) return;
+    try {
+      const data = JSON.parse(event.data);
+      updateSmbMountStatus(selected, data.mount_path === path ? data.mount_state : 'unknown');
+    } catch (_) { updateSmbMountStatus(selected, 'unknown'); }
+  };
+  source.onerror = () => { if (current()) updateSmbMountStatus(selected, 'unknown'); };
+  source.addEventListener('expired', () => {
+    if (!current()) return;
+    stopSmbMountStatusWatch();
+    updateSmbMountStatus(selected, 'unknown');
+  });
 }
 
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) stopSmbMountStatusPolling();
+  if (document.hidden) stopSmbMountStatusWatch();
   else refreshSelectedSmbProfileMountStatus();
 });
 
@@ -7045,7 +7038,7 @@ async function runSmbProfileAction(row, action, options = {}) {
     return;
   }
   if (row.dataset.smbMountBusy === 'true') return;
-  stopSmbMountStatusPolling();
+  stopSmbMountStatusWatch();
   row.dataset.smbMountBusy = 'true';
   updateSmbMountStatus(row, 'unknown');
   try {

@@ -1262,7 +1262,7 @@ Existing profile and repository paths remain unchanged; no reimport or file move
 
 SMB profiles define network shares. Passwords are treated as secrets.
 
-**Mount status and manual actions:** Mount drive and Unmount drive are manual actions. While the SMB page is visible, Mounted, Not mounted or Mount status unknown is refreshed every five seconds from the local kernel mount table. This does not read NAS files or run a connection test. Refresh pauses in hidden browser tabs, on other pages and while editing a profile. Mounted does not confirm NAS reachability; Test connection and write access runs the active test only on request.
+**Mount status and manual actions:** Mount drive and Unmount drive are manual actions. While the SMB page is visible, Mounted, Not mounted or Mount status unknown is refreshed every five seconds from the local kernel mount table and delivered over one open status connection. Authentication runs when connecting, without repeated HTTP status requests. This does not read NAS files or run a connection test. Refresh pauses in hidden browser tabs, on other pages and while editing a profile. Mounted does not confirm NAS reachability; Test connection and write access runs the active test only on request.
 
 **Mount path:** `/mnt/borg-backup-ui/smb/<profile>` is the attachment point for the remote share. It is separate from the configured persistent plugin data directory (for example `/mnt/user/borg_backup_ui`) and is not additional array storage. With the share mounted, repository data written there resides on the NAS. Without the mount, no repository may be created there; an empty directory alone is not an available backup target. The status display changes neither mount paths nor boot configuration.
 
