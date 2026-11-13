@@ -322,7 +322,7 @@ def test_run_completes_fix_evidence_before_any_issue_write(monkeypatch):
     def fail(*args):
         raise ValueError('candidate metadata unavailable')
     monkeypatch.setattr(fixes, 'discover', fail)
-    with pytest.raises(ValueError, match='unavailable'):
+    with pytest.raises(monitor.monitor.MonitorFailure, match='fix candidate evidence: invalid or incomplete metadata'):
         monitor.run(apply=True)
     assert writes == []
 

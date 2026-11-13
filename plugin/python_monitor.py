@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 from datetime import date
+from email.utils import parsedate_to_datetime
 import hashlib
+import http.client
 import json
 import os
 import re
 import sys
 import tarfile
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -24,6 +28,10 @@ ROOT = monitor.ROOT
 PEPS = 'https://peps.python.org/api/python-releases.json'
 LATEST = 'https://raw.githubusercontent.com/astral-sh/python-build-standalone/latest-release/latest-release.json'
 NVD = 'https://services.nvd.nist.gov/rest/json/cves/2.0'
+NVD_ATTEMPTS = 3
+NVD_SCAN_SECONDS = 720
+READ_TIMEOUT = 60
+MAX_RETRY_AFTER = 120
 # Product identities, not version pins. Version/build/native versions come only
 # from the same provenance that the package builder verifies and ships.
 PRODUCTS = {
@@ -50,19 +58,115 @@ claim that every listed CVE is exploitable in Borg Backup UI.
 '''
 
 
-def read_json(url: str) -> dict:
-    """Read bounded public metadata without credentials, redirects or silent fallback."""
+@contextmanager
+def phase(name: str):
+    """Attach a caller-controlled stage to sanitized failures, never raw exception text."""
+    try:
+        yield
+    except monitor.MonitorFailure:
+        raise
+    except (ValueError, RuntimeError, OSError, KeyError, TypeError, AttributeError) as exc:
+        kind = ('timeout' if isinstance(exc, TimeoutError) else
+                'connection/read failure' if isinstance(exc, OSError) else
+                'invalid or incomplete metadata' if isinstance(exc, (ValueError, KeyError, TypeError, AttributeError)) else
+                'operation failed')
+        raise monitor.MonitorFailure(f'{name}: {kind}; no complete result') from None
+
+
+def source_label(url: str) -> str:
+    """Identify approved metadata requests without logging URLs, headers or upstream prose."""
+    if url == LATEST:
+        return 'supplier release pointer'
+    if url == PEPS:
+        return 'Python lifecycle metadata'
+    params = urllib.parse.parse_qs(urllib.parse.urlsplit(url).query)
+    page = params.get('startIndex', ['0'])[0]
+    page = page if re.fullmatch(r'\d{1,5}', page) else 'unknown'
+    cpe = params.get('virtualMatchString', [''])[0]
+    for name, product in PRODUCTS.items():
+        prefix = f'cpe:2.3:a:{product}:'
+        if product and cpe.startswith(prefix):
+            version = cpe[len(prefix):].split(':')[0]
+            if re.fullmatch(r'[0-9A-Za-z.+_-]{1,80}', version):
+                return f'NVD {name} {version} startIndex={page}'
+    keyword = params.get('keywordSearch', [''])[0]
+    if keyword in ('libedit', 'libuuid', 'mpdecimal'):
+        return f'NVD {keyword} startIndex={page}'
+    identifier = params.get('cveId', [''])[0]
+    if re.fullmatch(r'CVE-\d{4}-\d{4,20}', identifier):
+        return f'NVD {identifier}'
+    return 'NVD metadata'
+
+
+def retry_after_seconds(value: str | None) -> float:
+    """Parse Retry-After seconds/date; invalid hints use backoff, oversized waits abort."""
+    if not value:
+        return 0
+    if re.fullmatch(r'\d+', value):
+        return float(value) if len(value) < 10 else MAX_RETRY_AFTER + 1
+    try:
+        return max(0, parsedate_to_datetime(value).timestamp() - time.time())
+    except (ValueError, TypeError, OverflowError):
+        return 0
+
+
+def read_json(url: str, *, deadline: float | None = None) -> dict:
+    """Read bounded, credential-free JSON; retry transient NVD reads at most three times.
+
+    NVD timeouts, connection failures and HTTP 408/429/500/502/503/504 use 15/30s
+    backoff and bounded Retry-After hints. A monotonic scan deadline prevents
+    cumulative retries from exhausting the job. Permanent HTTP/schema failures
+    abort immediately. Only sanitized request identity and failure categories
+    enter logs; no stale response or partial result is returned on failure.
+    """
     if not (url in (PEPS, LATEST) or url.startswith(NVD + '?')):
         raise ValueError('Unapproved Python monitor source')
+    label = source_label(url)
+    attempts = NVD_ATTEMPTS if url.startswith(NVD + '?') else 1
+    if deadline is None:
+        deadline = time.monotonic() + NVD_SCAN_SECONDS
     request = urllib.request.Request(url, headers={'Accept': 'application/json', 'User-Agent': 'borg-backup-ui-dependency-monitor'})
-    with urllib.request.build_opener(monitor.NoRedirect).open(request, timeout=60) as response:
-        raw = response.read(16 * 1024 * 1024 + 1)
-    if len(raw) > 16 * 1024 * 1024:
-        raise ValueError('Monitor response exceeds size bound')
-    result = json.loads(raw)
-    if not isinstance(result, dict):
-        raise ValueError('Monitor response must be an object')
-    return result
+    for attempt in range(1, attempts + 1):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise monitor.MonitorFailure(f'{label}: scan time budget exhausted before attempt {attempt}')
+        wait = 15 * attempt
+        retryable = True
+        print(f'Metadata read: {label}; attempt {attempt}/{attempts}', file=sys.stderr, flush=True)
+        try:
+            with urllib.request.build_opener(monitor.NoRedirect).open(request, timeout=min(READ_TIMEOUT, remaining)) as response:
+                raw = response.read(16 * 1024 * 1024 + 1)
+            if len(raw) > 16 * 1024 * 1024:
+                raise monitor.MonitorFailure(f'{label}: response exceeds size bound')
+            result = json.loads(raw)
+            if not isinstance(result, dict):
+                raise monitor.MonitorFailure(f'{label}: JSON response must be an object')
+            if time.monotonic() >= deadline:
+                raise monitor.MonitorFailure(f'{label}: scan time budget exhausted during response read')
+            print(f'Metadata read completed: {label}; attempt {attempt}/{attempts}', file=sys.stderr, flush=True)
+            return result
+        except urllib.error.HTTPError as exc:
+            reason = f'HTTP {int(exc.code)}'
+            retryable = exc.code in (408, 429, 500, 502, 503, 504)
+            wait = max(wait, retry_after_seconds(exc.headers.get('Retry-After') if exc.headers else None))
+            exc.close()
+        except TimeoutError:
+            reason = 'read/connect timeout'
+        except urllib.error.URLError as exc:
+            reason = 'read/connect timeout' if isinstance(exc.reason, TimeoutError) else 'connection/TLS failure'
+        except OSError:
+            reason = 'connection/read failure'
+        except http.client.HTTPException:
+            reason = 'incomplete or invalid HTTP response'
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            raise monitor.MonitorFailure(f'{label}: invalid JSON response') from None
+        detail = f'{label}: {reason}; attempt {attempt}/{attempts}'
+        if not retryable or attempt == attempts:
+            raise monitor.MonitorFailure(detail + '; request failed') from None
+        if wait > MAX_RETRY_AFTER or wait >= deadline - time.monotonic():
+            raise monitor.MonitorFailure(detail + '; retry delay exceeds remaining scan budget or wait limit') from None
+        print(f'{detail}; retrying in {wait:g}s', file=sys.stderr, flush=True)
+        time.sleep(wait)
 
 
 def finding(key: str, title: str, text: str, *, security: bool = False) -> dict:
@@ -433,28 +537,36 @@ def preserve_native_triage(actions: list, found: list, issues: list) -> None:
 
 def run(apply: bool = False) -> dict:
     """Collect complete upstream evidence before reconciling bot-authored issues."""
-    if apply:
-        monitor.require_main_job('python-monitor.yml')
-        monitor.hosted.bot()
-    versions = baselines(ROOT)
-    tag = read_json(LATEST)['tag']
-    if not re.fullmatch(r'\d{8}', tag):
-        raise ValueError('Invalid latest supplier tag')
-    supplier = monitor.evidence.api(f'repos/astral-sh/python-build-standalone/releases/tags/{tag}')
-    pep = read_json(PEPS)
+    deadline = time.monotonic() + NVD_SCAN_SECONDS
+    with phase('protected workflow and bot identity'):
+        if apply:
+            monitor.require_main_job('python-monitor.yml')
+            monitor.hosted.bot()
+    with phase('stable/source runtime inventory'):
+        versions = baselines(ROOT)
+    with phase('supplier release metadata'):
+        tag = read_json(LATEST)['tag']
+        if not re.fullmatch(r'\d{8}', tag):
+            raise ValueError('Invalid latest supplier tag')
+        supplier = monitor.evidence.api(f'repos/astral-sh/python-build-standalone/releases/tags/{tag}')
+    with phase('Python lifecycle metadata'):
+        pep = read_json(PEPS)
     cache = {}
     def cached_request(url):
         """Reuse identical public queries within this complete multi-build scan."""
         if url not in cache:
-            cache[url] = read_json(url)
+            cache[url] = read_json(url, deadline=deadline)
         return cache[url]
     scoped = []
     for scope, lock in versions:
-        found = release_findings(lock, pep, supplier, date.today())
-        found += security_findings(lock, request=cached_request)
+        with phase('release and lifecycle assessment'):
+            found = release_findings(lock, pep, supplier, date.today())
+        with phase('NVD component/schema assessment'):
+            found += security_findings(lock, request=cached_request)
         scoped.append((scope, found))
-    found = merge_findings(scoped)
-    annotate_remediation(found, scoped, versions, list(cache.values()))
+    with phase('baseline remediation assessment'):
+        found = merge_findings(scoped)
+        annotate_remediation(found, scoped, versions, list(cache.values()))
     candidates = {}
 
     def candidate_inventory(lock, supplier, version, root):
@@ -464,13 +576,15 @@ def run(apply: bool = False) -> dict:
             candidates[key] = fix_monitor.candidate_inventory(lock, supplier, version, root)
         return candidates[key]
 
-    reviews = fix_monitor.review_replacements(versions, supplier, pep, sys.modules[__name__], candidate_inventory)
+    with phase('supplier replacement inventory'):
+        reviews = fix_monitor.review_replacements(versions, supplier, pep, sys.modules[__name__], candidate_inventory)
     for item in found:
         if item['key'] in reviews:
             item['text'] += '\n\n' + reviews[item['key']]
-    issues = monitor.existing_issues()
-    actions, deferred = monitor.plan_updates(found, issues, namespace='python', checklist=CHECKLIST)
-    preserve_native_triage(actions, found, issues)
+    with phase('GitHub issue inventory and reconciliation plan'):
+        issues = monitor.existing_issues()
+        actions, deferred = monitor.plan_updates(found, issues, namespace='python', checklist=CHECKLIST)
+        preserve_native_triage(actions, found, issues)
 
     def fix_request(url):
         """Rate-limit additional CVE lookups and reuse complete source responses."""
@@ -478,14 +592,18 @@ def run(apply: bool = False) -> dict:
             time.sleep(6.5)
         return cached_request(url)
 
-    fixes = fix_monitor.discover(versions, supplier, pep, issues, fix_request, sys.modules[__name__], candidate_inventory)
-    notice = fix_monitor.notification(fixes, issues)
+    with phase('fix candidate evidence'):
+        fixes = fix_monitor.discover(versions, supplier, pep, issues, fix_request, sys.modules[__name__], candidate_inventory)
+    with phase('GitHub notification history'):
+        notice = fix_monitor.notification(fixes, issues)
     notified = 0
     if apply:
-        for action in actions:
-            monitor.write_issue(action, workflow='python-monitor.yml')
-        if notice:
-            notified = fix_monitor.publish(fixes)
+        with phase('GitHub issue updates'):
+            for action in actions:
+                monitor.write_issue(action, workflow='python-monitor.yml')
+        with phase('GitHub fix notification publication'):
+            if notice:
+                notified = fix_monitor.publish(fixes)
     return {'mode': 'apply' if apply else 'preview',
             'scan_status': 'complete', 'release_authorized': False,
             'fix_candidates': len(fixes), 'new_fix_notifications': notice['count'] if notice else 0,
@@ -502,7 +620,8 @@ if __name__ == '__main__':
     parser.add_argument('--apply', action='store_true')
     args = parser.parse_args()
     try:
-        result = monitor.checked('Python upstream metadata, inventory or issue reconciliation', run, args.apply)
+        with phase('monitor orchestration'):
+            result = run(args.apply)
     except monitor.MonitorFailure as exc:
         print(f'Python monitor failed during {exc}; no all-clear result. See the Python runtime maintainer guide.', file=sys.stderr)
         sys.exit(1)
