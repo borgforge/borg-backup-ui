@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.11.11.1135">
+<!ENTITY version   "2026.11.13.1206">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -20,6 +20,11 @@
 
 <CHANGES>
 <![CDATA[
+###2026.11.13.1206###
+### Security
+
+- Update SQLite in the bundled Python 3.13 runtime to 3.54.1 to address the tracked SQLite library vulnerabilities. The plugin includes the updated private runtime for offline use; an independently installed external Python remains managed by its provider. (#732, #706, #707, #708, #709, #710, #711, #712, #713, #714, #715, #718)
+
 ###2026.11.11.1135###
 ### Bug Fixes
 
@@ -52,19 +57,6 @@
 - Include a sanitized database profile inventory in support bundles so diagnostic tools can resolve profile IDs and current backup settings. Exclude credentials and distinguish unavailable profile data from an empty inventory or a failed backup. (#703)
 - Update bundled Apprise to 2.2.0 with 170 available notification providers, including 12 new services. Burst SMS is now listed as Kudosity; existing URLs, profiles and secrets remain supported without migration. (#721)
 
-###2026.11.03.1237###
-### Bug Fixes
-
-- Fix automatic removal of verified database dumps on Btrfs pools. Preserve the archived status of all verified database profiles if local cleanup fails, and log cleanup start, completion and failure separately. Older and manual dumps remain unchanged. (#694)
-
-### Improvements
-
-- Show configured database backups with a Database marker on job cards. Add export start, progress and outcome messages to the job log, separate from Borg archive verification. Clarify that database exports run automatically before Docker/VM shutdown and Borg backup, without an additional pre-script. (#689)
-- Compare local database dumps in a compact table with separate job/manual filters, newest-first ordering, pagination and expandable paths and cleanup actions. Clarify that a job archives only its current dumps and manifest, while older and manual dumps remain governed by local retention. (#691)
-- Use the clear Archived status for local database dumps and explain file-size/checksum verification in the details without implying that a separate restore test was not performed. (#691)
-- Explain manual versus automatic local-dump retention beside the profile setting and show the policy recorded at creation in each run's details, in German and English. (#691)
-- Match Browse & Restore and Restore History width to Jobs. Reports and Browse & Restore now start with Choose job and load job-specific data only after an explicit selection, in German and English. (#692)
-
 ]]>
 </CHANGES>
 
@@ -90,8 +82,8 @@ PLUGIN_DIR="/boot/config/plugins/${NAME}"
 PACKAGE_FILE="${PLUGIN_DIR}/${NAME}-${VERSION}.txz"
 PACKAGE_TMP="${PACKAGE_FILE}.tmp"
 PACKAGE_URL="&pkgurl;"
-EXPECTED_MD5="b9e9a9c949e0ff17e6f415aec46595ba"
-EXPECTED_SHA256="6070d7f06d8968b16d08d156644be12ec302124d526c7b12137ec5f7ace61469"
+EXPECTED_MD5="d63ed9ecaa0070b01d1a8d1334250d0d"
+EXPECTED_SHA256="2050c306cf327b90ea0710230e56a7ffe35d7175fdef636a506010974757665a"
 INSTALLED_MD5_FILE="${PLUGIN_DIR}/.installed-package-md5"
 VENDOR_DIR="${PLUGIN_DIR}/runtime/vendor"
 VENDOR_BUNDLE_DIR="${PLUGIN_DIR}/runtime/vendor-bundles"
