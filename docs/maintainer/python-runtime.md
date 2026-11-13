@@ -245,6 +245,27 @@ source/schema errors and access failures are visible failed runs, never a quiet
 all-clear. No credentials go to upstream metadata endpoints. Only validated
 identifiers/versions and locally constructed links enter issue bodies.
 
+NVD transport recovery (#720) retries timeouts, connection/read failures and
+HTTP 408/429/500/502/503/504 at most three times per request. Each attempt has
+a maximum 60-second socket timeout. Retries wait 15 then 30 seconds, or the
+server's longer `Retry-After` (seconds or HTTP date). A requested wait over
+120 seconds or beyond the remaining scan budget fails instead of retrying early.
+The existing 6.5-second spacing between ordinary NVD requests remains in place.
+NVD requests share a 720-second budget measured from scan start; time spent on
+earlier inventory and metadata reads also consumes it. The workflow allows
+15 minutes, leaving time for checkout and GitHub reconciliation after bounded
+retries. This handles transient failures, not a persistent
+NVD outage; no API key, stale cache or empty-success fallback is introduced.
+
+Logs identify the approved source, NVD component/version or CVE, pagination
+offset, attempt and sanitized error category (timeout, connection, HTTP status,
+JSON/size failure). Other failures identify the inventory, assessment, GitHub
+history or write phase. Upstream response bodies, arbitrary exception messages,
+URLs and headers are not logged. Permanent HTTP errors and malformed responses
+fail without retries. For a failed run, inspect the final phase and preceding
+request attempts; retry the protected main workflow after upstream recovery.
+Only a complete scan may proceed to issue reconciliation and fix notifications.
+
 Issues use a separate `bbui-python-monitor` managed block, preserving maintainer
 notes/checklists. CVEs affecting several components are grouped. Unchanged
 findings cause no write. `status::waiting` and not-planned closures defer;
