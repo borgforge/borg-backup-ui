@@ -147,10 +147,12 @@ def test_unapproved_endpoint_never_reaches_network(transport):
     assert transport.calls == []
 
 
-def test_phase_error_keeps_stage_but_masks_untrusted_exception():
-    with pytest.raises(monitor.monitor.MonitorFailure, match='GitHub notification history: invalid or incomplete metadata') as exc:
+@pytest.mark.parametrize('error,category', [(ValueError(SECRET), 'invalid or incomplete metadata'),
+                                         (http.client.BadStatusLine(SECRET), 'connection/read failure')])
+def test_phase_error_keeps_stage_but_masks_untrusted_exception(error, category):
+    with pytest.raises(monitor.monitor.MonitorFailure, match=f'GitHub notification history: {category}') as exc:
         with monitor.phase('GitHub notification history'):
-            raise ValueError(SECRET)
+            raise error
     assert SECRET not in str(exc.value)
 
 

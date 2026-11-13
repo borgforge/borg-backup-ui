@@ -65,9 +65,9 @@ def phase(name: str):
         yield
     except monitor.MonitorFailure:
         raise
-    except (ValueError, RuntimeError, OSError, KeyError, TypeError, AttributeError) as exc:
+    except (ValueError, RuntimeError, OSError, http.client.HTTPException, KeyError, TypeError, AttributeError) as exc:
         kind = ('timeout' if isinstance(exc, TimeoutError) else
-                'connection/read failure' if isinstance(exc, OSError) else
+                'connection/read failure' if isinstance(exc, (OSError, http.client.HTTPException)) else
                 'invalid or incomplete metadata' if isinstance(exc, (ValueError, KeyError, TypeError, AttributeError)) else
                 'operation failed')
         raise monitor.MonitorFailure(f'{name}: {kind}; no complete result') from None
