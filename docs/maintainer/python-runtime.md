@@ -2,13 +2,12 @@
 
 ## Release status and ownership
 
-The source implementation is not a stable-release announcement. The first
-stable version without a Python 3 for Unraid requirement is **not assigned**:
-Unraid tests and explicit test/stable approval are pending. Published stable
-2026.11.03.1237 still needs external Python. When promoting the verified test
-candidate, record the first stable version here and in the English/German
-installation instructions, README and CA descriptions. The #548 release-note
-fragment makes the change explicit in that release's manifest.
+Published stable **2026.11.11.1135** contains the private CPython 3.13.18
+runtime based on supplier build 20261026, including SQLite 3.53.1. The source
+update in #732 builds the same Python series with SQLite 3.54.1; it is not a
+stable-release announcement. Its test candidate requires real Unraid acceptance
+and separate explicit stable approval. Keep the stable and planned inventories
+separate until the tested artifact is actually promoted.
 
 The Borg Backup UI maintainer owns Python/native-library updates, triage and
 compatibility testing. The daily monitor does not update hosts or authorize
@@ -24,13 +23,13 @@ is merged before its stable release, both builds remain monitored; duplicate
 findings are grouped. Older releases without private Python do not create a
 fictitious shipped-runtime baseline. The initial supplier is
 [Astral python-build-standalone](https://docs.astral.sh/python-build-standalone/),
-CPython 3.13.18, build 20261026, ordinary GIL, x86_64-unknown-linux-gnu (not v2/v3).
+CPython 3.13.18, ordinary GIL, x86_64-unknown-linux-gnu (not v2/v3).
 The 3.13 series is deliberately bounded; new stable series require compatibility
 review. External Python 3.10 through 3.13 must pass the same import/operation probe.
 Compatibility with an old external version is not an upstream support guarantee.
 
-The full provenance archive, supplier-stripped install archive, downloads
-inventory, supplier license and `PYTHON.json`
+For unmodified upstream builds, the full provenance archive, supplier-stripped
+install archive, downloads inventory, supplier license and `PYTHON.json`
 are SHA256-pinned. The builder compares Python version, target, glibc requirement,
 linked libraries and native source versions to the committed inventory. It
 rejects unknown linked libraries or inventory drift. Native versions come from
@@ -40,7 +39,8 @@ source ID, compile options, session symbol and CLI presence;
 runtime checks also exercise SSL, SQLite,
 compression, authentication and the exact packaged Apprise dependencies.
 
-The full supplier archive is a build input only. Executable binaries come from
+For unmodified upstream builds the full supplier archive is a build input only.
+Executable binaries come from
 the separately pinned `install_only_stripped` archive from the same release.
 This removes debug data while preserving supplier-produced relocation metadata.
 Package build and validation reject payloads above GitHub's 100 MiB ordinary
@@ -80,6 +80,78 @@ not a claim of completed Unraid host testing. Memory use includes the extracted
 runtime; insufficient RAM, missing/corrupt payload or failed probes fail with a
 repair message. The control page can stage the runtime for recovery while the
 service is stopped.
+
+## Source-built SQLite remediation (#732)
+
+The planned runtime uses supplier source commit
+`9244801782b78e4c4afc5c82a4524aa2101d3298` (20261110), with SQLite **3.54.1**.
+`runtime/python/source-build.lock.json` pins the source archive, SQLite archive
+and amalgamation hash, original/patched dependency inventory, the SQLite test
+expectation, uv driver and build options. Supplier source changes are limited to
+the SQLite dependency pin, its distribution-test version expectation and disabling
+optional BOLT for this x86_64 target. PGO and LTO remain enabled. The original
+BOLT-instrumented profiling run crashed in `test_functools.test_recursive_pickle`;
+the final non-BOLT binary passes the unfiltered SQLite, functools and pickle
+suites with an explicitly recorded 16 MiB **test-process** stack. The recursive
+pickle case also crashes at 8 MiB in the unchanged supplier binary and the
+non-BOLT build. This is not a BOLT-only or SQLite regression. Runtime stack
+defaults remain unchanged; deep recursive pickling at 8 MiB remains an open
+limitation tracked in [#733](https://github.com/borgforge/borg-backup-ui/issues/733).
+BBUI application persistence does not use pickle; user-supplied hooks are outside
+that assessment. Similar upstream reports provide context, not an exact root-cause
+claim: [CPython #157062](https://github.com/python/cpython/issues/157062) and
+[LLVM #225479](https://github.com/llvm/llvm-project/issues/225479).
+Dependencies/toolchain/sysroot follow that immutable supplier source. Python
+remains 3.13.18, ordinary GIL, x86_64 GNU with a glibc 2.17 ceiling.
+
+`plugin/python_source_build.py` builds all dependencies and CPython in Docker
+using the supplier's PGO/LTO recipe. Docker/Buildx, the hash-pinned uv driver,
+an explicit bootstrap Python and substantial free disk space are prerequisites.
+Scratch and caches stay under `.release-tmp/`; no credentials are needed to
+compile. For example, with the driver/bootstrap paths chosen explicitly:
+
+```bash
+python3 plugin/python_source_build.py build --work .release-tmp/python-source \
+  --uv /absolute/path/to/verified/uv --python /absolute/path/to/bootstrap/python
+python3 plugin/python_source_build.py package --work .release-tmp/python-source \
+  --destination .release-tmp/python-source/output
+```
+
+Packaging checks source integrity again, strips ELF debug sections, runs the
+supplier distribution tests and CPython SQLite/functools/pickle tests, verifies
+actual Python/SQLite/OpenSSL/native features and every ELF's glibc symbols, then
+writes an input archive and proposed lockfile. It does not overwrite committed
+pins. Preserve the full build/log for review; copy the reviewed archive into
+`runtime/python/inputs/` and the generated lock into `runtime/python/runtime.lock.json`.
+The input archive includes the install tree, original licenses, Python metadata,
+modified supplier dependency inventory and a source-build receipt. Its SHA256,
+recipe and receipt hashes are committed. Rebuilding is input-pinned; byte-for-byte
+compiler reproducibility is not claimed. This receipt is not CI authorization.
+
+Normal GitHub CI and the existing protected testing pipeline consume this pinned
+input without compiling CPython in a credential-bearing publishing job. The
+builder checks recipe/archive/receipt/inventory/native-version agreement. The
+pipeline still runs the complete application checks and private-runtime checks.
+The source input archive is excluded from the installed plugin payload; users
+receive only the final private runtime bundle. There is no runtime download on
+Unraid and no host-library replacement. Legacy upstream inputs remain readable
+for already published stable provenance.
+
+The lock records a distinct `custom_build.id` and a SQLite security floor of
+3.54.1. The monitor scans actual component versions, independently for current
+source and the published stable payload. While stable is still affected, its
+CVE issues remain open and the managed block states when the planned build has
+crossed explicit advisory fix bounds. Missing search results alone never prove a
+fix. New supplier builds are checked against the combined stable/planned security
+floors; a newer build date with older SQLite is labelled an unsuitable replacement
+and cannot trigger a misleading fix notification. Returning to an upstream build
+requires reviewed metadata, meeting these floors and the normal tests.
+
+CVE-2026-119379 (session) and CVE-2026-119586 (native CLI) remain visible findings,
+with scoped non-applicability only when verified native facts prove the required
+feature absent. Updating those facts keeps a manually closed issue closed if all
+matching baselines still lack the prerequisite. Missing facts or a newly enabled
+feature restore ordinary potential/reopen behavior. No CVE is globally ignored.
 
 ## Build-time download retries (#728)
 

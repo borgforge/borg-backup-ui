@@ -57,13 +57,14 @@ def package_owns_path(name: str) -> bool:
 
 
 def verify_package_permissions(members: list[tarfile.TarInfo]) -> None:
+    """Reject unowned paths, non-root owners and unsafe directory/file/hardlink modes."""
     for member in members:
         name = member.name.removeprefix("./").rstrip("/")
         if not package_owns_path(name):
             raise RuntimeError(f"Package contains a shared or unexpected system path: {member.name}")
         if member.uid != 0 or member.gid != 0:
             raise RuntimeError(f"Package member is not owned by root:root: {member.name}")
-        if member.isdir() or member.isfile():
+        if member.isdir() or member.isfile() or member.islnk():
             expected = 0o755 if member.isdir() or member.mode & 0o111 else 0o644
             if member.mode != expected:
                 raise RuntimeError(f"Package member has unsafe permissions: {member.name}")
@@ -80,7 +81,8 @@ def build_package(root: Path, package: Path) -> None:
 
     The portable builder compresses once, in sorted order with SOURCE_DATE_EPOCH
     timestamps (zero when unset). Native makepkg retains its generated hooks and
-    the existing normalization pass. Portable output is replaced atomically
+    the normalization pass, including hardlink aliases regardless of archive
+    order. Portable output is replaced atomically
     after validation. Invalid epoch, paths or archive metadata raise an error.
     """
     epoch = int(os.environ.get("SOURCE_DATE_EPOCH", "0"))
@@ -130,7 +132,7 @@ def build_package(root: Path, package: Path) -> None:
                 # PAX metadata must not override the normalized ownership.
                 for key in ("uid", "gid", "uname", "gname", "mtime", "atime", "ctime"):
                     member.pax_headers.pop(key, None)
-                if member.isdir() or member.isfile():
+                if member.isdir() or member.isfile() or member.islnk():
                     member.mode = 0o755 if member.isdir() or member.mode & 0o111 else 0o644
                 target.addfile(member, source.extractfile(member) if member.isfile() else None)
         with tarfile.open(filtered, "r:xz") as archive:

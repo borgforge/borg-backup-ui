@@ -1,0 +1,59 @@
+{
+  "bolt_enabled": false,
+  "build_patches": [
+    {
+      "after_sha256": "2c19628c6a02c9252fea6d5cd3570ac11f510bbb7cdf9f1966c1fc92df55d7ee",
+      "before_sha256": "885fc423f6942a81e52046bde8714798b643cabd8a0986d833c82badf5bd6442",
+      "new": "  openssl_target: linux-x86_64\n  bolt_capable: false\n\nx86_64_v2-unknown-linux-gnu:",
+      "old": "  openssl_target: linux-x86_64\n  bolt_capable: true\n\nx86_64_v2-unknown-linux-gnu:",
+      "path": "cpython-unix/targets.yml",
+      "reason": "Disable optional BOLT after the initial instrumented profiling run failed; PGO and LTO remain enabled. The recursive-pickle stack limitation also occurs without BOLT and upstream (BBUI #733)."
+    }
+  ],
+  "cpu_count": 4,
+  "glibc_minimum": "2.17",
+  "id": "bbui-cpython-3.13.18-sqlite-3.54.1-r1",
+  "known_limitations": [
+    {
+      "description": "Recursive pickle crashes at an 8 MiB stack in both the upstream binary and this build; unfiltered native suites use an explicit 16 MiB test stack. Runtime defaults remain unchanged.",
+      "issue": 733
+    }
+  ],
+  "native_test_modules": [
+    "test_sqlite3",
+    "test_functools",
+    "test_pickle"
+  ],
+  "native_test_stack_bytes": 16777216,
+  "options": "pgo+lto",
+  "original_downloads_sha256": "d48f25ee30c3ba8006c9a3046d4d3c5ec061a3f1fd831a1e44562f2e8547ef60",
+  "patched_downloads_sha256": "fa07b959e5ffc049936724b64ee0617227e1be89b9ed91349e4c7366bbee73a4",
+  "python": "3.13.18",
+  "release_tag": "20261113",
+  "schema": 1,
+  "series": "cpython-3.13",
+  "source_archive_sha256": "727b1f6b58d90987951c0071eda7c47c0a3a210452d6006c4bc8074236528cc4",
+  "sqlite": {
+    "actual_version": "3.54.1.0",
+    "sha256": "926ef8d3eab93fbf6e06011901273eec076b25594a4e1cdadd50c987f4f6d64e",
+    "size": 3332984,
+    "sqlite3_c_sha3_256": "e2b869d3003b33c942b7dd7063604fbc53553e1b66609570df39b9b7b558ee81",
+    "url": "https://www.sqlite.org/2026/sqlite-autoconf-3540100.tar.gz",
+    "version": "3540100"
+  },
+  "supplier": "astral-sh/python-build-standalone",
+  "supplier_build": "20261110",
+  "supplier_commit": "9244801782b78e4c4afc5c82a4524aa2101d3298",
+  "target": "x86_64-unknown-linux-gnu",
+  "test_expectation_patch": {
+    "after_sha256": "f77f0d6a1d93ddd355a1f10858e1a8d750f7bf24b2c42730ea089e6d06d31a4e",
+    "before_sha256": "972c8c3ad2d65e97c88ed9938d063f666d2392360f2655de6037e77fc1f9021e",
+    "new": "(sqlite3.sqlite_version_info, (3, 54, 1))",
+    "old": "(sqlite3.sqlite_version_info, (3, 53, 1))",
+    "path": "pythonbuild/disttests/__init__.py"
+  },
+  "uv": {
+    "version": "0.13.8",
+    "wheel_sha256": "e18a57b8b352eb7c8feb317b9f6f533c8f0ad9673fd6cf34bbe3cf1a9f6a8984"
+  }
+}

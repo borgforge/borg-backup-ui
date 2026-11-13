@@ -120,6 +120,7 @@ def test_artifact_validation_rejects_shared_directories_even_with_0755(tmp_path,
 
 @pytest.mark.parametrize("kind,mode,uid", [(tarfile.DIRTYPE, 0o775, 0),
                                          (tarfile.REGTYPE, 0o664, 0),
+                                         (tarfile.LNKTYPE, 0o664, 0),
                                          (tarfile.REGTYPE, 0o4755, 0),
                                          (tarfile.REGTYPE, 0o644, 1000)])
 def test_artifact_validation_rejects_unsafe_payload_metadata(kind, mode, uid):
@@ -180,3 +181,27 @@ def test_portable_package_is_reproducible_across_mtimes_and_rejects_unowned_file
     with pytest.raises(RuntimeError, match="unexpected system path"):
         workflow.build_package(stage, first)
     assert first.read_bytes() == original
+
+
+@pytest.mark.parametrize("alias_first", [False, True])
+@pytest.mark.parametrize("mode", [0o600, 0o664, 0o775])
+def test_makepkg_normalizes_both_hardlink_names(tmp_path, monkeypatch, alias_first, mode):
+    """Every hardlink header is normalized even when its usual filename is the alias (#735)."""
+    monkeypatch.setattr(workflow.shutil, "which", lambda _: "makepkg")
+    monkeypatch.setattr(workflow.subprocess, "run", lambda *a, **k: None)
+    package = tmp_path / "plugin.txz"
+    names = [APP + "/config.example", APP + "/config-hardlink"]
+    if alias_first:
+        names.reverse()
+    with tarfile.open(package, "w:xz") as archive:
+        data = tarfile.TarInfo(names[0])
+        data.mode, data.size = mode, 7
+        archive.addfile(data, io.BytesIO(b"payload"))
+        alias = tarfile.TarInfo(names[1])
+        alias.type, alias.linkname, alias.mode = tarfile.LNKTYPE, names[0], mode
+        archive.addfile(alias)
+    workflow.build_package(tmp_path, package)
+    with tarfile.open(package) as archive:
+        members = archive.getmembers()
+        assert {entry.mode for entry in members} == ({0o755} if mode & 0o111 else {0o644})
+        assert archive.extractfile(names[0]).read() == archive.extractfile(names[1]).read() == b"payload"

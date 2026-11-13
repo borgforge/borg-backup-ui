@@ -147,55 +147,106 @@ print(json.dumps(facts))
     return facts
 
 
+
+def custom_inputs(lock: dict, root: Path, unpacked: Path) -> tuple[Path, Path]:
+    """Verify a repository-pinned source-build input and extract its data safely.
+
+    The source recipe and build receipt are bound to the runtime lock. This is
+    artifact provenance, not a substitute for GitHub CI or release approval.
+    Return source inventory/license paths; reject changed pins or build identity.
+    """
+    custom = lock['custom_build']
+    relative = Path(custom['artifact'])
+    if relative.is_absolute() or '..' in relative.parts or relative.parts[:1] != ('inputs',):
+        raise ValueError('Invalid custom Python input path')
+    artifact = root / 'runtime/python' / relative
+    recipe = root / 'runtime/python/source-build.lock.json'
+    if sha256(artifact) != lock['sha256'] or sha256(recipe) != custom['recipe_sha256']:
+        raise ValueError('Custom Python input or source recipe checksum mismatch')
+    with tarfile.open(artifact) as source:
+        members = source.getmembers()
+        if any(not member.name.startswith('python/') and not (member.name == 'python' and member.isdir())
+               for member in members):
+            raise ValueError('Unexpected custom Python archive layout')
+        source.extractall(unpacked, filter='data')
+    receipt = unpacked / 'python/source-build.json'
+    if sha256(receipt) != custom['receipt_sha256']:
+        raise ValueError('Custom Python build receipt checksum mismatch')
+    facts = json.loads(receipt.read_text())
+    if (facts['recipe_sha256'] != custom['recipe_sha256'] or facts['id'] != custom['id']
+            or facts['python_version'] != lock['version'] or facts['target'] != lock['target']):
+        raise ValueError('Custom Python build receipt identity mismatch')
+    downloads = unpacked / 'python/supplier-downloads.json'
+    license_path = unpacked / 'python/SUPPLIER-LICENSE.txt'
+    if (sha256(downloads) != lock['downloads_sha256']
+            or sha256(license_path) != lock['supplier_license_sha256']):
+        raise ValueError('Custom Python source inventory/license mismatch')
+    return downloads, license_path
+
+
+def validate_component_floors(lock: dict, components: dict) -> None:
+    """Reject missing/non-numeric versions or regressions below committed security floors."""
+    for name, floor in lock.get('minimum_component_versions', {}).items():
+        current = components.get(name, {}).get('version', '')
+        def numeric(value):
+            """Parse a dotted numeric native-library version without guessing suffixes."""
+            if not isinstance(value, str) or not value or any(not p.isdecimal() for p in value.split('.')):
+                raise ValueError('Unverifiable native-library security floor')
+            return tuple(int(p) for p in value.split('.'))
+        if numeric(current) < numeric(floor):
+            raise ValueError('Native library is below its required security floor')
+
+
 def build(destination: Path, cache: Path, root: Path = ROOT) -> dict:
     """Verify upstream provenance and create a deterministic portable bundle.
 
-    Only the supplier-stripped install tree and licenses are shipped; compiler objects, headers,
+    Only a verified stripped install tree and licenses are shipped; compiler objects, headers,
     pip, ensurepip and stdlib tests are omitted. No interpreter is installed on
     the build host. Errors prevent package publication.
     """
     lock = json.loads((root / 'runtime/python/runtime.lock.json').read_text())
     cache.mkdir(parents=True, exist_ok=True)
     destination.mkdir(parents=True, exist_ok=True)
-    release = f"https://github.com/{lock['supplier']}/releases/download/{lock['build']}"
-    raw = f"https://raw.githubusercontent.com/{lock['supplier']}/{lock['build']}"
-    archive = cache / lock['archive']
-    fetch(release + '/' + urllib.parse.quote(lock['archive']), archive, lock['sha256'])
-    downloads_path = cache / 'downloads.json'
-    license_path = cache / 'SUPPLIER-LICENSE.txt'
-    fetch(raw + '/pythonbuild/downloads.json', downloads_path, lock['downloads_sha256'])
-    fetch(raw + '/LICENSE', license_path, lock['supplier_license_sha256'])
     unpacked = cache / 'unpacked'
     if unpacked.exists():
         shutil.rmtree(unpacked)
     unpacked.mkdir()
-    tar_path = cache / 'upstream.tar'
-    with tar_path.open('wb') as out:
-        subprocess.run(['zstd', '-d', '-c', str(archive)], stdout=out, check=True)
-    with tarfile.open(tar_path) as source:
-        source.extractall(unpacked, filter='data')
-    tar_path.unlink()
+    if lock.get('custom_build'):
+        downloads_path, license_path = custom_inputs(lock, root, unpacked)
+    else:
+        release = f"https://github.com/{lock['supplier']}/releases/download/{lock['build']}"
+        raw = f"https://raw.githubusercontent.com/{lock['supplier']}/{lock['build']}"
+        archive = cache / lock['archive']
+        fetch(release + '/' + urllib.parse.quote(lock['archive']), archive, lock['sha256'])
+        downloads_path = cache / 'downloads.json'
+        license_path = cache / 'SUPPLIER-LICENSE.txt'
+        fetch(raw + '/pythonbuild/downloads.json', downloads_path, lock['downloads_sha256'])
+        fetch(raw + '/LICENSE', license_path, lock['supplier_license_sha256'])
+        tar_path = cache / 'upstream.tar'
+        with tar_path.open('wb') as out:
+            subprocess.run(['zstd', '-d', '-c', str(archive)], stdout=out, check=True)
+        with tarfile.open(tar_path) as source:
+            source.extractall(unpacked, filter='data')
+        tar_path.unlink()
+        stripped = cache / lock['install_archive']
+        fetch(release + '/' + urllib.parse.quote(lock['install_archive']), stripped, lock['install_sha256'])
+        selected = cache / 'selected'
+        if selected.exists():
+            shutil.rmtree(selected)
+        selected.mkdir()
+        with tarfile.open(stripped) as source:
+            source.extractall(selected, filter='data')
+        shutil.rmtree(unpacked / 'python/install')
+        shutil.move(str(selected / 'python'), unpacked / 'python/install')
     metadata_path = unpacked / 'python/PYTHON.json'
     if sha256(metadata_path) != lock['metadata_sha256']:
         raise ValueError('Python metadata checksum mismatch')
     metadata = json.loads(metadata_path.read_text())
     components = inventory(metadata, json.loads(downloads_path.read_text()), lock)
     if components != lock['components']:
-        raise ValueError('Committed Python inventory differs from supplier provenance')
-    # Use the supplier's stripped binaries (separately pinned), preserving its
-    # relocation/version metadata. The full archive supplies build evidence and
-    # license texts. Avoid shipping debug data that exceeds GitHub's file limit.
-    stripped = cache / lock['install_archive']
-    fetch(release + '/' + urllib.parse.quote(lock['install_archive']), stripped, lock['install_sha256'])
-    selected = cache / 'selected'
-    if selected.exists():
-        shutil.rmtree(selected)
-    selected.mkdir()
-    with tarfile.open(stripped) as source:
-        source.extractall(selected, filter='data')
+        raise ValueError('Committed Python inventory differs from source-build provenance')
+    validate_component_floors(lock, components)
     install = unpacked / 'python/install'
-    shutil.rmtree(install)
-    shutil.move(str(selected / 'python'), install)
     for path in list(install.rglob('*.a')) + [install / 'include']:
         if path.is_dir():
             shutil.rmtree(path)
@@ -223,7 +274,13 @@ def build(destination: Path, cache: Path, root: Path = ROOT) -> dict:
     shutil.copy2(license_path, install / 'licenses/PYTHON-BUILD-STANDALONE.txt')
     shutil.copy2(metadata_path, install / 'PYTHON.json')
     shutil.copy2(downloads_path, install / 'supplier-downloads.json')
+    if lock.get('custom_build'):
+        shutil.copy2(unpacked / 'python/source-build.json', install / 'source-build.json')
     native = native_facts(install / 'bin' / ('python' + metadata['python_major_minor_version']), lock)
+    if lock.get('custom_build'):
+        receipt = json.loads((unpacked / 'python/source-build.json').read_text())
+        if native != receipt['native_facts'] or native != lock.get('native_facts'):
+            raise ValueError('Executed custom runtime differs from its build receipt')
     provenance = {**lock, 'components': components, 'native_facts': native}
     (install / 'provenance.json').write_text(json.dumps(provenance, indent=2, sort_keys=True) + '\n')
     bundle = destination / 'python-runtime.tar.xz'
