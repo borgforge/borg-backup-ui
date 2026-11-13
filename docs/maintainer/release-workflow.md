@@ -163,7 +163,9 @@ and the existing manifest changelog retention. Mixed source/release PRs fail.
 Package checks cover manifest channel URLs, MD5 and SHA256, embedded source and
 note provenance, required payload, vendor bundle and safe permissions. Shared
 host directory entries are omitted; payload directories/executables are 0755,
-other regular files 0644, with root ownership. Existing host permissions are
+other regular files 0644, with root ownership. Hardlink aliases follow the same
+file-mode normalization and validation in both portable and makepkg builds (#735),
+regardless of which name holds the data in the archive. Existing host permissions are
 preserved; an already affected host still needs the documented manual recovery.
 
 The release PR uses artifact-only CI. Optional local `release-preflight.sh`
