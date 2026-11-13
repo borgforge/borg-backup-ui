@@ -74,6 +74,17 @@ def finding(key: str, title: str, text: str, *, security: bool = False) -> dict:
     return result
 
 
+def runtime_identity(lock: dict) -> str:
+    """Distinguish a local source-build revision from its upstream base release."""
+    identity = lock['version'] + '+' + lock['build']
+    if lock.get('custom_build'):
+        identifier = lock['custom_build']['id']
+        if not re.fullmatch(r'[A-Za-z0-9.+_-]{1,100}', identifier):
+            raise ValueError('Invalid custom runtime identity')
+        identity += ' / ' + identifier
+    return identity
+
+
 def release_findings(lock: dict, pep: dict, supplier: dict, today: date) -> list[dict]:
     """Detect actual stable releases, same-version rebuilds and 180/90/0-day EOL gates."""
     current = Version(lock['version'])
@@ -122,7 +133,7 @@ def release_findings(lock: dict, pep: dict, supplier: dict, today: date) -> list
         raise ValueError('Latest supplier release lacks the stripped runtime artifact')
     if candidate > current or (candidate == current and tag > lock['build']):
         output.append(finding(f'release:build-{candidate}-{tag}', f'Review Python runtime build {candidate}+{tag}',
-                              f'Monitored build: {current}+{lock["build"]}. Available: {candidate}+{tag}.\n'
+                              f'Monitored build: {runtime_identity(lock)}. Available: {candidate}+{tag}.\n'
                               f'Source: https://github.com/astral-sh/python-build-standalone/releases/tag/{tag}\n'
                               'Urgency: review native-library and security changes, including same-version rebuilds.'))
     eol = date.fromisoformat(metadata[series]['end_of_life'])
@@ -227,6 +238,18 @@ def keyword_mentions_component(cve: dict, name: str) -> bool:
     return any(re.search(r'(?<![a-z0-9])' + re.escape(alias) + r'(?![a-z0-9])', text) for alias in aliases)
 
 
+def native_non_applicability(identifier: str, lock: dict) -> str | None:
+    """Recognize audited missing prerequisites from verified runtime facts, never hide CVEs."""
+    facts = lock.get('native_facts', {})
+    if identifier == 'CVE-2026-119586' and facts.get('sqlite_cli') is False:
+        return 'Native SQLite CLI is absent; its .recover command is not shipped.'
+    if (identifier == 'CVE-2026-119379' and facts.get('sqlite_session_symbol') is False
+            and isinstance(facts.get('sqlite_compile_options'), list)
+            and 'ENABLE_SESSION' not in facts['sqlite_compile_options']):
+        return 'SQLite session extension and sqlite3changeset_apply symbol are absent.'
+    return None
+
+
 def security_findings(lock: dict, request=read_json, pause=time.sleep) -> list[dict]:
     """Query all shipped components with NVD rate limiting and bounded pagination.
 
@@ -293,14 +316,19 @@ def security_findings(lock: dict, request=read_json, pause=time.sleep) -> list[d
     output = []
     for identifier, record in sorted(by_cve.items()):
         digest = facts_digest(record['facts'])
-        output.append(finding(f'security:{identifier}', f'Review private Python runtime advisory {identifier}',
-                              f'Monitored build: {lock["version"]}+{lock["build"]}.\n'
+        absent = native_non_applicability(identifier, lock)
+        classification = (f'Classification: not applicable to this exact build. {absent} '
+                          'Reassess whenever native build facts change.\n' if absent else
+                          'Classification: potential; version/CPE matches do not prove reachability or a fix. '
+                          'Review compile options and CLI presence separately.\n')
+        item = finding(f'security:{identifier}', f'Review private Python runtime advisory {identifier}',
+                              f'Monitored build: {runtime_identity(lock)}.\n'
                               f'Potentially affected components: {", ".join(sorted(record["components"]))}.\n'
                               f'Source and affected/fixed version ranges: https://nvd.nist.gov/vuln/detail/{identifier}\n'
                               'Urgency: security triage now; confirm platform/feature applicability and supplier fixes.\n'
-                              'Classification: potential; version/CPE matches do not prove reachability or a fix. '
-                              'Review compile options and CLI presence separately.\n'
-                              f'Advisory facts SHA256: {digest}', security=True))
+                              + classification + f'Advisory facts SHA256: {digest}', security=True)
+        item['applicability'] = 'not_applicable' if absent else 'potential'
+        output.append(item)
     return output
 
 
@@ -334,7 +362,7 @@ def baselines(root=ROOT) -> list[tuple[str, dict]]:
         member = archive.extractfile('boot/config/plugins/borg-backup-ui/runtime/python/python-runtime.json')
         shipped = json.loads(member.read())
     same = all(shipped.get(key) == source.get(key) for key in
-               ('version', 'build', 'components', 'sha256', 'install_sha256'))
+               ('version', 'build', 'components', 'sha256', 'install_sha256', 'custom_build', 'minimum_component_versions'))
     if same:
         return [(f'published stable {version} and current source', shipped)]
     return [(f'published stable {version}', shipped), ('planned source update', source)]
@@ -348,9 +376,59 @@ def merge_findings(scoped: list[tuple[str, list[dict]]]) -> list[dict]:
             text = f'Scope: {scope}.\n' + item['text']
             if item['key'] in grouped:
                 grouped[item['key']]['text'] += '\n\n' + text
+                if item.get('applicability') != 'not_applicable':
+                    grouped[item['key']]['applicability'] = 'potential'
             else:
                 grouped[item['key']] = {**item, 'text': text}
     return list(grouped.values())
+
+
+def annotate_remediation(found: list, scoped: list, versions: list, responses: list) -> None:
+    """Explain positively evidenced fixed baselines while an older stable CVE remains open.
+
+    Reuse complete NVD records from this scan. An absent result alone does not
+    establish a fix and never closes an issue automatically.
+    """
+    records = {}
+    for response in responses:
+        for row in response.get('vulnerabilities', []):
+            records[row['cve']['id']] = row['cve']
+    affected = {scope: {item['key'] for item in items} for scope, items in scoped}
+    engine = sys.modules[__name__]
+    for item in found:
+        if not item['key'].startswith('security:'):
+            continue
+        cve = records.get(item['key'].split(':', 1)[1])
+        if not cve:
+            continue
+        for scope, candidate in versions:
+            if item['key'] in affected[scope]:
+                continue
+            for previous_scope, previous in versions:
+                if item['key'] not in affected[previous_scope]:
+                    continue
+                fixes = fix_monitor.fixed_components(cve, previous, candidate, engine)
+                if fixes:
+                    components = ', '.join(part['component'] + ' ' + part['after'] for part in fixes)
+                    item['text'] += (f'\n\nScope: {scope}.\nRuntime: {runtime_identity(candidate)}.\n'
+                                     f'Fix present by explicit advisory version bounds: {components}. '
+                                     'Other affected baselines remain tracked; no automatic closure or release approval.')
+                    break
+
+
+def preserve_native_triage(actions: list, found: list, issues: list) -> None:
+    """Keep manually closed native-inapplicable CVEs closed while updating their evidence.
+
+    A missing/changed prerequisite fact restores ordinary potential/reopen logic.
+    This never closes an issue or suppresses its managed-block updates.
+    """
+    non_applicable = {item['key'] for item in found if item.get('applicability') == 'not_applicable'}
+    closed = {f'repos/{monitor.REPO}/issues/{issue["number"]}'
+              for identifier, issue in fix_monitor.security_issues(issues)
+              if issue['state'] == 'closed' and 'security:' + identifier in non_applicable}
+    for action in actions:
+        if action['method'] == 'PATCH' and action['endpoint'] in closed:
+            action['payload'].pop('state', None)
 
 
 def run(apply: bool = False) -> dict:
@@ -376,8 +454,23 @@ def run(apply: bool = False) -> dict:
         found += security_findings(lock, request=cached_request)
         scoped.append((scope, found))
     found = merge_findings(scoped)
+    annotate_remediation(found, scoped, versions, list(cache.values()))
+    candidates = {}
+
+    def candidate_inventory(lock, supplier, version, root):
+        """Reuse exact supplier metadata between replacement checks and fix notifications."""
+        key = (version, supplier['tag_name'], lock['target'], tuple(lock['excluded_extensions']), lock['glibc_minimum'])
+        if key not in candidates:
+            candidates[key] = fix_monitor.candidate_inventory(lock, supplier, version, root)
+        return candidates[key]
+
+    reviews = fix_monitor.review_replacements(versions, supplier, pep, sys.modules[__name__], candidate_inventory)
+    for item in found:
+        if item['key'] in reviews:
+            item['text'] += '\n\n' + reviews[item['key']]
     issues = monitor.existing_issues()
     actions, deferred = monitor.plan_updates(found, issues, namespace='python', checklist=CHECKLIST)
+    preserve_native_triage(actions, found, issues)
 
     def fix_request(url):
         """Rate-limit additional CVE lookups and reuse complete source responses."""
@@ -385,7 +478,7 @@ def run(apply: bool = False) -> dict:
             time.sleep(6.5)
         return cached_request(url)
 
-    fixes = fix_monitor.discover(versions, supplier, pep, issues, fix_request, sys.modules[__name__])
+    fixes = fix_monitor.discover(versions, supplier, pep, issues, fix_request, sys.modules[__name__], candidate_inventory)
     notice = fix_monitor.notification(fixes, issues)
     notified = 0
     if apply:
@@ -399,7 +492,7 @@ def run(apply: bool = False) -> dict:
             'notified_fixes': notified,
             'security_candidates': sum(item['key'].startswith('security:') for item in found),
             'security_scope': 'CPython and inventoried native libraries; separate from pip-audit',
-            'baselines': [{'scope': scope, 'build': item['version'] + '+' + item['build']} for scope, item in versions],
+            'baselines': [{'scope': scope, 'build': runtime_identity(item)} for scope, item in versions],
             'components_scanned': sum(len(item['components']) for _, item in versions), 'findings': len(found), 'deferred': deferred,
             'creates': sum(a['method'] == 'POST' for a in actions), 'updates': sum(a['method'] == 'PATCH' for a in actions)}
 

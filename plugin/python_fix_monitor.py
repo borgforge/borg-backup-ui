@@ -164,7 +164,8 @@ def candidate_inventory(lock: dict, supplier: dict, version: str, root: Path) ->
         metadata = archive_metadata(archive)
     if metadata.get('build_options') != 'pgo+lto':
         raise ValueError('Unexpected candidate build options')
-    candidate = {**lock, 'version': version, 'build': tag}
+    candidate = {key: lock[key] for key in ('supplier', 'target', 'glibc_minimum', 'excluded_extensions')}
+    candidate.update(version=version, build=tag)
     candidate['components'] = runtime.inventory(metadata, json.loads(raw), candidate)
     for name, component in candidate['components'].items():
         if not re.fullmatch(r'[0-9A-Za-z.+_-]{1,80}', component['version']):
@@ -248,6 +249,49 @@ def fixed_components(cve: dict, lock: dict, candidate: dict, engine) -> list[dic
     return fixes
 
 
+
+def required_floors(versions: list) -> dict[str, str]:
+    """Combine stable/planned security floors so an upstream replacement cannot regress either."""
+    result = {}
+    for _, lock in versions:
+        for name, minimum in lock.get('minimum_component_versions', {}).items():
+            if name not in result or Version(minimum) > Version(result[name]):
+                result[name] = minimum
+    return result
+
+
+def replacement_regressions(candidate: dict, floors: dict[str, str]) -> list[str]:
+    """Describe missing, unknown or too-old upstream native versions; never assume parity."""
+    result = []
+    for name, minimum in sorted(floors.items()):
+        actual = candidate['components'].get(name, {}).get('version')
+        try:
+            valid = actual is not None and Version(actual) >= Version(minimum)
+        except InvalidVersion:
+            valid = False
+        if not valid:
+            result.append(f'{name}: candidate {actual or "missing"}, required >= {minimum}')
+    return result
+
+
+def review_replacements(versions: list, supplier: dict, pep: dict, engine, inventory=candidate_inventory) -> dict:
+    """Attach a concrete regression check to new supplier-build issues for custom baselines."""
+    floors = required_floors(versions)
+    if not floors:
+        return {}
+    reviews = {}
+    for _, lock in versions:
+        for item in engine.release_findings(lock, pep, supplier, engine.date.today()):
+            if not item['key'].startswith('release:build-') or item['key'] in reviews:
+                continue
+            version = item['key'].split('-')[1]
+            candidate = inventory(lock, supplier, version, engine.ROOT)
+            problems = replacement_regressions(candidate, floors)
+            reviews[item['key']] = ('Replacement blocked by native security floors: ' + '; '.join(problems) + '.'
+                                    if problems else 'Candidate meets the committed native security floors; compatibility and release review still required.')
+    return reviews
+
+
 def discover(versions: list, supplier: dict, pep: dict, issues: list, request, engine, inventory=candidate_inventory) -> list[dict]:
     """Compare open CVEs with compatible newer builds; complete all reads before writes."""
     opened = [(identifier, issue) for identifier, issue in security_issues(issues) if eligible(issue)]
@@ -264,6 +308,8 @@ def discover(versions: list, supplier: dict, pep: dict, issues: list, request, e
         if identity not in candidates:
             candidates[identity] = inventory(lock, supplier, version, engine.ROOT)
         candidate = candidates[identity]
+        if replacement_regressions(candidate, required_floors(versions)):
+            continue
         if not set(candidate['components']) <= set(engine.PRODUCTS):
             raise ValueError('Candidate contains an unmonitored native component')
         for identifier, issue in opened:

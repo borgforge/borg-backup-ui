@@ -4,6 +4,30 @@ Review date: 2026-11-06. Scope: current source and published testing candidate
 2026.11.05.1312; stable 2026.11.03.1237 still uses external Python and contains no
 private runtime. This is an applicability review, not a release attestation.
 
+## Follow-up: source-built remediation (#732, 2026-11-13)
+
+The historical review below describes the original supplier bundle. Published
+stable 2026.11.11.1135 now includes that private runtime with SQLite 3.53.1.
+Supplier build 3.13.18+20261110 was downloaded and its actual interpreter checked:
+it still contains SQLite 3.53.1 and OpenSSL 3.5.9, with session support/native
+SQLite CLI absent. Its updates to Expat, libedit and zlib do not fix these CVEs.
+
+The maintainer authorized a source-built Python 3.13.18 runtime with SQLite
+3.54.1, a new pipeline testing candidate and issue updates, but **no stable
+release**. The source recipe, packaging and monitor behavior are documented in
+[the source-build guide](python-runtime.md#source-built-sqlite-remediation-732).
+SQLite 3.54.1 exceeds the current explicit NVD fix bounds for #706-#715 and #718.
+#716/#717 remain feature-specific non-applicability decisions, not blanket
+version exemptions. The actual custom binary, source evidence, native tests,
+glibc compatibility and hosted CI must pass before publication.
+
+Keep the eleven affected-library issues open while the stable payload still
+contains SQLite 3.53.1. Record the verified test candidate separately; a fixed
+planned/test inventory is not a statement that stable users received the fix.
+The monitor uses both inventories and prevents a new supplier build from being
+advertised as a suitable replacement when it violates the committed SQLite
+3.54.1 floor. It never automatically updates runtime pins or closes these CVEs.
+
 ## Decision
 
 **Testing publication authorized by the maintainer on 2026-11-06, retaining

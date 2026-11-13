@@ -186,7 +186,7 @@ if [ -d "${REPO_DIR}/runtime" ]; then
   mkdir -p "${APP_DST}/runtime"
   (
     cd "${REPO_DIR}/runtime"
-    tar --create --exclude='./vendor' .
+    tar --create --exclude='./vendor' --exclude='./python/inputs' .
   ) | (
     cd "${APP_DST}/runtime"
     tar --extract

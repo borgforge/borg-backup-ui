@@ -1,6 +1,6 @@
 {
-  "archive": "cpython-3.13.18+20261026-x86_64-unknown-linux-gnu-pgo+lto-full.tar.zst",
-  "build": "20261026",
+  "archive": "bbui-cpython-3.13.18-sqlite-3.54.1-r1.tar.xz",
+  "build": "20261110",
   "components": {
     "bzip2": {
       "source": "https://astral-sh.github.io/mirror/files/bzip2-1.0.8.tar.gz",
@@ -12,14 +12,14 @@
       "version": "3.13.18"
     },
     "expat": {
-      "source": "https://github.com/libexpat/libexpat/releases/download/R_2_9_0/expat-2.9.0.tar.xz",
-      "source_sha256": "1e6371862cc31999b368c3b89b49994f0677e1bab5f1b2b85ae3741f5d803051",
-      "version": "2.9.0"
+      "source": "https://github.com/libexpat/libexpat/releases/download/R_2_10_0/expat-2.10.0.tar.xz",
+      "source_sha256": "c624ba2998fc65df1163a49641ff3f9ab73138b11641d92c86bee0fb01b1bc7f",
+      "version": "2.10.0"
     },
     "libedit": {
-      "source": "https://thrysoee.dk/editline/libedit-20240808-3.1.tar.gz",
-      "source_sha256": "5f0573349d77c4a48967191cdd6634dd7aa5f6398c6a57fe037cc02696d6099f",
-      "version": "20240808-3.1"
+      "source": "https://thrysoee.dk/editline/libedit-20260512-3.1.tar.gz",
+      "source_sha256": "432d5e7ea8b0116dd39f2eca7bc11d0eed77faa6b77ea526ace89907c23ea4a0",
+      "version": "20260512-3.1"
     },
     "libffi": {
       "source": "https://github.com/libffi/libffi/releases/download/v3.8.0/libffi-3.8.0.tar.gz",
@@ -42,9 +42,9 @@
       "version": "3.5.9"
     },
     "sqlite": {
-      "source": "https://www.sqlite.org/2026/sqlite-autoconf-3530100.tar.gz",
-      "source_sha256": "83e6b2020a034e9a7ad4a72feea59e1ad52f162e09cbd26735a3ffb98359fc4f",
-      "version": "3.53.1"
+      "source": "https://www.sqlite.org/2026/sqlite-autoconf-3540100.tar.gz",
+      "source_sha256": "926ef8d3eab93fbf6e06011901273eec076b25594a4e1cdadd50c987f4f6d64e",
+      "version": "3.54.1"
     },
     "uuid": {
       "source": "https://sourceforge.net/projects/libuuid/files/libuuid-1.0.3.tar.gz",
@@ -57,22 +57,88 @@
       "version": "5.8.4"
     },
     "zlib": {
-      "source": "https://github.com/madler/zlib/releases/download/v1.3.2/zlib-1.3.2.tar.gz",
-      "source_sha256": "bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16",
-      "version": "1.3.2"
+      "source": "https://github.com/madler/zlib/releases/download/v1.4/zlib-1.4.tar.gz",
+      "source_sha256": "02dd159783677a749c04adbdd02b55b8a2bcc7e054f51b76b549199a916ad584",
+      "version": "1.4"
     }
   },
-  "downloads_sha256": "8b0e472c66797dcd58dfa461171c7f416602503924091e5e4629e776221b8a27",
+  "custom_build": {
+    "artifact": "inputs/bbui-cpython-3.13.18-sqlite-3.54.1-r1.tar.xz",
+    "id": "bbui-cpython-3.13.18-sqlite-3.54.1-r1",
+    "receipt_sha256": "63919c7b44b053405cd99c4f09179331d1f14cc0c3ace0ed4ded33ec1d54d086",
+    "recipe_sha256": "de5d36f039b8a5dd8468d3c54265159e92f0c309adae196f1a42e80a47324c98"
+  },
+  "downloads_sha256": "fa07b959e5ffc049936724b64ee0617227e1be89b9ed91349e4c7366bbee73a4",
   "excluded_extensions": [
     "_dbm",
     "_tkinter"
   ],
   "glibc_minimum": "2.17",
-  "install_archive": "cpython-3.13.18+20261026-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
-  "install_sha256": "df15fe60d3ff55bf9dcf25824b5572756bb8816ff93865a273d3301d7066a8b7",
-  "metadata_sha256": "53304e0a7215bbe05a08780b6d491e965e02814bf38820819ba26ac15fc54e40",
-  "schema": 1,
-  "sha256": "f003449a05408c2e4b184f2a7abd1ea277081ff1a9100289075243ab5ed81207",
+  "install_archive": "bbui-cpython-3.13.18-sqlite-3.54.1-r1.tar.xz",
+  "install_sha256": "6c0403566fd6beda472d3496d6e534733821f3462dae9f259e042f56f031624e",
+  "metadata_sha256": "eba945b3e43289ab797fefc14778eaf824d34d29db5ec18b96d1a60a3e660478",
+  "minimum_component_versions": {
+    "sqlite": "3.54.1"
+  },
+  "native_facts": {
+    "openssl": "OpenSSL 3.5.9 29 Sep 2026",
+    "python": "3.13.18",
+    "sqlite": "3.54.1",
+    "sqlite_cli": false,
+    "sqlite_compile_options": [
+      "ATOMIC_INTRINSICS=1",
+      "COMPILER=clang-23.1.3",
+      "DEFAULT_AUTOVACUUM",
+      "DEFAULT_CACHE_SIZE=-2000",
+      "DEFAULT_FILE_FORMAT=4",
+      "DEFAULT_JOURNAL_SIZE_LIMIT=-1",
+      "DEFAULT_MMAP_SIZE=0",
+      "DEFAULT_PAGE_SIZE=4096",
+      "DEFAULT_PCACHE_INITSZ=20",
+      "DEFAULT_RECURSIVE_TRIGGERS",
+      "DEFAULT_SECTOR_SIZE=4096",
+      "DEFAULT_SYNCHRONOUS=2",
+      "DEFAULT_WAL_AUTOCHECKPOINT=1000",
+      "DEFAULT_WAL_SYNCHRONOUS=2",
+      "DEFAULT_WORKER_THREADS=0",
+      "DIRECT_OVERFLOW_READ",
+      "ENABLE_DBSTAT_VTAB",
+      "ENABLE_FTS3",
+      "ENABLE_FTS3_PARENTHESIS",
+      "ENABLE_FTS4",
+      "ENABLE_FTS5",
+      "ENABLE_GEOPOLY",
+      "ENABLE_MATH_FUNCTIONS",
+      "ENABLE_PERCENTILE",
+      "ENABLE_RTREE",
+      "MALLOC_SOFT_LIMIT=1024",
+      "MAX_ATTACHED=10",
+      "MAX_COLUMN=2000",
+      "MAX_COMPOUND_SELECT=500",
+      "MAX_DEFAULT_PAGE_SIZE=8192",
+      "MAX_EXPR_DEPTH=1000",
+      "MAX_FUNCTION_ARG=1000",
+      "MAX_LENGTH=1000000000",
+      "MAX_LIKE_PATTERN_LENGTH=50000",
+      "MAX_MMAP_SIZE=0x7fff0000",
+      "MAX_PAGE_COUNT=0xfffffffe",
+      "MAX_PAGE_SIZE=65536",
+      "MAX_SCHEMA=10000000",
+      "MAX_SQL_LENGTH=1000000000",
+      "MAX_TRIGGER_DEPTH=1000",
+      "MAX_VARIABLE_NUMBER=32766",
+      "MAX_VDBE_OP=250000000",
+      "MAX_WORKER_THREADS=8",
+      "MUTEX_PTHREADS",
+      "SYSTEM_MALLOC",
+      "TEMP_STORE=1",
+      "THREADSAFE=1"
+    ],
+    "sqlite_session_symbol": false,
+    "sqlite_source_id": "2026-10-16 14:45:20 555e07ef33f69a0957d24d8e555b702464a131d6f1607f4c3c1e4551e8e6ca76"
+  },
+  "schema": 2,
+  "sha256": "6c0403566fd6beda472d3496d6e534733821f3462dae9f259e042f56f031624e",
   "supplier": "astral-sh/python-build-standalone",
   "supplier_license_sha256": "1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5",
   "target": "x86_64-unknown-linux-gnu",
