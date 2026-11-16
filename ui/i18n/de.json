@@ -4032,8 +4032,9 @@
     "hideStatus": "Status ausblenden"
   },
   "mobile": {
+    "untilRevoked": "Bis zum Widerruf",
     "back": "Zurück zu Borg Backup UI",
-    "intro": "Kopple dein Android-Gerät für den lesenden Zugriff. Sitzungen laufen nach 12 Stunden ab und können hier widerrufen werden.",
+    "intro": "Kopple dein Android-Gerät. Neue Apps können bis zum Widerruf angemeldet bleiben; ältere Kopplungen laufen nach 12 Stunden ab.",
     "warning": "Bestätige nur einen Code, der gerade in deiner eigenen BorgForge-Mobile-App angezeigt wird. Bestätige niemals zugesandte Codes. Die Freigabe erlaubt den Zugriff auf Jobnamen und Statusdaten.",
     "code": "Code aus deiner App",
     "approve": "Gerät freigeben",

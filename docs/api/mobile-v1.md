@@ -10,8 +10,9 @@ no restore operations, raw logs or configuration exports. Existing browser/inter
 1. The Android client uses a validated HTTPS base URL and reads
    `GET /api/mobile/v1/capabilities`: `api_version: 1`,
    `authentication: device_pairing`, `scope: monitor:read`,
-   `session_expires_in: 43200`.
-2. `POST /api/mobile/v1/pair` with JSON `device_name` (1-80 characters)
+   `session_expires_in: 43200`, `persistent_pairing: true`.
+2. `POST /api/mobile/v1/pair` with JSON `device_name` (1-80 characters) and optional strict boolean
+   `persistent: true` when advertised
    returns `device_code` (32 random bytes, base64url), `user_code` (10 characters),
    `expires_in: 600`, `session_expires_in: 43200`, and `scope`.
 3. On the **same HTTPS server**, sign into Borg Backup UI, then open
@@ -24,6 +25,8 @@ no restore operations, raw logs or configuration exports. Existing browser/inter
 4. `POST /api/mobile/v1/exchange` with `device_code` returns
    `status: pending`, or once only `status: authorized`, `access_token`,
    `session_id`, `expires_at` (Unix seconds), `scope: monitor:read`.
+   Persistent pairing additionally returns a `refresh_token` (`bfr_` plus 43
+   base64url characters), once only. Both credentials require secure storage.
    The shipped app checks on explicit user action, without background polling.
    If the one-time response is lost, begin a new pairing.
 5. Send `Authorization: Bearer <access_token>` only to this exact server and
@@ -54,10 +57,33 @@ just to use the integrated settings page.
 
 ## Lifecycle and permissions
 
-Device sessions expire **12 hours after pairing**, without sliding renewal or a
-refresh token. Pair again after expiry. `GET /api/auth/mobile/sessions` lists the
-current browser user's own sessions (`id`, `label`, `created_at`, `expires_at`, `job_control`), plus
-`can_approve_job_control` for the current browser user.
+Access tokens expire **12 hours after issuance**. New clients opt into persistent
+pairing; legacy pairs keep fixed expiry and never silently gain persistence.
+Persistent devices remain registered until explicitly revoked, logged out, or
+invalidated by a user security change. Existing devices need one new pairing to
+obtain a refresh credential. No data-store migration or expiry extension is
+performed for old sessions.
+
+`POST /api/mobile/v1/refresh` with `{refresh_token}` issues a new `access_token`,
+`session_id`, `expires_at`, and `scope`. The session ID and approved rights remain
+unchanged. The refresh credential is long-lived, hashed on disk and accepted only
+on this endpoint; it cannot read data or control jobs. Browser Origins are rejected,
+bodies are bounded, user security is rechecked and renewal is limited to 30/device/hour.
+A renewed access token invalidates the old one. The refresh credential remains
+stable so a lost response does not require re-pairing. A stolen refresh credential
+can renew until revoked: HTTPS, Keystore storage and prompt device revocation are
+required. Neither credential is an internal/plugin administrator token.
+
+Clients serialize renewal per server, atomically replace storage only if the old
+credential is still current, and never replay job writes after renewal. Commands
+are scoped to an access-token epoch; old admitted requests are rejected after
+rotation and a fresh epoch starts a fresh bounded ledger. Revocation removes the
+entire grant, including refresh access, across server restarts.
+
+`GET /api/auth/mobile/sessions` lists the current browser user's own sessions
+(`id`, `label`, `created_at`, `expires_at`, `job_control`, optional `persistent: true`),
+plus `can_approve_job_control`. For persistent devices `expires_at` is access-token
+expiry; the UI displays "Until revoked" as the device lifetime.
 `POST /api/auth/mobile/revoke` with `session_id` idempotently revokes an owned
 session. Foreign IDs do not confer access. Existing logout-all operations also
 revoke mobile sessions in their selected user/all scope.
@@ -65,18 +91,18 @@ revoke mobile sessions in their selected user/all scope.
 Passwords, roles and enabled state are checked against current users. Account
 security changes/deletion revoke persisted sessions and approved pending pairs
 before saving the change. Disabling then re-enabling does not restore access.
-The fixed expiry and password/role fingerprint also apply after restarts.
+Access expiry and the password/role fingerprint also apply after restarts.
 
 `config/mobile-sessions.json` is additive: atomic replacement, file mode 0600,
 credential digests only, no raw access/device/user code. An invalid existing
 store fails closed with 503, preserving the file. Back up authentication state
-securely; restoring an older auth backup can restore still-unexpired sessions.
+securely; restoring an older auth backup can restore device grants, including persistent grants.
 The store is owned by the existing single server process and serializes mutations
 with a lock. Running multiple independent writers against one data directory is
 not supported. Anonymous pairing is limited to 10 attempts/IP/hour, approval to
 30/user/hour, with 100 pending requests and 500 sessions globally. Reverse proxies
 share the connection IP bucket; arbitrary forwarded client IP headers are not
-trusted. Expired entries are pruned during store operations.
+trusted. Expired pending and legacy session entries are pruned during store operations; persistent device grants are retained.
 
 This is a per-device bearer session, not hardware attestation or proof of
 possession. A stolen bearer works until revoked/expired; Android stores it with
@@ -158,7 +184,7 @@ cleanup. The existing maintenance guard applies to these endpoints.
 A per-session ledger reserves each request durably before execution. Same ID and
 payload returns a stored success, never a second launch; changed payload or an
 incomplete reservation returns 409. Crashes/timeouts require status reconciliation,
-not automatic retries. At most 100 command reservations per 12-hour session are
+not automatic retries. At most 100 command reservations per access-token epoch are
 retained. Revocation and account changes also prevent result replay. Concurrent
 mobile admission is serialized in the single server process.
 
@@ -181,3 +207,13 @@ unsupported. Never start or cancel production backups as a test.
 the integrated DE/EN UI for all roles, escaping, input preservation, duplicate
 approval suppression, revocation, error states, shell navigation and fixed login
 return routing. Browser fixtures contain synthetic device metadata only.
+
+## Foreground status updates (#742)
+
+The client polls snapshots sequentially while visible: every five seconds while
+any job runs, otherwise every thirty seconds. Resuming refreshes immediately.
+Background polling is suspended; failed reads are shown as failures rather than
+retaining a running card as current. No write is replayed by this polling.
+`tests/test_mobile_refresh.py` verifies renewal after long inactivity, expiry,
+legacy behavior, Origin/token boundaries, hashed storage, revocation, account
+changes and rejection of commands admitted under an obsolete access token.

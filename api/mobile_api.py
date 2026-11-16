@@ -13,7 +13,7 @@ PREFIX = "/api/mobile/v1/"
 BROWSER = "/api/auth/mobile/"
 ROUTES = {
     "GET": {PREFIX + "capabilities", PREFIX + "snapshot", BROWSER + "sessions"},
-    "POST": {PREFIX + "pair", PREFIX + "exchange", PREFIX + "logout",
+    "POST": {PREFIX + "pair", PREFIX + "exchange", PREFIX + "refresh", PREFIX + "logout",
              BROWSER + "approve", BROWSER + "revoke", PREFIX + "jobs/start", PREFIX + "jobs/cancel"},
 }
 
@@ -42,7 +42,7 @@ def authorize(handler, path: str, request_id: str) -> bool:
                     or urlparse(handler.headers.get("Origin", "")).scheme != "https"):
                 raise auth.MobileError("csrf_origin_mismatch", 403)
             handler._mobile_user = username
-        elif path not in {PREFIX + "capabilities", PREFIX + "pair", PREFIX + "exchange"}:
+        elif path not in {PREFIX + "capabilities", PREFIX + "pair", PREFIX + "exchange", PREFIX + "refresh"}:
             header = handler.headers.get("Authorization", "")
             token = header[7:] if header.startswith("Bearer ") else ""
             handler._mobile_session = auth.authenticate(handler.config, token)
@@ -68,11 +68,13 @@ def handle(handler) -> dict:
         body = handler._read_json_body()
     if path == PREFIX + "capabilities":
         return {"api_version": 1, "authentication": "device_pairing", "scope": auth.SCOPE,
-                "session_expires_in": auth.SESSION_TTL, "job_control": True}
+                "session_expires_in": auth.SESSION_TTL, "job_control": True, "persistent_pairing": True}
     if path == PREFIX + "pair":
-        return auth.begin(handler.config, body.get("device_name"), handler._client_ip())
+        return auth.begin(handler.config, body.get("device_name"), handler._client_ip(), body.get("persistent", False))
     if path == PREFIX + "exchange":
         return auth.exchange(handler.config, body.get("device_code"))
+    if path == PREFIX + "refresh":
+        return auth.refresh(handler.config, body.get("refresh_token"))
     if path == BROWSER + "approve":
         return auth.approve(handler.config, handler._mobile_user, body.get("user_code"), body.get("allow_job_control", False))
     if path == BROWSER + "sessions":

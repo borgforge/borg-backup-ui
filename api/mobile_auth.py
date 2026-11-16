@@ -1,7 +1,7 @@
 """Bounded, browser-approved device sessions (#738).
 
 Only SHA-256 credential digests are persisted. A fixed twelve-hour lifetime
-requires explicit re-pairing; there is no refresh credential or password login.
+limits access tokens. Opt-in refresh credentials keep devices paired until revoked.
 """
 from __future__ import annotations
 
@@ -63,7 +63,7 @@ def _load(config: dict) -> dict:
             raise ValueError()
         now = time.time()
         for key in ("pending", "sessions"):
-            data[key] = [row for row in data[key] if row["expires_at"] > now]
+            data[key] = [row for row in data[key] if row["expires_at"] > now or (key == "sessions" and row.get("refresh_hash"))]
         data["limits"] = {k: [v for v in values if v > now - 3600]
                           for k, values in data["limits"].items() if values and max(values) > now - 3600}
         return data
@@ -97,9 +97,11 @@ def _limit(config: dict, data: dict, key: str, maximum: int) -> None:
     _save(config, data)
 
 
-def begin(config: dict, label: object, client_ip: str) -> dict:
-    """Create a ten-minute pairing; rate/bounds limit anonymous resource use."""
+def begin(config: dict, label: object, client_ip: str, persistent: bool = False) -> dict:
+    """Create a ten-minute pair; explicit persistence enables a revocable grant."""
     if not isinstance(label, str) or not 1 <= len(label.strip()) <= 80 or any(ord(c) < 32 for c in label):
+        raise MobileError("mobile_bad_request", 400)
+    if type(persistent) is not bool:
         raise MobileError("mobile_bad_request", 400)
     with LOCK:
         data = _load(config)
@@ -109,7 +111,7 @@ def begin(config: dict, label: object, client_ip: str) -> dict:
         device_code = secrets.token_urlsafe(32)
         user_code = "".join(secrets.choice("ABCDEFGHJKLMNPQRSTUVWXYZ23456789") for _ in range(10))
         data["pending"].append({"device_hash": digest(device_code), "code_hash": digest(user_code),
-                                "label": label.strip(), "expires_at": time.time() + PAIR_TTL})
+                                "persistent": persistent, "label": label.strip(), "expires_at": time.time() + PAIR_TTL})
         _save(config, data)
         return {"device_code": device_code, "user_code": user_code, "expires_in": PAIR_TTL,
                 "scope": SCOPE, "session_expires_in": SESSION_TTL}
@@ -156,10 +158,40 @@ def exchange(config: dict, device_code: object) -> dict:
                    "username": pending["username"], "fingerprint": pending["fingerprint"],
                    "label": pending["label"], "job_control": pending.get("job_control", False), "created_at": time.time(),
                    "expires_at": time.time() + SESSION_TTL}
+        refresh_token = "bfr_" + secrets.token_urlsafe(32) if pending.get("persistent") else None
+        if refresh_token:
+            session["refresh_hash"] = digest(refresh_token)
         data["pending"].remove(pending)
         data["sessions"].append(session)
         _save(config, data)
         return {"status": "authorized", "access_token": token, "session_id": session["id"],
+                "expires_at": session["expires_at"], "scope": SCOPE,
+                **({"refresh_token": refresh_token} if refresh_token else {})}
+
+
+def refresh(config: dict, refresh_token: object) -> dict:
+    """Renew an owned device's access token; no expiry extends revoked grants.
+
+    The long-lived credential is accepted only here, never for monitoring or
+    commands. It is retained to recover a lost response. Each renewal invalidates
+    the previous access token and its command epoch; repeated job writes are not
+    retried by clients. Only credential hashes are persisted.
+    """
+    import re
+    if not isinstance(refresh_token, str) or not re.fullmatch(r"bfr_[A-Za-z0-9_-]{43}", refresh_token):
+        raise MobileError("mobile_unauthorized", 401)
+    with LOCK:
+        data = _load(config)
+        hashed = digest(refresh_token)
+        session = next((s for s in data["sessions"]
+                        if secrets.compare_digest(s.get("refresh_hash", ""), hashed)), None)
+        if not session or _fingerprint(_user(config, session["username"])) != session["fingerprint"]:
+            raise MobileError("mobile_unauthorized", 401)
+        _limit(config, data, "refresh:" + session["id"], 30)
+        token = "bfm_" + secrets.token_urlsafe(32)
+        session.update(token_hash=digest(token), expires_at=time.time() + SESSION_TTL, commands={})
+        _save(config, data)
+        return {"access_token": token, "session_id": session["id"],
                 "expires_at": session["expires_at"], "scope": SCOPE}
 
 
@@ -171,7 +203,7 @@ def authenticate(config: dict, token: str) -> dict:
         data = _load(config)
         hashed = digest(token)
         session = next((s for s in data["sessions"] if secrets.compare_digest(s["token_hash"], hashed)), None)
-        if not session or _fingerprint(_user(config, session["username"])) != session["fingerprint"]:
+        if not session or session["expires_at"] <= time.time() or _fingerprint(_user(config, session["username"])) != session["fingerprint"]:
             raise MobileError("mobile_unauthorized", 401)
         return dict(session)
 
@@ -182,7 +214,8 @@ def sessions(config: dict, username: str) -> dict:
         data = _load(config)
         return {"can_approve_job_control": _user(config, username).get("role") in {"operator", "admin"},
                 "sessions": [dict({k: s[k] for k in ("id", "label", "created_at", "expires_at")},
-                                  job_control=s.get("job_control", False))
+                                  job_control=s.get("job_control", False),
+                                  **({"persistent": True} if s.get("refresh_hash") else {}))
                              for s in data["sessions"] if s["username"] == username]}
 
 
@@ -232,8 +265,8 @@ def command(config: dict, session: dict, request_id: str, payload: dict, execute
     """Reserve a bounded operation ID durably before invoking a job action once.
 
     Replays return the recorded result; a crash/exception leaves an uncertain
-    reservation (409), never an automatic second launch. Entries expire with
-    the session. Revoked or changed users cannot replay successful commands.
+    reservation (409), never an automatic second launch. Entries belong to
+    the current access-token epoch. Revoked or changed users cannot replay successful commands.
     """
     import re
     if not isinstance(request_id, str) or not re.fullmatch(r"[a-f0-9]{32}", request_id):
@@ -241,7 +274,9 @@ def command(config: dict, session: dict, request_id: str, payload: dict, execute
     with LOCK:
         data = _load(config)
         current = next((s for s in data["sessions"] if s["id"] == session["id"]), None)
-        if not current or _fingerprint(_user(config, current["username"])) != current["fingerprint"]:
+        if (not current or current["expires_at"] <= time.time()
+                or current["token_hash"] != session["token_hash"]
+                or _fingerprint(_user(config, current["username"])) != current["fingerprint"]):
             raise MobileError("mobile_unauthorized", 401)
         if not can_control(config, current):
             raise MobileError("mobile_forbidden", 403)

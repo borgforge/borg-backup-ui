@@ -4032,8 +4032,9 @@
     "hideStatus": "Hide status"
   },
   "mobile": {
+    "untilRevoked": "Until revoked",
     "back": "Back to Borg Backup UI",
-    "intro": "Pair your own Android device for read-only monitoring. Sessions expire after 12 hours and can be revoked here.",
+    "intro": "Pair your Android device. New apps can remain signed in until revoked; older pairings expire after 12 hours.",
     "warning": "Only approve a code currently displayed on your own BorgForge Mobile app. Never approve a code sent by someone else. Approval grants access to job names and monitoring data.",
     "code": "Code from your app",
     "approve": "Approve device",

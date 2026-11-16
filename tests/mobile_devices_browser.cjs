@@ -10,7 +10,7 @@ const {chromium} = require('playwright');
       const page = await browser.newPage({viewport:{width:1200,height:1000}});
       const errors = []; page.on('pageerror', e => errors.push(e.message));
       let approvals = [], revoked = [], requests = [], fail = false, failApproval = false;
-      let sessions = [{id:'a'.repeat(32),label:'<img src=x onerror="window.injected=true">',created_at:1794820000,expires_at:1794863200,job_control:false}];
+      let sessions = [{id:'a'.repeat(32),label:'<img src=x onerror="window.injected=true">',created_at:1794820000,expires_at:1794863200,job_control:false,persistent:role==='admin'}];
       await page.route('https://bbui.test/**', async route => {
         const req=route.request(), path=new URL(req.url()).pathname;
         if (path==='/') return route.fulfill({contentType:'text/html',body:fs.readFileSync('ui/index.html','utf8').replace('<script src="/ui/js/app-main.js"></script>','')});
@@ -58,6 +58,7 @@ const {chromium} = require('playwright');
       },role);
       await page.waitForSelector('[data-mobile-id]',{timeout:5000}).catch(async e=>{console.error(await page.locator('#settings-message').innerText(),errors);throw e;});
       assert.equal(await page.locator('#mobile-device-list img').count(),0);
+      if(role==='admin') assert((await page.locator('#mobile-device-list').innerText()).includes(language==='de'?'Bis zum Widerruf':'Until revoked'));
       assert((await page.locator('#mobile-device-list').innerText()).includes('<img src=x'));
       assert.equal(await page.locator('#mobile-job-control').isDisabled(),role==='viewer');
       assert.equal(await page.locator('#user-new-name').count(),role==='admin'?1:0);

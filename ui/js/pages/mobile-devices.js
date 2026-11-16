@@ -70,7 +70,7 @@
         <thead><tr><th>${escHtml(t('device'))}</th><th>${escHtml(t('access'))}</th><th>${escHtml(t('created'))}</th><th>${escHtml(t('expires'))}</th><th>${escHtml(t('actions'))}</th></tr></thead>
         <tbody>${data.sessions.map(session => `<tr>
           <td>${escHtml(session.label)}</td><td><span class="badge ${session.job_control ? 'warning' : 'info'}">${escHtml(t(session.job_control ? 'controlAccess' : 'readAccess'))}</span></td>
-          <td>${escHtml(date(session.created_at))}</td><td>${escHtml(date(session.expires_at))}</td>
+          <td>${escHtml(date(session.created_at))}</td><td>${escHtml(session.persistent === true ? t('untilRevoked') : date(session.expires_at))}</td>
           <td><button type="button" class="btn btn-danger btn-sm" data-settings-action="mobile-revoke" data-mobile-id="${escAttr(session.id)}" ${secure ? '' : 'disabled'}>${escHtml(t('revoke'))}</button></td>
         </tr>`).join('')}</tbody></table></div>` : `<div class="empty-state">${escHtml(t('empty'))}</div>`;
       if (!secure) message(root, t('https'), true);
