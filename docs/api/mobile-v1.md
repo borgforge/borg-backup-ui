@@ -98,9 +98,11 @@ timeouts at the proxy. No CORS access or TLS bypass is added.
 - `repositories`: opaque `id`, display `name`, nullable recorded `bytes`,
   `checked_at`, `measured_at` from status reports, deduplicated by current
   repository assignment. These are recorded samples, not a fresh repository scan.
-- `restore_tests`: `job_name`, last attempt `status`, nullable `checked_at`,
+- `restore_verifications`: `job_name`, last attempt `status`, nullable `checked_at`,
   `verification` (`verified`, `stale`, `failed`, `never`, `not_required`), nullable
   `valid_until`, `reason_code`. Missing evidence is included explicitly.
+  Legacy `restore_tests` retains only timestamped attempts so initial v1 clients
+  can still parse their required `checked_at` field.
 - `storage_daily`: 30 daily `{date: YYYY-MM-DD, bytes: integer|null}` samples
   from the existing overview aggregation.
 

@@ -46,8 +46,9 @@ def test_status_schedule_metrics_and_allowlist(config, monkeypatch):
     assert job['can_start'] and not job['can_cancel']
     assert data['repositories'][0]['bytes'] == 500
     assert data['repositories'][0]['checked_at']
-    assert data['restore_tests'][0]['verification'] == 'never'
-    assert data['restore_tests'][0]['checked_at'] is None
+    assert data['restore_verifications'][0]['verification'] == 'never'
+    assert data['restore_verifications'][0]['checked_at'] is None
+    assert data['restore_tests'] == []  # Older v1 clients require timestamps.
     assert '/private' not in json.dumps(data)
     for value in ('cancelled', 'skipped', 'unavailable'):
         assert api._status(value) == value

@@ -195,7 +195,7 @@ def snapshot(handler) -> dict:
     overview = handler._get_report_overview("days=30&location=all")
     result = {"api_version": 1, "sampled_at": datetime.now(timezone.utc).isoformat(),
               "job_control": allowed,
-              "jobs": [], "history": [], "repositories": [], "restore_tests": [],
+              "jobs": [], "history": [], "repositories": [], "restore_tests": [], "restore_verifications": [],
               "storage_daily": [{"date": p["date"], "bytes": _number(p.get("repository_bytes"))}
                                 for p in overview["daily"]]}
     repo_samples = {}
@@ -232,7 +232,7 @@ def snapshot(handler) -> dict:
         stamp = _stamp(job.get("restore_verification_last_test_date"))
         verification = job.get("restore_verification_status")
         if stamp or verification:
-            result["restore_tests"].append({"job_name": _name(job.get("display_name") or job.get("name")),
+            result["restore_verifications"].append({"job_name": _name(job.get("display_name") or job.get("name")),
                                             "status": _status(job.get("restore_verification_last_test_result")),
                                             "checked_at": stamp, "verification": _code(verification),
                                             "valid_until": _stamp(job.get("restore_verification_valid_until")),
@@ -247,6 +247,9 @@ def snapshot(handler) -> dict:
             if previous is None or (sample["bytes"] is not None and
                     (sample["measured_at"] or "") > (previous["measured_at"] or "")):
                 repo_samples[key] = sample
+    # Initial v1 clients require a non-null checked_at in restore_tests. Keep
+    # that subset while newer clients read all evidence, including never tested.
+    result["restore_tests"] = [r for r in result["restore_verifications"] if r["checked_at"]]
     result["repositories"] = list(repo_samples.values())
     for item in history:
         stamp = _stamp(item.get("timestamp"))
