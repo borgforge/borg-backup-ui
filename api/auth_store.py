@@ -176,6 +176,10 @@ def read_users_store(config: dict) -> dict:
 
 
 def write_users_store(config: dict, data: dict) -> None:
+    """Atomically save users, invalidating mobile approvals on security changes."""
+    if (data_root(config) / "config" / "mobile-sessions.json").exists():
+        from mobile_auth import revoke_changed_users
+        revoke_changed_users(config, read_users_store(config), data)
     fp = users_file(config)
     fp.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(data, ensure_ascii=False, indent=2) + "\n"

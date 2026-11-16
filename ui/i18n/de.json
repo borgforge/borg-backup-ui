@@ -3967,7 +3967,6 @@
     "waitingCountMany": "{count} warten",
     "unknownCountOne": "{count} Status unbekannt",
     "unknownCountMany": "{count} Status unbekannt",
-
     "activeCount": "{count} aktive Läufe",
     "title": "Server-Auslastung",
     "live": "Live · alle {seconds} s",
@@ -4031,5 +4030,21 @@
     "savedStatus": "Gespeicherter Backup-Status",
     "showStatus": "Status anzeigen",
     "hideStatus": "Status ausblenden"
+  },
+  "mobile": {
+    "back": "Zurück zu Borg Backup UI",
+    "intro": "Kopple dein Android-Gerät für den lesenden Zugriff. Sitzungen laufen nach 12 Stunden ab und können hier widerrufen werden.",
+    "warning": "Bestätige nur einen Code, der gerade in deiner eigenen BorgForge-Mobile-App angezeigt wird. Bestätige niemals zugesandte Codes. Die Freigabe erlaubt den Zugriff auf Jobnamen und Statusdaten.",
+    "code": "Code aus deiner App",
+    "approve": "Lesenden Zugriff freigeben",
+    "devices": "Deine Mobilgeräte",
+    "refresh": "Geräte aktualisieren",
+    "login": "Anmelden und anschließend hierher zurückkehren",
+    "error": "Anfrage fehlgeschlagen. Prüfe Anmeldung, Code und HTTPS-Verbindung und versuche es erneut.",
+    "expires": "Gültig bis",
+    "revoke": "Widerrufen",
+    "empty": "Keine aktiven mobilen Sitzungen.",
+    "approved": "Freigegeben. Schließe die Kopplung jetzt in der App ab.",
+    "https": "Öffne diese Seite über HTTPS, um ein Gerät freizugeben."
   }
 }

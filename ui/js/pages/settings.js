@@ -2740,6 +2740,7 @@ function renderSettingsUsers() {
             ${settingsT('users.signedIn')} <strong>${escHtml(currentUser || '—')}</strong>${currentRole ? ` (${escHtml(currentRole)})` : ''}
             · ${settingsT('users.activeSessions')} <strong>${ownSessions}</strong>${totalSessions !== null ? ` · ${settingsT('users.total')} <strong>${totalSessions}</strong>` : ''}
           </span>
+          <a class="btn btn-secondary btn-sm" href="/ui/mobile-devices.html">BorgForge Mobile</a>
           <button class="btn btn-secondary btn-sm" data-settings-action="user-change-own-password">${settingsT('users.changeOwnPassword')}</button>
           <button class="btn btn-secondary btn-sm" data-settings-action="user-logout-own-sessions">${settingsT('users.logoutOwn')}</button>
           ${currentRole === 'admin' ? `<button class="btn btn-secondary btn-sm" data-settings-action="user-logout-all-sessions">${settingsT('users.logoutAll')}</button>` : ''}
