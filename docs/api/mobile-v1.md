@@ -2,8 +2,8 @@
 
 This additive API pairs a native client without copying internal API tokens,
 widget tokens, browser cookies or Unraid credentials. It grants **monitor:read**
-only. There are no mobile job controls, restore operations, logs or configuration
-exports. Existing browser/internal automation routes keep their authorization.
+by default. Optional device-specific job control is described below. There are
+no restore operations, raw logs or configuration exports. Existing browser/internal automation routes keep their authorization.
 
 ## Pairing
 
@@ -38,7 +38,8 @@ Responses use `Cache-Control: no-store`; no token is put in a URL or cookie.
 
 Device sessions expire **12 hours after pairing**, without sliding renewal or a
 refresh token. Pair again after expiry. `GET /api/auth/mobile/sessions` lists the
-current browser user's own sessions (`id`, `label`, `created_at`, `expires_at`).
+current browser user's own sessions (`id`, `label`, `created_at`, `expires_at`, `job_control`), plus
+`can_approve_job_control` for the current browser user.
 `POST /api/auth/mobile/revoke` with `session_id` idempotently revokes an owned
 session. Foreign IDs do not confer access. Existing logout-all operations also
 revoke mobile sessions in their selected user/all scope.
@@ -76,46 +77,80 @@ TLS connection from arbitrary forwarded headers. Keep the proxy-to-plugin link
 on a trusted network or protect it with TLS as well. Configure request limits and
 timeouts at the proxy. No CORS access or TLS bypass is added.
 
-## Monitoring projection
+## Monitoring projection (#740)
 
-`snapshot` has `api_version: 1`, `sampled_at` (UTC ISO 8601), and arrays:
+`snapshot` has `api_version: 1`, UTC `sampled_at`, boolean `job_control`, and:
 
-- `jobs`: opaque `id`, `name`, `status`, opaque `repository_id`, nullable
-  `last_run`, `next_run`, `duration_seconds`.
-- `history`: latest at most 100 valid timestamped entries, opaque `id`,
-  `job_name`, `status`, `timestamp`, nullable `duration_seconds`, `bytes`
-  (recorded original data size, not network transfer).
-- `repositories`: opaque `id`, display `name`, nullable `bytes`, `checked_at`.
-  Individual sizes/checks are currently unavailable, not inferred from jobs.
-- `restore_tests`: `job_name`, `status`, `checked_at` from recorded job evidence.
-- `storage_daily`: 30 daily `{date: YYYY-MM-DD, bytes: integer|null}` entries
-  from the existing overview repository-size aggregation. These are recorded
-  samples carried forward by that aggregation, not live disk readings.
+- `jobs`: opaque `id`/`repository_id`, `name`, `status`, nullable `last_run`,
+  `next_run`, `duration_seconds`, `bytes` (original size), `compressed_bytes`,
+  `deduplicated_bytes`, `files_count`, `exit_code`, `reason_code`.
+  `schedule_state` is `none`, `disabled`, `active`, or `unsupported`; nullable
+  `cron` uses server-local time. The existing reminder calculator supplies next
+  run for supported expressions; unsupported expressions are preserved, not guessed.
+- Job runtime fields: nullable `run_id`, `phase`, `percent`, `processed_bytes`,
+  boolean `cancel_requested`, `can_start`, `can_cancel`. A measured percentage is
+  exposed only when the runtime records one; Borg create normally has none.
+  `processed_bytes` is the recorded original size so far, not network traffic.
+- `history`: latest at most 100 valid timestamped entries, opaque `id`/`job_id`,
+  `job_name`, `status`, `timestamp`, nullable `duration_seconds`, `bytes`,
+  `reason_code`, `exit_code`. Failure codes are also preserved by the existing
+  history API as an additive field.
+- `repositories`: opaque `id`, display `name`, nullable recorded `bytes`,
+  `checked_at`, `measured_at` from status reports, deduplicated by current
+  repository assignment. These are recorded samples, not a fresh repository scan.
+- `restore_tests`: `job_name`, last attempt `status`, nullable `checked_at`,
+  `verification` (`verified`, `stale`, `failed`, `never`, `not_required`), nullable
+  `valid_until`, `reason_code`. Missing evidence is included explicitly.
+- `storage_daily`: 30 daily `{date: YYYY-MM-DD, bytes: integer|null}` samples
+  from the existing overview aggregation.
 
-Source: `mobile_api.snapshot` projects `_get_jobs` (`jobs_api.list_jobs`),
-`_get_history` (`history_api.get_history_data`) and `_get_report_overview`
-(`dashboard_overview.get_dashboard_overview`). It excludes paths, raw logs,
-archive names, retention/source configuration, credentials and arbitrary fields.
-Display names are intentionally included and may be sensitive. Job/status reads
-retain existing backend behavior, including legacy status snapshot bookkeeping;
-no backup/restore command is executed. Unknown states become `unknown`; no
-schedule, progress percentage, VPN state or missing measurement is invented.
-Naive recorded timestamps are interpreted in the server's local timezone and
-converted to UTC. History entries with invalid timestamps are omitted.
+Backup outcomes retain `cancelled`, `skipped`, `unavailable`; `failed` maps to
+`error`. Jobs without an attempt are `ready`; disabled jobs are `disabled`.
+Unknown future states remain `unknown`. Fields added in #740 are optional to
+clients. Older clients continue reading the initial v1 subset.
 
-Errors: 400 invalid input/code; 401 invalid/expired/revoked device or browser
-session; 403 missing setup, invalid Origin or maintenance write restriction;
-404 unsupported method/path/query; 429 pairing limits; 503 unavailable stores.
-Clients should discard invalid sessions on 401 and require pairing again.
-Never display raw server errors or fall back to the demo for a real server.
+Sources: `jobs_api.list_jobs`, `status_api.get_status_data`,
+`jobs_api.get_all_runtime_states`, read-only `schedule_api.get_schedules`,
+`notification_reminder_api._next_expected_run`, `history_api.get_history`, and
+`dashboard_overview`. Free-form error text, raw logs, source/repository paths,
+configuration, passphrases and filename activity are never projected. Structured
+reason identifiers permit localized client explanations without forwarding logs.
+
+## Explicit job control (#740)
+
+Capabilities advertises `job_control: true`. During browser approval,
+`allow_job_control: true` (strict JSON boolean) requires an enabled operator/admin.
+Default false and all existing sessions remain read-only. The bearer scope stays
+`monitor:read` for compatibility; the stored additional device consent and current
+role are authoritative, checked again for every command. Re-pair to change rights.
+
+`POST /api/mobile/v1/jobs/start`: `{job_id, request_id}`.
+`POST /api/mobile/v1/jobs/cancel`: `{job_id, run_id, request_id}`.
+IDs are from the current snapshot; `request_id` is 32 random lowercase hex digits.
+Both return `{accepted: true, run_id}`; cancellation also returns
+`cancellation_deferred`. Accepted cancellation is a request, not proof of completion.
+Only ordinary wizard backup jobs are eligible. No utility/restore/delete endpoint
+is granted. Starts require enabled and idle; cancellation requires the exact
+current run, an allowed phase and no already-pending cancellation. Existing
+`job_launch.start_backup` and `jobs_api.cancel_job` retain runtime locks, hooks and
+cleanup. The existing maintenance guard applies to these endpoints.
+
+A per-session ledger reserves each request durably before execution. Same ID and
+payload returns a stored success, never a second launch; changed payload or an
+incomplete reservation returns 409. Crashes/timeouts require status reconciliation,
+not automatic retries. At most 100 command reservations per 12-hour session are
+retained. Revocation and account changes also prevent result replay. Concurrent
+mobile admission is serialized in the single server process.
 
 ## Verification
 
 `tests/test_mobile_auth.py` covers the full HTTP pairing/read/logout flow,
-read-only authorization boundaries, CSRF, credential hashing, permissions,
+device authorization boundaries, CSRF, credential hashing, permissions,
 revocation, account changes, expiry, rate limiting, corruption and projection.
 Run it with `tests/test_auth.py` and `tests/test_dashboard_overview_api.py` for
-focused regression coverage. Hosted CI remains the full-suite authority.
+focused regression coverage. `tests/test_mobile_controls.py` additionally mocks launch/cancel services to test
+consent, roles, duplicate/crash protection, revoked sessions, run identity,
+uncancellable phases and measured projections. Hosted CI remains the full-suite authority.
 
 Maintainer test on the test candidate: pair a viewer, check actual job/history
 labels and states, revoke it in the browser, refresh the app and expect sign-in;

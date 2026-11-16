@@ -4036,7 +4036,7 @@
     "intro": "Kopple dein Android-Gerät für den lesenden Zugriff. Sitzungen laufen nach 12 Stunden ab und können hier widerrufen werden.",
     "warning": "Bestätige nur einen Code, der gerade in deiner eigenen BorgForge-Mobile-App angezeigt wird. Bestätige niemals zugesandte Codes. Die Freigabe erlaubt den Zugriff auf Jobnamen und Statusdaten.",
     "code": "Code aus deiner App",
-    "approve": "Lesenden Zugriff freigeben",
+    "approve": "Gerät freigeben",
     "devices": "Deine Mobilgeräte",
     "refresh": "Geräte aktualisieren",
     "login": "Anmelden und anschließend hierher zurückkehren",
@@ -4045,6 +4045,9 @@
     "revoke": "Widerrufen",
     "empty": "Keine aktiven mobilen Sitzungen.",
     "approved": "Freigegeben. Schließe die Kopplung jetzt in der App ab.",
-    "https": "Öffne diese Seite über HTTPS, um ein Gerät freizugeben."
+    "https": "Öffne diese Seite über HTTPS, um ein Gerät freizugeben.",
+    "jobControl": "Zusätzlich Backup-Jobs starten und laufende Jobs abbrechen erlauben (Operator/Admin)",
+    "controlAccess": "Anzeige und Jobsteuerung",
+    "readAccess": "Nur Anzeige"
   }
 }

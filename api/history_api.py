@@ -227,6 +227,7 @@ def get_history_data(config: dict, filters: dict | None = None) -> dict:
             "error_message": raw.get("error_message"),
             "hook_results": raw.get("hook_results", {}),
             "backup_exit_code": raw.get("backup_exit_code"),
+            "failure_code": raw.get("failure_code", ""),
             "skip_reason_code": raw.get("skip_reason_code", ""),
             "skip_reason_text": raw.get("skip_reason_text", ""),
             "repository_check_date": raw.get("repository_check_date"),

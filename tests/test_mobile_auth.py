@@ -40,7 +40,7 @@ def test_pairing_consumed_hashed_private_and_revocable(config):
     with pytest.raises(auth.MobileError):
         auth.exchange(config, pairing["device_code"])
     own = auth.sessions(config, "viewer")["sessions"]
-    assert set(own[0]) == {"id", "label", "created_at", "expires_at"}
+    assert set(own[0]) == {"id", "label", "created_at", "expires_at", "job_control"}
     auth.revoke(config, "another", session["session_id"])
     auth.authenticate(config, session["access_token"])
     auth.revoke(config, "viewer", session["session_id"])
@@ -110,9 +110,10 @@ def test_authorization_boundaries(config):
     assert not h._authorize_api_request(h.path, 'test')
 
 
-def test_snapshot_allowlist_and_unknown_measurements():
+def test_snapshot_allowlist_and_unknown_measurements(config):
     secret = '/private/secret-path'
-    h = SimpleNamespace(
+    h = SimpleNamespace(config=config, _mobile_session={},
+        _get_status=lambda: {"backups": []}, _get_running=lambda: {},
         _get_jobs=lambda: {'jobs': [{'key': secret, 'display_name': 'Photos', 'repository_key': secret,
                                     'repository_name': 'Repository', 'repo_path': secret, 'last_status': 'success'}]},
         _get_history=lambda _: {'entries': [{'job_key': secret, 'job_name': 'Photos', 'timestamp': '2026-01-02 12:00:00', 'log_file': secret}]},
@@ -163,6 +164,10 @@ def test_http_pairing_snapshot_and_logout(config):
         _UI_SESSIONS = {}
         def log_message(self, *_args):
             pass
+        def _get_status(self):
+            return {"backups": []}
+        def _get_running(self):
+            return {}
         def _get_jobs(self):
             return {'jobs': []}
         def _get_history(self, _query):

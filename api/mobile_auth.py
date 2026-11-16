@@ -1,4 +1,4 @@
-"""Bounded, browser-approved read-only device sessions (#738).
+"""Bounded, browser-approved device sessions (#738).
 
 Only SHA-256 credential digests are persisted. A fixed twelve-hour lifetime
 requires explicit re-pairing; there is no refresh credential or password login.
@@ -115,19 +115,23 @@ def begin(config: dict, label: object, client_ip: str) -> dict:
                 "scope": SCOPE, "session_expires_in": SESSION_TTL}
 
 
-def approve(config: dict, username: str, code: object) -> dict:
+def approve(config: dict, username: str, code: object, allow_job_control: bool = False) -> dict:
     """Bind a code to the current enabled browser user; approval is one-use."""
     with LOCK:
         data = _load(config)
         _limit(config, data, "approve:" + username, 30)
         user = _user(config, username)
+        if type(allow_job_control) is not bool:
+            raise MobileError("mobile_bad_request", 400)
+        if allow_job_control and user.get("role") not in {"operator", "admin"}:
+            raise MobileError("mobile_forbidden", 403)
         if not isinstance(code, str) or len(code) > 32:
             raise MobileError("mobile_bad_request", 400)
         hashed = digest(code.upper().replace("-", "").replace(" ", ""))
         pending = next((p for p in data["pending"] if secrets.compare_digest(p["code_hash"], hashed)), None)
         if not pending or pending.get("username"):
             raise MobileError("mobile_invalid_code", 400)
-        pending.update(username=username, fingerprint=_fingerprint(user))
+        pending.update(username=username, fingerprint=_fingerprint(user), job_control=allow_job_control)
         _save(config, data)
         return {"approved": True, "device_name": pending["label"], "scope": SCOPE}
 
@@ -150,7 +154,7 @@ def exchange(config: dict, device_code: object) -> dict:
         token = "bfm_" + secrets.token_urlsafe(32)
         session = {"id": secrets.token_hex(16), "token_hash": digest(token),
                    "username": pending["username"], "fingerprint": pending["fingerprint"],
-                   "label": pending["label"], "created_at": time.time(),
+                   "label": pending["label"], "job_control": pending.get("job_control", False), "created_at": time.time(),
                    "expires_at": time.time() + SESSION_TTL}
         data["pending"].remove(pending)
         data["sessions"].append(session)
@@ -176,7 +180,9 @@ def sessions(config: dict, username: str) -> dict:
     """List only the caller's device metadata, never credential digests."""
     with LOCK:
         data = _load(config)
-        return {"sessions": [{k: s[k] for k in ("id", "label", "created_at", "expires_at")}
+        return {"can_approve_job_control": _user(config, username).get("role") in {"operator", "admin"},
+                "sessions": [dict({k: s[k] for k in ("id", "label", "created_at", "expires_at")},
+                                  job_control=s.get("job_control", False))
                              for s in data["sessions"] if s["username"] == username]}
 
 
@@ -214,3 +220,44 @@ def revoke_changed_users(config: dict, before: dict, after: dict) -> None:
                if current.get(normalize_username(u.get("username"))) != security_fields(u)}
     if changed:
         revoke_users(config, changed)
+
+
+def can_control(config: dict, session: dict) -> bool:
+    """Require explicit device consent and a currently enabled operator/admin."""
+    return (session.get("job_control") is True
+            and _user(config, session["username"]).get("role") in {"operator", "admin"})
+
+
+def command(config: dict, session: dict, request_id: str, payload: dict, execute) -> dict:
+    """Reserve a bounded operation ID durably before invoking a job action once.
+
+    Replays return the recorded result; a crash/exception leaves an uncertain
+    reservation (409), never an automatic second launch. Entries expire with
+    the session. Revoked or changed users cannot replay successful commands.
+    """
+    import re
+    if not isinstance(request_id, str) or not re.fullmatch(r"[a-f0-9]{32}", request_id):
+        raise MobileError("mobile_bad_request", 400)
+    with LOCK:
+        data = _load(config)
+        current = next((s for s in data["sessions"] if s["id"] == session["id"]), None)
+        if not current or _fingerprint(_user(config, current["username"])) != current["fingerprint"]:
+            raise MobileError("mobile_unauthorized", 401)
+        if not can_control(config, current):
+            raise MobileError("mobile_forbidden", 403)
+        commands = current.setdefault("commands", {})
+        previous = commands.get(request_id)
+        if previous:
+            if previous["payload"] != payload or "result" not in previous:
+                raise MobileError("mobile_command_uncertain", 409)
+            return previous["result"]
+        if len(commands) >= 100:
+            raise MobileError("mobile_rate_limited", 429)
+        commands[request_id] = {"payload": payload}
+        _save(config, data)
+        # Serializing launch admission prevents two concurrent mobile requests
+        # passing the existing runtime check before either process is recorded.
+        result = execute()
+        commands[request_id]["result"] = result
+        _save(config, data)
+        return result

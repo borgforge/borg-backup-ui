@@ -1,5 +1,5 @@
 'use strict';
-/** Manage owned, read-only device sessions; credentials never enter the DOM. */
+/** Manage owned device sessions; credentials never enter the DOM. */
 (async function mobileDevices() {
   const i18n = window.BBUI.components.i18n;
   await i18n.init();
@@ -21,12 +21,13 @@
   async function refresh() {
     try {
       const data = await api('sessions');
+      document.getElementById('job-control').disabled = data.can_approve_job_control !== true;
       const list = document.getElementById('devices');
       list.replaceChildren();
       for (const session of data.sessions) {
         const row = document.createElement('li');
         const text = document.createElement('span');
-        text.textContent = `${session.label} · ${t('expires')} ${new Date(session.expires_at * 1000).toLocaleString()} `;
+        text.textContent = `${session.label} · ${t(session.job_control ? 'controlAccess' : 'readAccess')} · ${t('expires')} ${new Date(session.expires_at * 1000).toLocaleString()} `;
         const button = document.createElement('button');
         button.textContent = t('revoke');
         button.onclick = async () => {
@@ -44,8 +45,9 @@
     const button = form.querySelector('button');
     button.disabled = true;
     try {
-      await api('approve', {user_code: document.getElementById('code').value});
+      await api('approve', {user_code: document.getElementById('code').value, allow_job_control: document.getElementById('job-control').checked});
       document.getElementById('code').value = '';
+      document.getElementById('job-control').checked = false;
       result.textContent = t('approved');
     } catch (_) { result.textContent = t('error'); }
     finally { button.disabled = false; }
