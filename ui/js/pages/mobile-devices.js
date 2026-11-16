@@ -15,6 +15,8 @@
               maxlength="16" required pattern="[A-Za-z2-9 -]{10,16}"></div>
           <label class="form-checkbox-row"><input id="mobile-job-control" type="checkbox" disabled>
             <span>${escHtml(t('jobControl'))}</span></label>
+          <label class="form-checkbox-row"><input id="mobile-logs" type="checkbox">
+            <span>${escHtml(t('logsConsent'))}</span></label>
           <button class="btn btn-primary" id="mobile-approve" type="submit" disabled>${escHtml(t('approve'))}</button>
         </form>
         <div id="mobile-device-result" class="status-message hidden" role="status" aria-live="polite"></div>
@@ -69,9 +71,9 @@
       list.innerHTML = data.sessions.length ? `<div class="mobile-devices-table"><table class="settings-table">
         <thead><tr><th>${escHtml(t('device'))}</th><th>${escHtml(t('access'))}</th><th>${escHtml(t('created'))}</th><th>${escHtml(t('expires'))}</th><th>${escHtml(t('actions'))}</th></tr></thead>
         <tbody>${data.sessions.map(session => `<tr>
-          <td>${escHtml(session.label)}</td><td><span class="badge ${session.job_control ? 'warning' : 'info'}">${escHtml(t(session.job_control ? 'controlAccess' : 'readAccess'))}</span></td>
+          <td>${escHtml(session.label)}</td><td><span class="badge ${session.job_control ? 'warning' : 'info'}">${escHtml(t(session.job_control ? 'controlAccess' : 'readAccess'))}</span><br>${escHtml(t(session.logs ? 'logsEnabled' : 'logsDisabled'))}</td>
           <td>${escHtml(date(session.created_at))}</td><td>${escHtml(session.persistent === true ? t('untilRevoked') : date(session.expires_at))}</td>
-          <td><button type="button" class="btn btn-danger btn-sm" data-settings-action="mobile-revoke" data-mobile-id="${escAttr(session.id)}" ${secure ? '' : 'disabled'}>${escHtml(t('revoke'))}</button></td>
+          <td><button type="button" class="btn btn-secondary btn-sm" data-settings-action="mobile-logs" data-mobile-logs="${session.logs ? 'false' : 'true'}" data-mobile-id="${escAttr(session.id)}" ${secure ? '' : 'disabled'}>${escHtml(t(session.logs ? 'disableLogs' : 'enableLogs'))}</button> <button type="button" class="btn btn-danger btn-sm" data-settings-action="mobile-revoke" data-mobile-id="${escAttr(session.id)}" ${secure ? '' : 'disabled'}>${escHtml(t('revoke'))}</button></td>
         </tr>`).join('')}</tbody></table></div>` : `<div class="empty-state">${escHtml(t('empty'))}</div>`;
       if (!secure) message(root, t('https'), true);
     } catch (error) {
@@ -100,6 +102,7 @@
       root.querySelector('#mobile-job-control').disabled = true;
       try {
         await api('approve', {user_code: root.querySelector('#mobile-pair-code').value,
+          allow_logs: root.querySelector('#mobile-logs').checked,
           allow_job_control: root.mobileCanControl && root.querySelector('#mobile-job-control').checked});
         if (!root.isConnected) return;
         form.reset();
@@ -121,9 +124,11 @@
     button.disabled = true;
     root.mobileGeneration = (root.mobileGeneration || 0) + 1;
     try {
-      await api('revoke', {session_id: button.dataset.mobileId});
+      const logs = button.dataset.settingsAction === 'mobile-logs';
+      await api(logs ? 'log-permission' : 'revoke', {session_id: button.dataset.mobileId,
+        ...(logs ? {allow_logs: button.dataset.mobileLogs === 'true'} : {})});
       if (!root.isConnected) return;
-      message(root, t('revoked'));
+      message(root, t(logs ? 'logsUpdated' : 'revoked'));
       await refresh();
     } catch (error) {
       if (root.isConnected) { message(root, error.message, true); button.disabled = false; }

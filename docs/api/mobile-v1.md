@@ -217,3 +217,47 @@ retaining a running card as current. No write is replayed by this polling.
 `tests/test_mobile_refresh.py` verifies renewal after long inactivity, expiry,
 legacy behavior, Origin/token boundaries, hashed storage, revocation, account
 changes and rejection of commands admitted under an obsolete access token.
+
+## Opt-in log tails and cached repository details (#743)
+
+Capabilities adds `logs: true` and `repository_details: true`. Snapshots add
+`logs_supported: true` and the current device's boolean `logs` permission. Existing
+devices default to no log access. Browser approval accepts optional strict boolean
+`allow_logs`; viewers may opt in independently of job-control rights. Settings >
+Users also permits granting/removing logs without re-pairing via
+`POST /api/auth/mobile/log-permission` with `{session_id, allow_logs}`. It requires
+an owned device, current enabled browser user, HTTPS matching Origin and the
+maintenance guard. Foreign/missing IDs return 404; malformed values return 400.
+
+`POST /api/mobile/v1/logs/read` is a **read-only** bounded request with bearer auth,
+JSON Content-Type and exactly one of `{event_id}` or `{job_id, run_id}`. There are
+no path, filename, cursor or arbitrary query parameters. History IDs resolve only
+within the snapshot's latest 100 known-job records and their retained log_file;
+`log_available` describes a reference, not proof the file still exists. Missing or
+rotated logs return 404; replaced live runs without exact retained evidence return
+409. A new run is never substituted for the requested run. Current consent and
+revocation are checked again after the read. No cookie/internal token authorizes
+this route. Permissions survive access-token refresh and end with device revocation.
+
+Response: `{text, running, limited: true, redacted: true}`. Retained reads use the
+existing descriptor-pinned, confined log reader with an 8192-byte tail. In-memory
+reads copy at most 200 lines; activity files reuse the bounded 64 KiB run reader.
+Oversized lines and common secret/key formats are suppressed, paths/addresses and
+filename activity masked. Redaction precedes the final 6000-code-point bound;
+partial boundary lines are omitted. This is an excerpt, not a complete download.
+Custom script prose can still contain private information: explicit device log
+consent is essential, and clients must not persist or log response text. Clients
+poll only an open foreground live-log viewer, sequentially every five seconds;
+errors stop automatic reads, and completed logs require no ongoing polling.
+
+Repository entries now also include unassigned repositories from
+`repositories_api.read_repository_store`, without running Borg or refreshing
+storage. Optional fields: `archives_count`, `original_bytes` (total_size),
+`compressed_bytes` (total_csize), `deduplicated_bytes` (unique_csize), `encryption`,
+`info_at`, `info_status`, `check_status`. Unknown measurements stay null and cached
+measurement timestamps remain separate from current snapshot time. Configuration
+paths, credentials, raw refresh errors and archive filenames are not projected.
+There are no repository write/maintenance/delete/restore grants.
+
+Focused regressions: `tests/test_mobile_details.py`, history-log security tests,
+mobile auth/refresh/control tests and DE/EN settings browser tests.

@@ -14,7 +14,7 @@ BROWSER = "/api/auth/mobile/"
 ROUTES = {
     "GET": {PREFIX + "capabilities", PREFIX + "snapshot", BROWSER + "sessions"},
     "POST": {PREFIX + "pair", PREFIX + "exchange", PREFIX + "refresh", PREFIX + "logout",
-             BROWSER + "approve", BROWSER + "revoke", PREFIX + "jobs/start", PREFIX + "jobs/cancel"},
+             BROWSER + "approve", BROWSER + "revoke", PREFIX + "jobs/start", PREFIX + "jobs/cancel", PREFIX + "logs/read", BROWSER + "log-permission"},
 }
 
 
@@ -68,7 +68,7 @@ def handle(handler) -> dict:
         body = handler._read_json_body()
     if path == PREFIX + "capabilities":
         return {"api_version": 1, "authentication": "device_pairing", "scope": auth.SCOPE,
-                "session_expires_in": auth.SESSION_TTL, "job_control": True, "persistent_pairing": True}
+                "session_expires_in": auth.SESSION_TTL, "job_control": True, "persistent_pairing": True, "logs": True, "repository_details": True}
     if path == PREFIX + "pair":
         return auth.begin(handler.config, body.get("device_name"), handler._client_ip(), body.get("persistent", False))
     if path == PREFIX + "exchange":
@@ -76,7 +76,12 @@ def handle(handler) -> dict:
     if path == PREFIX + "refresh":
         return auth.refresh(handler.config, body.get("refresh_token"))
     if path == BROWSER + "approve":
-        return auth.approve(handler.config, handler._mobile_user, body.get("user_code"), body.get("allow_job_control", False))
+        return auth.approve(handler.config, handler._mobile_user, body.get("user_code"), body.get("allow_job_control", False), body.get("allow_logs", False))
+    if path == BROWSER + "log-permission":
+        return auth.log_permission(handler.config, handler._mobile_user, body.get("session_id"), body.get("allow_logs"))
+    if path == PREFIX + "logs/read":
+        from mobile_logs import read_log
+        return read_log(handler, body)
     if path == BROWSER + "sessions":
         return auth.sessions(handler.config, handler._mobile_user)
     if path == BROWSER + "revoke":
@@ -196,7 +201,7 @@ def snapshot(handler) -> dict:
     history = handler._get_history("per_page=100&page=1")["entries"]
     overview = handler._get_report_overview("days=30&location=all")
     result = {"api_version": 1, "sampled_at": datetime.now(timezone.utc).isoformat(),
-              "job_control": allowed,
+              "job_control": allowed, "logs": handler._mobile_session.get("logs") is True, "logs_supported": True,
               "jobs": [], "history": [], "repositories": [], "restore_tests": [], "restore_verifications": [],
               "storage_daily": [{"date": p["date"], "bytes": _number(p.get("repository_bytes"))}
                                 for p in overview["daily"]]}
@@ -252,13 +257,27 @@ def snapshot(handler) -> dict:
     # Initial v1 clients require a non-null checked_at in restore_tests. Keep
     # that subset while newer clients read all evidence, including never tested.
     result["restore_tests"] = [r for r in result["restore_verifications"] if r["checked_at"]]
+    from repositories_api import read_repository_store
+    for repo in read_repository_store(handler.config)["repositories"]:
+        key = repo["repository_key"]
+        sample = repo_samples.setdefault(key, {"id": _id(key), "name": _name(repo.get("display_name")),
+                                               "bytes": None, "checked_at": None, "measured_at": None})
+        stats = repo.get("repository_stats") or {}
+        sample.update(archives_count=_number(stats.get("archives_count")),
+                      original_bytes=_number(stats.get("total_size")),
+                      compressed_bytes=_number(stats.get("total_csize")),
+                      deduplicated_bytes=_number(stats.get("unique_csize")),
+                      encryption=_code(repo.get("encryption")),
+                      info_at=_stamp(repo.get("last_info_refresh_at")),
+                      info_status=_code(repo.get("last_info_refresh_status")),
+                      check_status=_code(repo.get("last_check_status")))
     result["repositories"] = list(repo_samples.values())
     for item in history:
         stamp = _stamp(item.get("timestamp"))
         if not stamp:
             continue
         result["history"].append({"id": _id(str(item.get("job_key")) + stamp + str(item.get("run_id"))),
-                                  "job_id": _id(item.get("job_key")),
+                                  "job_id": _id(item.get("job_key")), "log_available": bool(item.get("log_file")),
                                   "job_name": _name(item.get("job_name")), "timestamp": stamp,
                                   "status": _status(item.get("status")),
                                   "reason_code": _code(item.get("failure_code") or item.get("skip_reason_code")),

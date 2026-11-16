@@ -117,13 +117,13 @@ def begin(config: dict, label: object, client_ip: str, persistent: bool = False)
                 "scope": SCOPE, "session_expires_in": SESSION_TTL}
 
 
-def approve(config: dict, username: str, code: object, allow_job_control: bool = False) -> dict:
+def approve(config: dict, username: str, code: object, allow_job_control: bool = False, allow_logs: bool = False) -> dict:
     """Bind a code to the current enabled browser user; approval is one-use."""
     with LOCK:
         data = _load(config)
         _limit(config, data, "approve:" + username, 30)
         user = _user(config, username)
-        if type(allow_job_control) is not bool:
+        if type(allow_job_control) is not bool or type(allow_logs) is not bool:
             raise MobileError("mobile_bad_request", 400)
         if allow_job_control and user.get("role") not in {"operator", "admin"}:
             raise MobileError("mobile_forbidden", 403)
@@ -133,7 +133,7 @@ def approve(config: dict, username: str, code: object, allow_job_control: bool =
         pending = next((p for p in data["pending"] if secrets.compare_digest(p["code_hash"], hashed)), None)
         if not pending or pending.get("username"):
             raise MobileError("mobile_invalid_code", 400)
-        pending.update(username=username, fingerprint=_fingerprint(user), job_control=allow_job_control)
+        pending.update(username=username, fingerprint=_fingerprint(user), job_control=allow_job_control, logs=allow_logs)
         _save(config, data)
         return {"approved": True, "device_name": pending["label"], "scope": SCOPE}
 
@@ -156,7 +156,7 @@ def exchange(config: dict, device_code: object) -> dict:
         token = "bfm_" + secrets.token_urlsafe(32)
         session = {"id": secrets.token_hex(16), "token_hash": digest(token),
                    "username": pending["username"], "fingerprint": pending["fingerprint"],
-                   "label": pending["label"], "job_control": pending.get("job_control", False), "created_at": time.time(),
+                   "logs": pending.get("logs", False), "label": pending["label"], "job_control": pending.get("job_control", False), "created_at": time.time(),
                    "expires_at": time.time() + SESSION_TTL}
         refresh_token = "bfr_" + secrets.token_urlsafe(32) if pending.get("persistent") else None
         if refresh_token:
@@ -215,6 +215,7 @@ def sessions(config: dict, username: str) -> dict:
         return {"can_approve_job_control": _user(config, username).get("role") in {"operator", "admin"},
                 "sessions": [dict({k: s[k] for k in ("id", "label", "created_at", "expires_at")},
                                   job_control=s.get("job_control", False),
+                                  **({"logs": True} if s.get("logs") else {}),
                                   **({"persistent": True} if s.get("refresh_hash") else {}))
                              for s in data["sessions"] if s["username"] == username]}
 
@@ -296,3 +297,30 @@ def command(config: dict, session: dict, request_id: str, payload: dict, execute
         commands[request_id]["result"] = result
         _save(config, data)
         return result
+
+
+def log_permission(config: dict, username: str, session_id: object, allowed: object) -> dict:
+    """Set log consent on an owned device from the authenticated browser only."""
+    if type(allowed) is not bool or not isinstance(session_id, str):
+        raise MobileError("mobile_bad_request", 400)
+    with LOCK:
+        _user(config, username)
+        data = _load(config)
+        session = next((s for s in data["sessions"] if s["id"] == session_id and s["username"] == username), None)
+        if not session:
+            raise MobileError("mobile_not_found", 404)
+        session["logs"] = allowed
+        _save(config, data)
+        return {"logs": allowed}
+
+
+def require_logs(config: dict, session: dict) -> None:
+    """Recheck the current credential, user and explicit log grant; fail closed."""
+    with LOCK:
+        current = next((s for s in _load(config)["sessions"] if s["id"] == session["id"]), None)
+        if (not current or current["expires_at"] <= time.time()
+                or current["token_hash"] != session["token_hash"]
+                or _fingerprint(_user(config, current["username"])) != current["fingerprint"]):
+            raise MobileError("mobile_unauthorized", 401)
+        if current.get("logs") is not True:
+            raise MobileError("mobile_forbidden", 403)

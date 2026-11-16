@@ -606,6 +606,21 @@ class JobManager:
             **_control_state_for_run(state.run_id),
         }
 
+    def output_tail(self, job_key: str, run_id: str) -> dict | None:
+        """Read at most 200 memory log lines for one exact run, without copying all.
+
+        File-backed and recovered runs return None for the confined file reader.
+        Oversized lines are omitted whole, before downstream secret masking.
+        """
+        job_key = _validate_job_key(job_key)
+        with self._lock:
+            state = self._states.get(job_key)
+        if state is None or state.run_id != run_id or state.log_file is not None:
+            return None
+        with state._lock:
+            lines = [line if len(line) <= 8192 else "[oversized line omitted]" for line in state.lines[-200:]]
+            return {"text": "\n".join(lines) + ("\n" if lines else ""), "running": not state.finished}
+
     def get_all_states(self) -> dict:
         with self._lock:
             keys = list(self._states.keys())

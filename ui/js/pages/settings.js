@@ -6461,7 +6461,7 @@ async function onSettingsContentClick(event) {
   const el = event.target.closest('[data-settings-action]');
   if (!el) return;
   const action = el.dataset.settingsAction || '';
-  if (action === 'mobile-refresh' || action === 'mobile-revoke') return window.BBUI.mobileDevices.handleClick(el);
+  if (action === 'mobile-refresh' || action === 'mobile-revoke' || action === 'mobile-logs') return window.BBUI.mobileDevices.handleClick(el);
   if (action === 'delete-backups-keep-latest') return deleteConfigBackupsKeepLatest();
   if (action === 'export-jobs') return exportJobsBundle();
   if (action === 'export-jobs-secure') return exportJobsBundleSecure();

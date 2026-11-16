@@ -9,7 +9,7 @@ const {chromium} = require('playwright');
     for (const language of ['de','en']) for (const role of ['admin','operator','viewer']) {
       const page = await browser.newPage({viewport:{width:1200,height:1000}});
       const errors = []; page.on('pageerror', e => errors.push(e.message));
-      let approvals = [], revoked = [], requests = [], fail = false, failApproval = false;
+      let approvals = [], revoked = [], logGrants = [], requests = [], fail = false, failApproval = false;
       let sessions = [{id:'a'.repeat(32),label:'<img src=x onerror="window.injected=true">',created_at:1794820000,expires_at:1794863200,job_control:false,persistent:role==='admin'}];
       await page.route('https://bbui.test/**', async route => {
         const req=route.request(), path=new URL(req.url()).pathname;
@@ -27,6 +27,8 @@ const {chromium} = require('playwright');
         } else if(path==='/api/auth/mobile/approve') {
           if(failApproval) return route.fulfill({status:400,contentType:'application/json',body:'{"message":"private-detail"}'});
           approvals.push(req.postDataJSON()); await new Promise(resolve=>setTimeout(resolve,100)); data={approved:true};
+        } else if(path==='/api/auth/mobile/log-permission') {
+          logGrants.push(req.postDataJSON()); sessions[0].logs=req.postDataJSON().allow_logs; data={logs:sessions[0].logs};
         } else if(path==='/api/auth/mobile/revoke') {
           revoked.push(req.postDataJSON()); sessions=[]; data={revoked:true};
         } else if(role!=='admin') throw new Error('Non-admin requested '+path);
@@ -89,7 +91,12 @@ const {chromium} = require('playwright');
       await page.evaluate(()=>document.getElementById('mobile-pair-form').dispatchEvent(new Event('submit',{cancelable:true})));
       await page.waitForFunction(()=>document.getElementById('mobile-pair-code').value==='');
       assert.equal(approvals.length,1);
-      assert.deepEqual(approvals[0],{user_code:'ABCDE23456',allow_job_control:role!=='viewer'});
+      assert.deepEqual(approvals[0],{user_code:'ABCDE23456',allow_logs:false,allow_job_control:role!=='viewer'});
+      await page.locator('[data-settings-action="mobile-logs"]').click();
+      await page.waitForFunction(()=>document.querySelector('[data-settings-action="mobile-logs"]').dataset.mobileLogs==='false');
+      assert.deepEqual(logGrants,[{session_id:'a'.repeat(32),allow_logs:true}]);
+      await page.locator('[data-settings-action="mobile-logs"]').click();
+      await page.waitForFunction(()=>document.querySelector('[data-settings-action="mobile-logs"]').dataset.mobileLogs==='true');
       await page.locator('[data-settings-action="mobile-revoke"]').click();
       await page.waitForFunction(()=>document.querySelectorAll('[data-mobile-id]').length===0);
       assert.deepEqual(revoked,[{session_id:'a'.repeat(32)}]);
