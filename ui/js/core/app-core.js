@@ -102,8 +102,9 @@ function maintenanceFallbackPage() {
  * @param {string} page Requested page identifier.
  */
 function navigate(page) {
+  // Settings renders only owned mobile devices for non-admin users.
   if (page === 'settings' && state.currentRole !== 'admin') {
-    page = 'dashboard';
+    window.BBUI.settingsState.activeTab = 'users';
   }
   if (isStartupMaintenanceMode() && !isMaintenancePageAllowed(page)) {
     page = maintenanceFallbackPage();

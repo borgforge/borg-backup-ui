@@ -4037,7 +4037,7 @@
     "warning": "Only approve a code currently displayed on your own BorgForge Mobile app. Never approve a code sent by someone else. Approval grants access to job names and monitoring data.",
     "code": "Code from your app",
     "approve": "Approve device",
-    "devices": "Your mobile devices",
+    "devices": "Registered devices",
     "refresh": "Refresh devices",
     "login": "Sign in, then return to this page",
     "error": "Request failed. Check your sign-in, code and HTTPS connection, then try again.",
@@ -4048,6 +4048,14 @@
     "https": "Open this page over HTTPS to approve a device.",
     "jobControl": "Also allow starting backup jobs and cancelling active runs (operator/admin)",
     "controlAccess": "Monitoring and job control",
-    "readAccess": "Monitoring only"
+    "readAccess": "Monitoring only",
+    "device": "Device",
+    "access": "Access",
+    "created": "Registered",
+    "actions": "Actions",
+    "loading": "Loading devices…",
+    "loadFailed": "Could not load devices.",
+    "revoked": "Device session revoked.",
+    "sessionHint": "These are the active device sessions for your account. Registration does not mean a device is currently online. Refresh the list after finishing pairing in the app."
   }
 }

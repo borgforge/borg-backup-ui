@@ -62,6 +62,7 @@
     '/ui/vendor/prism/prism-bash.min.js',
     '/ui/js/components/bash-editor.js',
     '/ui/js/pages/settings.js',
+    '/ui/js/pages/mobile-devices.js',
     '/ui/js/pages/databases.js',
     '/ui/js/pages/script-library.js',
     '/ui/js/pages/setup-wizard.js',

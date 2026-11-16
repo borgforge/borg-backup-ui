@@ -911,6 +911,15 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             self._handle_api(lambda: handle(self))
             return
 
+        if path == "/ui/mobile-devices.html":
+            # Existing app links enter the normal shell and keep a fixed login target.
+            target = "/#mobile-devices" if self._is_ui_session_valid() else "/login#mobile-devices"
+            self.send_response(302)
+            self.send_header("Location", target)
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            return
+
         if path == "/metrics":
             self._serve_prometheus_metrics()
             return
@@ -3899,7 +3908,7 @@ function authApiError(data,fallback){const code=String(data?.code||'').trim();if
 function showErr(t){msg.textContent=t;msg.className='status-message error login-msg';}
 async function doLogin(){btn.classList.add('loading');msg.className='status-message hidden login-msg';
 try{await i18nReady;const pw=document.getElementById('login-password').value||'';__LOGIN_PAYLOAD__const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-const d=await r.json();if(!r.ok||!d.ok)throw new Error(authApiError(d,'auth.loginFailed'));window.location.href='/';}
+const d=await r.json();if(!r.ok||!d.ok)throw new Error(authApiError(d,'auth.loginFailed'));window.location.href=window.location.hash==='#mobile-devices'?'/#mobile-devices':'/';}
 catch(e){showErr(e.message||authT('auth.loginFailed'));}
 finally{btn.classList.remove('loading');}}
 btn.addEventListener('click',doLogin);

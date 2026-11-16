@@ -15,7 +15,9 @@ no restore operations, raw logs or configuration exports. Existing browser/inter
    returns `device_code` (32 random bytes, base64url), `user_code` (10 characters),
    `expires_in: 600`, `session_expires_in: 43200`, and `scope`.
 3. On the **same HTTPS server**, sign into Borg Backup UI, then open
-   `/ui/mobile-devices.html` (also linked from Settings > Users).
+   **Settings > Users > BorgForge Mobile**. The existing app address
+   `/ui/mobile-devices.html` redirects into this integrated view; a fixed
+   `#mobile-devices` target survives login. No arbitrary return URL is accepted.
    Only enter a code displayed in your own app, never a code sent by someone else.
    `POST /api/auth/mobile/approve` with `user_code` needs a valid browser session
    for an enabled plugin user and a matching HTTPS Origin. Viewers may pair too.
@@ -33,6 +35,22 @@ Browser approval/list/revoke cannot be authorized by a mobile bearer. Anonymous
 pair/exchange POSTs reject browser Origin headers. JSON POST bodies are limited
 to 4096 bytes; unknown methods, routes and query parameters are rejected.
 Responses use `Cache-Control: no-store`; no token is put in a URL or cookie.
+
+## Integrated device management (#741)
+
+Pairing, the owned session list and revocation share the normal settings cards,
+theme, sidebar and navigation. Opening Users loads the list; refreshing, approving
+or revoking updates it in place without discarding a typed code. After completing
+pairing in the app, refresh to see the issued device session. Rows show the device
+label, access rights, registration time, expiry and a revoke action. A valid
+session is not a claim that the phone is currently online.
+
+Admins retain user administration. Viewer/operator accounts see only their own
+mobile-device section under Settings > Users and fetch no configuration/user-list
+APIs. Server-side administrative guards and device ownership are unchanged.
+Device approval still requires HTTPS, cookie authentication, matching Origin and
+explicit optional job-control consent. No new app build or re-pairing is needed
+just to use the integrated settings page.
 
 ## Lifecycle and permissions
 
@@ -158,3 +176,8 @@ Maintainer test on the test candidate: pair a viewer, check actual job/history
 labels and states, revoke it in the browser, refresh the app and expect sign-in;
 pair two server profiles and verify isolation; verify a legacy backend stays
 unsupported. Never start or cancel production backups as a test.
+
+`tests/test_mobile_settings_ui.py` and `tests/mobile_devices_browser.cjs` cover
+the integrated DE/EN UI for all roles, escaping, input preservation, duplicate
+approval suppression, revocation, error states, shell navigation and fixed login
+return routing. Browser fixtures contain synthetic device metadata only.

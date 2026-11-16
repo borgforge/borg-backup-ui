@@ -1360,3 +1360,13 @@
 .smb-mount-state { font-weight: 600; }
 .smb-mount-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .smb-mount-controls > small { flex-basis: 100%; }
+
+/* Mobile sessions share settings cards and theme tokens (#741). */
+.mobile-pair-form { display: grid; gap: 12px; margin: 18px 0; max-width: 680px; }
+.mobile-pair-form .btn { justify-self: start; }
+.mobile-pair-form .form-checkbox-row { align-items: flex-start; }
+.mobile-devices-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 24px; }
+.mobile-devices-heading h3 { margin: 0; }
+.mobile-devices-table { overflow-x: auto; }
+.mobile-devices-table td { overflow-wrap: anywhere; }
+.mobile-devices-table .btn { white-space: nowrap; }

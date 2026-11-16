@@ -4037,7 +4037,7 @@
     "warning": "Bestätige nur einen Code, der gerade in deiner eigenen BorgForge-Mobile-App angezeigt wird. Bestätige niemals zugesandte Codes. Die Freigabe erlaubt den Zugriff auf Jobnamen und Statusdaten.",
     "code": "Code aus deiner App",
     "approve": "Gerät freigeben",
-    "devices": "Deine Mobilgeräte",
+    "devices": "Registrierte Geräte",
     "refresh": "Geräte aktualisieren",
     "login": "Anmelden und anschließend hierher zurückkehren",
     "error": "Anfrage fehlgeschlagen. Prüfe Anmeldung, Code und HTTPS-Verbindung und versuche es erneut.",
@@ -4048,6 +4048,14 @@
     "https": "Öffne diese Seite über HTTPS, um ein Gerät freizugeben.",
     "jobControl": "Zusätzlich Backup-Jobs starten und laufende Jobs abbrechen erlauben (Operator/Admin)",
     "controlAccess": "Anzeige und Jobsteuerung",
-    "readAccess": "Nur Anzeige"
+    "readAccess": "Nur Anzeige",
+    "device": "Gerät",
+    "access": "Berechtigung",
+    "created": "Registriert am",
+    "actions": "Aktionen",
+    "loading": "Geräte werden geladen …",
+    "loadFailed": "Geräteliste konnte nicht geladen werden.",
+    "revoked": "Gerätesitzung widerrufen.",
+    "sessionHint": "Hier stehen die aktiven Gerätesitzungen deines Benutzerkontos. Eine Registrierung bedeutet nicht, dass das Gerät gerade online ist. Nach Abschluss der Kopplung in der App kannst du die Liste aktualisieren."
   }
 }

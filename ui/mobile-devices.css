@@ -1,3 +1,0 @@
-:root{color-scheme:dark;font-family:system-ui,sans-serif;background:#101923;color:#ecf4fa}main{max-width:640px;margin:48px auto;padding:24px}a{color:#36dce7}p{line-height:1.6}input,button{font:inherit;border:1px solid #485867;border-radius:8px;padding:12px;margin:8px 8px 8px 0}input{display:block;text-transform:uppercase;letter-spacing:.2em}button{cursor:pointer;background:#1b4653;color:#fff}button:disabled{opacity:.5}li{padding:16px 0;border-bottom:1px solid #485867;overflow-wrap:anywhere}label{display:block;font-weight:600}
-
-input[type="checkbox"]{display:inline-block;letter-spacing:normal;min-width:24px;min-height:24px;vertical-align:middle}

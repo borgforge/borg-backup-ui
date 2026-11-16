@@ -56,7 +56,7 @@
     const maintenance = !!core()?.isStartupMaintenanceMode?.();
     const maintenanceTitle = t('maintenanceMode.settingsReadOnly');
     const settingsNav = document.querySelector('.nav-item[data-page="settings"]');
-    if (settingsNav) settingsNav.style.display = canSettings ? '' : 'none';
+    if (settingsNav) settingsNav.style.display = ''; // Non-admin settings contains owned devices only.
     _setHidden('#sidebar-system-health', !canSettings);
 
     const viewerHint = t('permissions.viewerReadOnly');
@@ -438,8 +438,10 @@
       core()?.updateSidebarSystemHealth?.(true);
       if (core()?.isStartupMaintenanceMode?.()) {
         core()?.navigate?.(canSettings ? 'settings' : 'hilfe');
-      } else if (!canSettings && core()?.getCurrentPage?.() === 'settings') {
-        core()?.navigate?.('dashboard');
+      } else if (window.location.hash === '#mobile-devices') {
+        window.BBUI.settingsState.activeTab = 'users';
+        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        core()?.navigate?.('settings');
       }
     }).catch(() => {});
     _startRoleUiObserver();

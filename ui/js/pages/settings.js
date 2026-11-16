@@ -109,7 +109,8 @@ function getSettingsTabs() {
   ];
   const auth = settingsState.authStatus || {};
   const isAdmin = String(auth.current_role || '').toLowerCase() === 'admin';
-  if (!isAdmin || String(auth.auth_mode || '') !== 'users') {
+  if (settingsState.authStatus && !isAdmin) return tabs.filter((t) => t.key === 'users');
+  if (String(auth.auth_mode || '') !== 'users') {
     return tabs.filter((t) => t.key !== 'users');
   }
   return tabs;
@@ -138,6 +139,19 @@ async function refreshSettings() {
   hideEl('settings-message');
   _renderSettingsLoading();
   try {
+    // Non-admin users load only their own device area, never configuration APIs.
+    if (window.BBUI.core.getCurrentRole() !== 'admin') {
+      const auth = await fetch('/api/auth/status');
+      if (!auth.ok) throw new Error(settingsT('error'));
+      settingsState.authStatus = await auth.json();
+      settingsState.authUsers = [];
+      settingsState.data = {};
+      settingsState.activeTab = 'users';
+      renderSettings({}, null);
+      settingsState.loaded = true;
+      settingsState.dirty = false;
+      return;
+    }
     const [res, verRes, healthRes, authRes, reminderRes, appriseProfilesRes] = await Promise.all([
       fetch('/api/settings'),
       fetch('/api/version'),
@@ -191,8 +205,8 @@ async function refreshSettings() {
     }
     usersRequest.then((uData) => {
       settingsState.authUsers = Array.isArray(uData?.users) ? uData.users : [];
-      const usersPanel = document.querySelector('#settings-content [data-settings-panel="users"]');
-      if (usersPanel) usersPanel.innerHTML = renderSettingsUsers();
+      const usersPanel = document.getElementById('settings-user-admin');
+      if (usersPanel) usersPanel.innerHTML = renderSettingsUserAccounts();
     });
   } catch (err) {
     showMsg('settings-message', 'error', settingsT('error', { message: err.message }));
@@ -258,6 +272,17 @@ function renderSettings(data, systemHealth) {
   const el = document.getElementById('settings-content');
   if (!el) return;
   settingsState.scriptEditor?.destroy();
+  if (settingsState.authStatus && settingsState.authStatus.current_role !== 'admin') {
+    document.getElementById('settings-save-btn')?.classList.add('hidden');
+    const subtitle = document.querySelector('#page-settings .page-subtitle');
+    if (subtitle) subtitle.textContent = window.BBUI.components.i18n.t('mobile.devices');
+    const tabs = getSettingsTabs();
+    el.innerHTML = `<div class="settings-redesign-layout"><aside class="settings-side-menu"><nav>${renderSettingsMenu(tabs)}</nav></aside>
+      <section class="settings-workspace"><header class="settings-workspace-header"><div><small>${settingsT('title')}</small><h2>${settingsT('tabs.users')}</h2></div></header>
+        <div data-settings-panel="users">${window.BBUI.mobileDevices.render()}</div></section></div>`;
+    window.BBUI.mobileDevices.refresh();
+    return;
+  }
 
   const tabs = getSettingsTabs();
   const active = tabs.find((tab) => tab.key === settingsState.activeTab) || tabs[0];
@@ -348,6 +373,7 @@ function renderSettings(data, systemHealth) {
       settingsState.appInfo.repositoryUrl,
     );
   }
+  if (settingsState.activeTab === 'users') window.BBUI.mobileDevices.refresh();
   refreshSettingsConfigBackups();
   initializeSettingsProfileManagers();
   if (settingsState.activeTab === 'notifications') maybeLoadAppriseProviders();
@@ -421,9 +447,10 @@ async function activateSettingsTab(tabKey) {
   if (description) description.textContent = active.description;
 
   const profileTab = ['local', 'usb', 'smb', 'storagebox'].includes(active.key);
-  document.getElementById('settings-save-btn')?.classList.toggle('hidden', profileTab || ['about', 'factory-reset', 'integrations', 'scripts', 'databases'].includes(active.key));
+  document.getElementById('settings-save-btn')?.classList.toggle('hidden', settingsState.authStatus?.current_role !== 'admin' || profileTab || ['about', 'factory-reset', 'integrations', 'scripts', 'databases'].includes(active.key));
   if (SETTINGS_PROFILE_CONFIG[previousTab]) syncSettingsProfileManager(previousTab);
   if (SETTINGS_PROFILE_CONFIG[active.key]) syncSettingsProfileManager(active.key);
+  if (active.key === 'users') window.BBUI.mobileDevices.refresh();
   if (active.key === 'notifications') maybeLoadAppriseProviders();
   if (active.key === 'about') maybeLoadAboutLicenses();
   if (active.key === 'databases') loadDatabaseSettings();
@@ -2719,7 +2746,12 @@ async function copyHomepageWidgetField(id) {
   }
 }
 
+/** Keep asynchronous account-list updates separate from the active pairing form. */
 function renderSettingsUsers() {
+  return `<div id="settings-user-admin">${renderSettingsUserAccounts()}</div>${window.BBUI.mobileDevices.render()}`;
+}
+
+function renderSettingsUserAccounts() {
   const rows = Array.isArray(settingsState.authUsers) ? settingsState.authUsers : [];
   const timeout = String(settingsState.authStatus?.session_timeout_minutes || '30');
   const currentUser = String(settingsState.authStatus?.current_user || '').trim();
@@ -2740,7 +2772,6 @@ function renderSettingsUsers() {
             ${settingsT('users.signedIn')} <strong>${escHtml(currentUser || '—')}</strong>${currentRole ? ` (${escHtml(currentRole)})` : ''}
             · ${settingsT('users.activeSessions')} <strong>${ownSessions}</strong>${totalSessions !== null ? ` · ${settingsT('users.total')} <strong>${totalSessions}</strong>` : ''}
           </span>
-          <a class="btn btn-secondary btn-sm" href="/ui/mobile-devices.html">BorgForge Mobile</a>
           <button class="btn btn-secondary btn-sm" data-settings-action="user-change-own-password">${settingsT('users.changeOwnPassword')}</button>
           <button class="btn btn-secondary btn-sm" data-settings-action="user-logout-own-sessions">${settingsT('users.logoutOwn')}</button>
           ${currentRole === 'admin' ? `<button class="btn btn-secondary btn-sm" data-settings-action="user-logout-all-sessions">${settingsT('users.logoutAll')}</button>` : ''}
@@ -6430,6 +6461,7 @@ async function onSettingsContentClick(event) {
   const el = event.target.closest('[data-settings-action]');
   if (!el) return;
   const action = el.dataset.settingsAction || '';
+  if (action === 'mobile-refresh' || action === 'mobile-revoke') return window.BBUI.mobileDevices.handleClick(el);
   if (action === 'delete-backups-keep-latest') return deleteConfigBackupsKeepLatest();
   if (action === 'export-jobs') return exportJobsBundle();
   if (action === 'export-jobs-secure') return exportJobsBundleSecure();
