@@ -4047,7 +4047,7 @@
     "empty": "Keine aktiven mobilen Sitzungen.",
     "approved": "Freigegeben. Schließe die Kopplung jetzt in der App ab.",
     "https": "Öffne diese Seite über HTTPS, um ein Gerät freizugeben.",
-    "logsConsent": "Log-Zugriff erlauben (Logs können private Inhalte enthalten)",
+    "logsConsent": "Original-Logs anzeigen erlauben (einschließlich privater Inhalte)",
     "logsEnabled": "Logs erlaubt",
     "logsDisabled": "Logs gesperrt",
     "enableLogs": "Logs erlauben",

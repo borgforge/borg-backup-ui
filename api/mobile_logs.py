@@ -1,6 +1,6 @@
 """Explicitly approved, bounded run-log reads for mobile clients (#743).
 
-Only server-resolved identities are accepted. Text is transient, masked and never
+Only server-resolved identities are accepted. Text is transient and never
 written to a mobile audit/telemetry stream. Free-form logs remain private data.
 """
 from __future__ import annotations
@@ -9,34 +9,15 @@ import re
 
 import mobile_auth as auth
 from mobile_api import _id, _stamp
-from security_utils import mask_secrets
 
 
-def _masked_tail(text: str) -> str:
-    """Mask full lines before limiting output; omit private file activity/details.
+def _tail(text: str) -> str:
+    """Return at most 6000 original code points without masking or rewriting.
 
-    Common secret assignments, credentials, key material, paths and addresses are
-    suppressed. This is defense in depth, not a guarantee for arbitrary custom
-    script prose; explicit log permission remains mandatory.
+    Explicit device log consent authorizes this content. The bounded excerpt may
+    start within a line; existing masking performed by a log writer is untouched.
     """
-    lines = []
-    for line in text.splitlines()[-200:]:
-        if (len(line) > 8192 or re.search(r"(?i)(password|passphrase|token|secret|authorization|private key|passcommand|api[_-]?key)", line)
-                or re.search(r"(?:^|\s)[A-Z?+-] [^\s]", line)
-                or re.search(r"[A-Za-z0-9+/=_-]{40,}", line)):
-            lines.append("[private detail omitted]")
-            continue
-        line = mask_secrets(line)
-        line = re.sub(r"(?:[a-z][a-z0-9+.-]*://|[\w.-]+@)[^\s]+", "[address]", line, flags=re.I)
-        # Omit the entire line to cover spaces in paths and quoted filenames.
-        if re.search(r"(?:^|[\s=:('\"])(?:/|~[/\\]|[A-Za-z]:\\)|\b(?:\d{1,3}\.){3}\d{1,3}\b", line):
-            lines.append("[private detail omitted]")
-            continue
-        lines.append(re.sub(r"[\x00-\x1f\x7f]", "", line))
-    result = "\n".join(lines)
-    if len(result) > 6000:
-        result = result[-6000:].partition("\n")[2]
-    return result
+    return text[-6000:]
 
 
 def _history(handler) -> list:
@@ -57,7 +38,7 @@ def _retained(handler, row: dict) -> str:
 
 
 def read_log(handler, body: dict) -> dict:
-    """Return a masked tail by event ID or exact job/run; never accept a path.
+    """Return an original tail by event ID or exact job/run; never accept a path.
 
     400 rejects malformed identities, 403 missing consent, 404 missing logs and
     409 a replaced/ambiguous run. Auth is rechecked after reading for revocation.
@@ -105,7 +86,7 @@ def read_log(handler, body: dict) -> dict:
                     text = _retained(handler, matches[0])
             if running:
                 text = text.rsplit("\n", 1)[0] if "\n" in text else ""  # Do not expose a growing partial line.
-        result = {"text": _masked_tail(text), "running": running, "limited": True, "redacted": True}
+        result = {"text": _tail(text), "running": running, "limited": True, "redacted": False}
         auth.require_logs(handler.config, handler._mobile_session)
         return result
     except auth.MobileError:

@@ -3,7 +3,7 @@
 This additive API pairs a native client without copying internal API tokens,
 widget tokens, browser cookies or Unraid credentials. It grants **monitor:read**
 by default. Optional device-specific job control is described below. There are
-no restore operations, raw logs or configuration exports. Existing browser/internal automation routes keep their authorization.
+no restore operations or configuration exports; original log excerpts require explicit device log permission. Existing browser/internal automation routes keep their authorization.
 
 ## Pairing
 
@@ -218,7 +218,7 @@ retaining a running card as current. No write is replayed by this polling.
 legacy behavior, Origin/token boundaries, hashed storage, revocation, account
 changes and rejection of commands admitted under an obsolete access token.
 
-## Opt-in log tails and cached repository details (#743)
+## Opt-in original log tails and cached repository details (#743, #744)
 
 Capabilities adds `logs: true` and `repository_details: true`. Snapshots add
 `logs_supported: true` and the current device's boolean `logs` permission. Existing
@@ -241,12 +241,15 @@ this route. Permissions survive access-token refresh and end with device revocat
 
 Response: `{text, running, limited: true, redacted: true}`. Retained reads use the
 existing descriptor-pinned, confined log reader with an 8192-byte tail. In-memory
-reads copy at most 200 lines; activity files reuse the bounded 64 KiB run reader.
-Oversized lines and common secret/key formats are suppressed, paths/addresses and
-filename activity masked. Redaction precedes the final 6000-code-point bound;
-partial boundary lines are omitted. This is an excerpt, not a complete download.
-Custom script prose can still contain private information: explicit device log
-consent is essential, and clients must not persist or log response text. Clients
+reads copy at most 200 lines / 8192 characters; activity files reuse the bounded 64 KiB run reader.
+The mobile layer returns the last 6000 code points without masking or rewriting
+content. Limits may cut a first line; partial growing final lines are withheld.
+Masking already performed by a server log writer cannot be reversed. This is an
+excerpt, not a complete download. The maintainer explicitly authorized original
+content for devices with log consent (#744). Existing log grants apply; no new
+pairing is required. During pre-release development the app and backend are updated
+together, with no masked-format compatibility path. Clients must not persist or
+log response text. Error/telemetry redaction remains unchanged. Clients
 poll only an open foreground live-log viewer, sequentially every five seconds;
 errors stop automatic reads, and completed logs require no ongoing polling.
 

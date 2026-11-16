@@ -607,10 +607,10 @@ class JobManager:
         }
 
     def output_tail(self, job_key: str, run_id: str) -> dict | None:
-        """Read at most 200 memory log lines for one exact run, without copying all.
+        """Read a bounded original memory-log tail for one exact run.
 
         File-backed and recovered runs return None for the confined file reader.
-        Oversized lines are omitted whole, before downstream secret masking.
+        Copy at most 200 trailing lines / 8192 characters, without masking text.
         """
         job_key = _validate_job_key(job_key)
         with self._lock:
@@ -618,8 +618,14 @@ class JobManager:
         if state is None or state.run_id != run_id or state.log_file is not None:
             return None
         with state._lock:
-            lines = [line if len(line) <= 8192 else "[oversized line omitted]" for line in state.lines[-200:]]
-            return {"text": "\n".join(lines) + ("\n" if lines else ""), "running": not state.finished}
+            pieces, remaining = [], 8192
+            for line in reversed(state.lines[-200:]):
+                fragment = (line[-remaining:] + "\n")[-remaining:]
+                pieces.append(fragment)
+                remaining -= len(fragment)
+                if not remaining:
+                    break
+            return {"text": "".join(reversed(pieces)), "running": not state.finished}
 
     def get_all_states(self) -> dict:
         with self._lock:
