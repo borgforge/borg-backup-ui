@@ -27,7 +27,7 @@ def test_consent_owned_rechecked_and_revocable(config, monkeypatch):
     with pytest.raises(auth.MobileError):
         auth.log_permission(config, 'viewer', session['id'], 'true')
     assert auth.log_permission(config, 'viewer', session['id'], True) == {'logs': True}
-    monkeypatch.setattr(jobs_api.JobManager, 'output_tail', lambda *_: {'text':'Backup complete\n', 'running':False})
+    monkeypatch.setattr(jobs_api.JobManager, 'output_window', lambda *_: {'text':'Backup complete\n', 'running':False})
     assert mobile_logs.read_log(h, body)['text'] == 'Backup complete\n'
     # Use the old in-flight session object: permission removal still takes effect.
     auth.log_permission(config, 'viewer', session['id'], False)
@@ -38,7 +38,7 @@ def test_consent_owned_rechecked_and_revocable(config, monkeypatch):
     def revoke_during_read(*_):
         auth.revoke(config, 'viewer', session['id'])
         return {'text':'private', 'running':False}
-    monkeypatch.setattr(jobs_api.JobManager, 'output_tail', revoke_during_read)
+    monkeypatch.setattr(jobs_api.JobManager, 'output_window', revoke_during_read)
     with pytest.raises(auth.MobileError) as exc:
         mobile_logs.read_log(h, body)
     assert exc.value.api_status == 401
@@ -56,8 +56,8 @@ def test_history_exact_log_bounded_original_and_confined(config, tmp_path, monke
     event = api._id('photos'+api._stamp(row['timestamp'])+'run-12345')
     body = {'event_id':event}
     result = mobile_logs.read_log(h, body)
-    assert result['limited'] and result['redacted'] is False and not result['running']
-    assert 'Backup complete' in result['text'] and len(result['text']) < 12001
+    assert result['start'] == 0 and result['redacted'] is False and not result['running']
+    assert 'Backup complete' in result['text'] and len(result['text']) > 40000
     assert all(s in result['text'] for s in ('synthetic-secret','hidden','private-name','/private','bfm_'))
     for invalid in ({**body,'file':str(log)}, {'event_id':'../secret'}, {'event_id':'f'*32}):
         with pytest.raises(auth.MobileError): mobile_logs.read_log(h, invalid)
@@ -70,7 +70,7 @@ def test_history_exact_log_bounded_original_and_confined(config, tmp_path, monke
 def test_run_replacement_and_permission_route_guards(config, monkeypatch):
     h, session = log_handler(config)
     auth.log_permission(config, 'viewer', session['id'], True)
-    monkeypatch.setattr(jobs_api.JobManager, 'output_tail', lambda *_: None)
+    monkeypatch.setattr(jobs_api.JobManager, 'output_window', lambda *_: None)
     monkeypatch.setattr(jobs_api, 'get_job_runtime_state', lambda *_: {'run_id':'new-run', 'running':True})
     with pytest.raises(auth.MobileError) as exc:
         mobile_logs.read_log(h, {'job_id':api._id('photos'), 'run_id':'old-run'})
@@ -126,7 +126,7 @@ def test_permission_does_not_grant_foreign_devices(config):
 def test_finished_live_run_uses_only_matching_history(config, tmp_path, monkeypatch):
     h, session = log_handler(config)
     auth.log_permission(config, 'viewer', session['id'], True)
-    monkeypatch.setattr(jobs_api.JobManager, 'output_tail', lambda *_: None)
+    monkeypatch.setattr(jobs_api.JobManager, 'output_window', lambda *_: None)
     monkeypatch.setattr(jobs_api, 'get_job_runtime_state', lambda *_: {'run_id':'new-run', 'running':True})
     log = tmp_path / 'logs' / 'run.log'; log.parent.mkdir(); log.write_text('Finished previous run\n')
     monkeypatch.setattr(config_api, 'read_expanded_conf', lambda _: {'GLOBAL_LOG_DIR':str(log.parent)})
@@ -135,7 +135,9 @@ def test_finished_live_run_uses_only_matching_history(config, tmp_path, monkeypa
     assert not result['running'] and result['text'] == 'Finished previous run\n'
 
 
-def test_original_tail_preserves_text_and_never_exceeds_bound():
-    text = "A /synthetic/file name.txt\r\npassword=synthetic-only\n  indented\ttext 😀\n"
-    assert mobile_logs._tail(text) == text
-    assert mobile_logs._tail("x" * 10000 + text) == ("x" * 10000 + text)[-6000:]
+def test_original_window_preserves_text_and_never_exceeds_bound():
+    from mobile_log_window import memory_window, TEXT_WINDOW
+    text = "A /synthetic/file name.txt\r\npassword=synthetic-only\n  indented\ttext 😀"
+    assert memory_window([text], {}, 'test', False)['text'] == text + '\n'
+    result = memory_window(['x' * 100000, text], {}, 'test', False)
+    assert len(result['text']) == TEXT_WINDOW and result['start'] > 0

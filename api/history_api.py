@@ -12,13 +12,14 @@ LEGACY_LOG_DIR = Path("/mnt/user/Logs")
 _LOG_SUFFIXES = {".log", ".txt"}
 
 
-def _read_regular_history_log(path: Path, *, tail_bytes: int | None = None) -> str:
+def _read_regular_history_log(path: Path, *, tail_bytes: int | None = None, window: dict | None = None, window_running: bool = False) -> str | dict:
     """Read a previously authorized, absolute canonical log path as UTF-8.
 
     Pin each directory by descriptor and refuse symlinks while opening, so a
     path component replaced after authorization cannot redirect the read.
     Non-regular files raise ValueError; OS errors propagate to the caller.
     Optional tail_bytes bounds the read and drops an incomplete first line.
+    Optional window reads bounded mobile cursors from the same confined descriptor.
     All descriptors close on both success and failure. Linux/Unraid is required.
     """
     directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
@@ -37,6 +38,10 @@ def _read_regular_history_log(path: Path, *, tail_bytes: int | None = None) -> s
     try:
         if not stat.S_ISREG(os.fstat(file_fd).st_mode):
             raise ValueError("Log file must be a regular file")
+        if window is not None:
+            from mobile_log_window import file_window
+            with os.fdopen(file_fd, "rb", closefd=False) as handle:
+                return file_window(handle, window, running=window_running)
         with os.fdopen(file_fd, "r", encoding="utf-8", errors="replace", closefd=False) as handle:
             if tail_bytes is None:
                 return handle.read()
@@ -50,7 +55,7 @@ def _read_regular_history_log(path: Path, *, tail_bytes: int | None = None) -> s
         os.close(file_fd)
 
 
-def get_history_log(config: dict, file_path: str, *, tail_bytes: int | None = None) -> dict:
+def get_history_log(config: dict, file_path: str, *, tail_bytes: int | None = None, window: dict | None = None, window_running: bool = False) -> dict:
     """Read a .log/.txt file only within configured or legacy log storage.
 
     ``file_path`` must already be URL-decoded once. Relative paths are anchored
@@ -60,6 +65,9 @@ def get_history_log(config: dict, file_path: str, *, tail_bytes: int | None = No
     The current/legacy basename fallback preserves references to moved logs.
 
     Optional tail_bytes (1..65536) returns only a bounded tail for mobile reads.
+    Optional window provides validated mobile cursor reads; cannot combine with tail.
+    Window content is a metadata/text mapping; window_running preserves incomplete
+    UTF-8 at a growing EOF. Default browser responses are unchanged.
     Returns the existing ``exists``, ``content``, ``path`` response, including
     ``exists=False`` for missing allowed files. Traversal, escaping symlinks and
     unauthorized paths raise PermissionError; malformed requests and special
@@ -67,6 +75,11 @@ def get_history_log(config: dict, file_path: str, *, tail_bytes: int | None = No
     """
     from config_api import read_expanded_conf
 
+    if window is not None:
+        from mobile_log_window import options
+        if tail_bytes is not None or not isinstance(window, dict) or set(window) - {'start', 'before', 'file_id', 'known_size'}:
+            raise ValueError("Invalid log window")
+        window = options(window)
     if tail_bytes is not None and (type(tail_bytes) is not int or not 1 <= tail_bytes <= 65536):
         raise ValueError("Invalid log tail size")
     if not file_path:
@@ -97,7 +110,7 @@ def get_history_log(config: dict, file_path: str, *, tail_bytes: int | None = No
             if resolved.suffix.lower() not in _LOG_SUFFIXES:
                 denied = True
                 continue
-            content = _read_regular_history_log(resolved, tail_bytes=tail_bytes)
+            content = _read_regular_history_log(resolved, tail_bytes=tail_bytes, **({"window": window, "window_running": window_running} if window is not None else {}))
             return {"exists": True, "content": content, "path": str(resolved)}
         except FileNotFoundError:
             continue

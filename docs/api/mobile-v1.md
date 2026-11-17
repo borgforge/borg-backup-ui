@@ -229,29 +229,38 @@ Users also permits granting/removing logs without re-pairing via
 an owned device, current enabled browser user, HTTPS matching Origin and the
 maintenance guard. Foreign/missing IDs return 404; malformed values return 400.
 
-`POST /api/mobile/v1/logs/read` is a **read-only** bounded request with bearer auth,
-JSON Content-Type and exactly one of `{event_id}` or `{job_id, run_id}`. There are
-no path, filename, cursor or arbitrary query parameters. History IDs resolve only
-within the snapshot's latest 100 known-job records and their retained log_file;
-`log_available` describes a reference, not proof the file still exists. Missing or
-rotated logs return 404; replaced live runs without exact retained evidence return
-409. A new run is never substituted for the requested run. Current consent and
-revocation are checked again after the read. No cookie/internal token authorizes
-this route. Permissions survive access-token refresh and end with device revocation.
+`POST /api/mobile/v1/logs/read` is a read-only bounded request with bearer auth,
+JSON Content-Type and one identity: `{event_id}` or `{job_id, run_id}`. History IDs
+resolve within the snapshot's latest 100 known-job records and their retained log.
+No client path/filename is accepted. Current consent and revocation are checked
+again after reading. Cookie/internal tokens cannot authorize this route.
 
-Response: `{text, running, limited: true, redacted: true}`. Retained reads use the
-existing descriptor-pinned, confined log reader with an 8192-byte tail. In-memory
-reads copy at most 200 lines / 8192 characters; activity files reuse the bounded 64 KiB run reader.
-The mobile layer returns the last 6000 code points without masking or rewriting
-content. Limits may cut a first line; partial growing final lines are withheld.
-Masking already performed by a server log writer cannot be reversed. This is an
-excerpt, not a complete download. The maintainer explicitly authorized original
-content for devices with log consent (#744). Existing log grants apply; no new
-pairing is required. During pre-release development the app and backend are updated
-together, with no masked-format compatibility path. Clients must not persist or
-log response text. Error/telemetry redaction remains unchanged. Clients
-poll only an open foreground live-log viewer, sequentially every five seconds;
-errors stop automatic reads, and completed logs require no ongoing polling.
+Complete log navigation (#746) adds optional `start` or `before` (mutually
+exclusive nonnegative integers, maximum 2^53-1). Omit both for the current tail;
+`start:0` opens the beginning. Subsequent reads include both `file_id` and
+`known_size` from the previous response to pin the source and detect observed
+truncation. These guards are navigation metadata, never credentials.
+
+Response: `{text, running, redacted:false, start, end, size, file_id, unit}`.
+`start` is inclusive and `end` exclusive. Cursor units are `bytes` for file logs,
+`characters` (Unicode code points) for memory logs. Files copy at most 64 KiB;
+memory reads copy at most 16000 code points without joining the entire buffer.
+Adjacent windows preserve UTF-8 boundaries, original whitespace and long lines.
+A growing incomplete UTF-8 character remains for the next read. Source IDs are
+opaque hashes; active capture IDs remain stable across their verified retained
+copy. Retained file reads reuse descriptor-pinned directory confinement.
+No total file-size limit or silent truncation is introduced. Missing logs return
+404; replaced sources/runs or observed shrink return 409; malformed cursors 400.
+An in-place rewrite that preserves inode and size is not a supported log lifecycle.
+
+Original content is explicitly authorized by device log consent (#744); existing
+grants apply without re-pairing. Server-side writer masking cannot be reversed.
+The pre-release app/backend update together; no old tail-schema fallback remains.
+Text stays transient: clients must not persist it or write it to telemetry. The
+app opens history at the beginning and live logs at the tail, provides first/
+previous/next/end navigation, and polls only the visible foreground live end every
+five seconds. Reading older pages pauses following; errors stop polling and clear
+content. A replaced log must be reopened. No unbounded download or stream starts.
 
 Repository entries now also include unassigned repositories from
 `repositories_api.read_repository_store`, without running Borg or refreshing
@@ -302,3 +311,20 @@ then name ordering. Opaque IDs remain unchanged. All projections omit commands,
 raw errors, process IDs, cgroups, paths, secret references and descriptions.
 Names/archive names are authorized display metadata. No legacy fallback routes
 were added; update the pre-release app and backend together.
+
+## Independent host resources (#746)
+
+`GET /api/mobile/v1/resources` returns the existing host projection directly:
+`{available, stale, sampled_at, cpu_percent, memory_total_bytes,
+memory_available_bytes}`. It uses the same scoped bearer/maintenance guard and
+post-read session/user recheck as monitoring. It does not load restore plans or
+group history. The shared resource sampler is unchanged: its first snapshot has
+no CPU delta, its next sample is after one second, then cadence is one second
+with tracked jobs and ten seconds otherwise. Missing counters remain null.
+
+The Android app requests this small projection immediately on overview/system
+views, after two seconds while warming up, then every five seconds after response
+completion. Requests do not overlap or run in the background; transient errors
+back off to thirty seconds and auth/unsupported errors stop polling. Composite
+monitoring retains its thirty-second cadence and existing schema. Timestamp
+seconds and the refresh explanation are visible in the app.

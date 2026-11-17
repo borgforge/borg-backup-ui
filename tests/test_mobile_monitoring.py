@@ -89,7 +89,7 @@ def test_group_details_are_bounded_and_separate_not_run(mobile,monkeypatch):
     with pytest.raises(auth.MobileError):monitoring.handle(mobile,'groups/read',{'group_id':'f'*32})
 
 
-@pytest.mark.parametrize('method,path', [('GET','monitoring'),('POST','repositories/archives'),('POST','reports/read'),('POST','groups/read')])
+@pytest.mark.parametrize('method,path', [('GET','resources'),('GET','monitoring'),('POST','repositories/archives'),('POST','reports/read'),('POST','groups/read')])
 def test_new_routes_require_mobile_auth(config,method,path):
     route='/api/mobile/v1/'+path
     assert route in api.ROUTES[method]

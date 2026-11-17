@@ -12,7 +12,7 @@ import mobile_auth as auth
 PREFIX = "/api/mobile/v1/"
 BROWSER = "/api/auth/mobile/"
 ROUTES = {
-    "GET": {PREFIX + "capabilities", PREFIX + "snapshot", PREFIX + "monitoring", BROWSER + "sessions"},
+    "GET": {PREFIX + "capabilities", PREFIX + "snapshot", PREFIX + "monitoring", PREFIX + "resources", BROWSER + "sessions"},
     "POST": {PREFIX + "pair", PREFIX + "exchange", PREFIX + "refresh", PREFIX + "logout",
              BROWSER + "approve", BROWSER + "revoke", PREFIX + "jobs/start", PREFIX + "jobs/cancel", PREFIX + "logs/read", PREFIX + "repositories/archives", PREFIX + "reports/read", PREFIX + "groups/read", BROWSER + "log-permission"},
 }
@@ -92,7 +92,7 @@ def handle(handler) -> dict:
     if path in {PREFIX + "jobs/start", PREFIX + "jobs/cancel"}:
         return control(handler, path.rsplit("/", 1)[-1], body)
     endpoint = path.removeprefix(PREFIX)
-    if endpoint in {"monitoring", "repositories/archives", "reports/read", "groups/read"}:
+    if endpoint in {"monitoring", "resources", "repositories/archives", "reports/read", "groups/read"}:
         from mobile_monitoring import handle as monitoring
         return monitoring(handler, endpoint, body)
     return snapshot(handler)

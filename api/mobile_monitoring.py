@@ -169,7 +169,9 @@ def report(handler, body):
 def handle(handler, endpoint, body):
     """Dispatch authenticated reads and check revocation again before responding."""
     _current(handler)
-    if endpoint == 'monitoring':
+    if endpoint == 'resources':
+        result = resources(handler.config)
+    elif endpoint == 'monitoring':
         result = {'sampled_at': datetime.now(timezone.utc).isoformat()}
         for key, reader in (('resources', resources), ('restore_tests', restore_tests), ('groups', groups)):
             try:
