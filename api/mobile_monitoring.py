@@ -115,6 +115,11 @@ def groups(config):
 
 
 def group_detail(handler, body):
+    """Resolve an opaque group ID and return current/last-five bounded runs.
+
+    Raises MobileError for malformed or unknown identity. Uses the existing
+    lifecycle reconciliation and never starts jobs or exposes raw runner errors.
+    """
     from job_groups import list_groups, group_history
     group_id = _opaque(body, 'group_id')
     group = next((g for g in list_groups(handler.config)['groups'] if _id(g['id']) == group_id), None)
