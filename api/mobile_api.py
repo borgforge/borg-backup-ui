@@ -12,9 +12,9 @@ import mobile_auth as auth
 PREFIX = "/api/mobile/v1/"
 BROWSER = "/api/auth/mobile/"
 ROUTES = {
-    "GET": {PREFIX + "capabilities", PREFIX + "snapshot", BROWSER + "sessions"},
+    "GET": {PREFIX + "capabilities", PREFIX + "snapshot", PREFIX + "monitoring", BROWSER + "sessions"},
     "POST": {PREFIX + "pair", PREFIX + "exchange", PREFIX + "refresh", PREFIX + "logout",
-             BROWSER + "approve", BROWSER + "revoke", PREFIX + "jobs/start", PREFIX + "jobs/cancel", PREFIX + "logs/read", BROWSER + "log-permission"},
+             BROWSER + "approve", BROWSER + "revoke", PREFIX + "jobs/start", PREFIX + "jobs/cancel", PREFIX + "logs/read", PREFIX + "repositories/archives", PREFIX + "reports/read", PREFIX + "groups/read", BROWSER + "log-permission"},
 }
 
 
@@ -91,6 +91,10 @@ def handle(handler) -> dict:
         return auth.revoke(handler.config, session["username"], session["id"])
     if path in {PREFIX + "jobs/start", PREFIX + "jobs/cancel"}:
         return control(handler, path.rsplit("/", 1)[-1], body)
+    endpoint = path.removeprefix(PREFIX)
+    if endpoint in {"monitoring", "repositories/archives", "reports/read", "groups/read"}:
+        from mobile_monitoring import handle as monitoring
+        return monitoring(handler, endpoint, body)
     return snapshot(handler)
 
 
@@ -206,6 +210,7 @@ def snapshot(handler) -> dict:
               "storage_daily": [{"date": p["date"], "bytes": _number(p.get("repository_bytes"))}
                                 for p in overview["daily"]]}
     repo_samples = {}
+    from mobile_monitoring import location
     for job in jobs:
         recorded = status.get(job["key"], {})
         live = runtime.get(job["key"], {})
@@ -216,7 +221,8 @@ def snapshot(handler) -> dict:
         percent = progress.get("percent")
         percent = percent if type(percent) in (int, float) and math.isfinite(percent) and 0 <= percent <= 100 else None
         result["jobs"].append({"id": _id(job["key"]), "name": _name(job.get("display_name") or job.get("name")),
-                               "status": state,
+                               "status": state, "location": location(job),
+                               "sort_name": _name(job.get("name") or job.get("display_name")),
                                "repository_id": _id(job["repository_key"]) if job.get("repository_key") else "",
                                "last_run": _stamp(recorded.get("timestamp") or job.get("last_timestamp")),
                                **_schedule(job, schedules),

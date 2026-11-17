@@ -264,3 +264,41 @@ There are no repository write/maintenance/delete/restore grants.
 
 Focused regressions: `tests/test_mobile_details.py`, history-log security tests,
 mobile auth/refresh/control tests and DE/EN settings browser tests.
+
+## Monitoring details (#745)
+
+The coordinated pre-release client adds the following exact authenticated routes.
+All use the existing monitor:read device bearer, current user and maintenance
+checks; browser/internal/widget tokens cannot call them. Credentials are checked
+again after detail reads, including revocation during slow archive listing.
+
+- GET `/api/mobile/v1/monitoring`: `sampled_at`, nullable `resources`,
+  `restore_tests`, `groups`. An unavailable section is null, never a fabricated
+  zero. Resources expose host CPU percent, total/available RAM, measurement time,
+  available/stale flags. Restore entries separate latest attempt, retained proof,
+  validity, due/next run, scheduler/policy and structured step identifiers/status/
+  duration/error codes. Groups expose names, member counts and latest run status,
+  completed/total steps. Lists contain at most 100 entries and expose total count.
+- POST `/api/mobile/v1/repositories/archives`, exactly `{repository_id}`: opaque
+  managed repository ID, name, sampled_at, total and at most 100 newest `items`
+  (name/start/end/duration_seconds). Explicit load only: the existing service can
+  mount SMB and execute Borg list; no periodic refresh. Duration is measured or
+  derived from valid recorded endpoints, otherwise null. No archive file browsing,
+  deletion, extraction or restore. 400 invalid input, 404 unknown managed ID,
+  503 unavailable repository; messages never reveal backend paths or secrets.
+- POST `/api/mobile/v1/reports/read`, exactly `{days: 7|30|90}`: existing server-local
+  daily outcomes, range, counts, success_rate and average_duration_seconds.
+  Success denominator is success + warning + error; skipped/cancelled/unknown are
+  separate. Empty denominator remains null. No Borg I/O.
+- POST `/api/mobile/v1/groups/read`, exactly `{group_id}`: current run, member IDs/
+  names and last five runs, each at most 100 ordered steps. Missing members have
+  null names. Counts of completed attempts exclude pending/not_run; never infer
+  a time percentage. Existing group service reconciles orphaned runs; no group
+  start/stop/schedule mutation is authorized by mobile.
+
+Snapshot jobs now include `location` and `sort_name`: same normalization and
+location sequence as `ui/js/pages/jobs.js` (local/usb/smb/storagebox/utility),
+then name ordering. Opaque IDs remain unchanged. All projections omit commands,
+raw errors, process IDs, cgroups, paths, secret references and descriptions.
+Names/archive names are authorized display metadata. No legacy fallback routes
+were added; update the pre-release app and backend together.
