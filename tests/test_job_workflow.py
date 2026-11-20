@@ -92,19 +92,18 @@ def test_failures_never_mark_unexecuted_steps_successful(run_backup, monkeypatch
     if failure == 'error': state.create_exit = 2
     if failure == 'cancel': state.cancel_at = 'create'; state.create_exit = 130
     if failure == 'restart': state.fail_restart = 'docker'
-    if failure == 'restart':
-        with pytest.raises(RuntimeError): state.run()
-    else:
-        assert state.run() == (130 if failure=='cancel' else 2)
+    assert state.run() == (130 if failure=='cancel' else 1 if failure=='restart' else 2)
     steps = {step['id']:step for step in state.workflow}
-    if failure in ('error','cancel','restart','pre'):
+    if failure in ('error','cancel','pre'):
         assert steps['compact']['status'] == 'skipped'
         assert 'duration_seconds' not in steps['compact']
     if failure == 'pre':
         assert steps['pre_script']['status'] == 'error'
         assert steps['create']['status'] == steps['start_docker']['status'] == 'skipped'
     else:
-        assert steps['start_docker']['status'] == ('error' if failure=='restart' else 'success')
+        assert steps['start_docker']['status'] == ('warning' if failure=='restart' else 'success')
+    if failure == 'restart':
+        assert all(steps[name]['status'] == 'success' for name in ('create', 'prune', 'compact', 'check'))
     assert steps['post_script']['status'] == ('error' if failure=='post' else 'success')
 
 
@@ -113,6 +112,24 @@ def test_post_condition_and_check_due_are_explicit(run_backup, monkeypatch, tmp_
     state.create_exit = 2
     assert state.run() == 2
     assert next(step for step in state.workflow if step['id']=='post_script')['reason'] == 'post_condition'
+
+
+@pytest.mark.parametrize('step', ['prune', 'compact', 'check', 'post'])
+def test_restart_warning_cannot_hide_later_step_failures(run_backup, monkeypatch, tmp_path, step):
+    state = observe_run(run_backup, monkeypatch, tmp_path, hooks=True,
+                        post=42 if step == 'post' else 0)
+    state.fail_restart = 'docker'
+    if step != 'post':
+        def fail_command(command, controller):
+            return 2 if command[1] == step else 0
+        monkeypatch.setattr(borg_runner, '_run_borg', fail_command)
+    assert state.run() == 2
+    steps = {item['id']: item for item in state.workflow}
+    assert steps['create']['status'] == 'success'
+    assert steps['start_docker']['status'] == 'warning'
+    assert steps['post_script' if step == 'post' else step]['status'] == 'error'
+    if step in ('prune', 'compact'):
+        assert steps['check']['status'] == 'skipped'
 
 
 def test_live_ledger_survives_phase_changes_and_write_failure(tmp_path, monkeypatch):
