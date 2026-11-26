@@ -20,6 +20,8 @@ from lib.borg_runner import BorgRunner
 from lib import docker_manager, vm_manager, runtime_recovery
 from wizard_api import generate_flow_preview
 
+REAL_FINISH = BackupJob._do_finish
+
 
 @pytest.fixture
 def run_backup(monkeypatch, tmp_path):
@@ -31,6 +33,7 @@ def run_backup(monkeypatch, tmp_path):
         log_file=tmp_path / "backup.log", backup_paths=[tmp_path],
         borg_cache_dir=tmp_path / "cache", date_tag="2026-10-09",
         runtime_recovery_file=tmp_path / "runtime-recovery.json",
+        status_dir=tmp_path / "status",
     )
     state = SimpleNamespace(
         actions=[], phases=[], result=None, cancelled=False, create_exit=0,
@@ -59,8 +62,8 @@ def run_backup(monkeypatch, tmp_path):
             assert stopped.container_ids == ["openhab-id"]
             action("start_docker")
             return docker_manager.DockerStartResult(
-                count_before=1, count_after=0 if state.fail_restart == "docker" else 1,
-                failed_ids=["openhab-id"] if state.fail_restart == "docker" else [],
+                count_before=1, count_after=0 if state.fail_restart in ("docker", "both") else 1,
+                failed_ids=["openhab-id"] if state.fail_restart in ("docker", "both") else [],
             )
 
     class Vms:
@@ -79,8 +82,8 @@ def run_backup(monkeypatch, tmp_path):
             action("start_vms")
             return vm_manager.VmStartResult(
                 target_vms=["test-vm"],
-                started_vms=[] if state.fail_restart == "vm" else ["test-vm"],
-                failed_vms=["test-vm"] if state.fail_restart == "vm" else [],
+                started_vms=[] if state.fail_restart in ("vm", "both") else ["test-vm"],
+                failed_vms=["test-vm"] if state.fail_restart in ("vm", "both") else [],
             )
 
     def create(*_args, **_kwargs):
@@ -168,19 +171,108 @@ def test_failed_or_cancelled_create_recovers_without_maintenance(run_backup, fai
     assert not state.config.lock_file.exists()
 
 
-@pytest.mark.parametrize("kind", ["docker", "vm"])
-def test_restart_failure_recovers_other_workloads_and_preserves_failure(run_backup, kind):
+@pytest.mark.parametrize("kind", ["docker", "vm", "both"])
+@pytest.mark.parametrize("create_exit,check_exit", [(0, 0), (1, 0), (0, 1), (0, 2)])
+def test_restart_failure_allows_maintenance_and_preserves_warnings(run_backup, kind, create_exit, check_exit):
     state = run_backup
     state.fail_restart = kind
-    with pytest.raises(RuntimeError, match="Runtime recovery failed"):
-        state.run()
-    assert state.actions == ["stop_docker", "stop_vms", "create", "start_docker", "start_vms", "finish", "release"]
-    assert state.result == (2, RUNTIME_RECOVERY_FAILED)
-    assert state.phases[-1][0] == "failed"
+    state.create_exit, state.check_exit = create_exit, check_exit
+    expected = max(1, check_exit)
+    assert state.run() == expected
+    assert state.actions == ["stop_docker", "stop_vms", "create", "start_docker", "start_vms",
+                             "prune", "compact", "check", "finish", "release"]
+    assert state.result == (expected, RUNTIME_RECOVERY_FAILED)
+    assert state.phases[-1][0] == ("failed" if expected == 2 else "completed")
     summary = runtime_recovery.summarize_runtime_recovery(state.config.runtime_recovery_file)
-    assert summary["pending_count"] == summary["attention_count"] == 1
+    assert summary["pending_count"] == summary["attention_count"] == (2 if kind == "both" else 1)
     assert summary["entries"][0]["state"] == "restart_failed"
     assert not state.config.lock_file.exists()
+
+
+@pytest.mark.parametrize("kind", ["docker", "vm"])
+@pytest.mark.parametrize("failure", ["create", "cancel_create", "cancel_restart"])
+def test_restart_failure_does_not_enable_maintenance_after_failed_or_cancelled_create(run_backup, kind, failure):
+    state = run_backup
+    state.fail_restart = kind
+    state.create_exit = 2 if failure == "create" else 0
+    state.cancel_at = {"cancel_create": "create", "cancel_restart": "start_docker"}.get(failure, "")
+    if failure == "cancel_restart":
+        assert state.run() == 2
+    else:
+        with pytest.raises(RuntimeError, match="Backup cleanup failed"):
+            state.run()
+    assert state.actions == ["stop_docker", "stop_vms", "create", "start_docker", "start_vms", "finish", "release"]
+    assert state.result == (2, RUNTIME_RECOVERY_FAILED)
+    assert runtime_recovery.summarize_runtime_recovery(state.config.runtime_recovery_file)["attention_count"] == 1
+    assert not state.config.lock_file.exists()
+
+
+@pytest.mark.parametrize("failure", ["unexpected", "persistence"])
+def test_unexpected_recovery_errors_remain_fatal_after_successful_create(run_backup, monkeypatch, caplog, failure):
+    state = run_backup
+
+    def fail(*_args, **_kwargs):
+        raise OSError("password=must-not-be-logged")
+
+    if failure == "unexpected":
+        monkeypatch.setattr(BackupJob, "start_docker", fail)
+    else:
+        monkeypatch.setattr(runtime_recovery, "mark_runtime_restarted", fail)
+    with pytest.raises(RuntimeError, match="Runtime recovery failed"):
+        state.run()
+    assert "prune" not in state.actions
+    assert "start_vms" in state.actions
+    assert state.result == (2, RUNTIME_RECOVERY_FAILED)
+    assert "must-not-be-logged" not in caplog.text
+    assert not state.config.lock_file.exists()
+
+
+@pytest.mark.parametrize("kind,name", [("docker", "OpenHAB"), ("vm", "test-vm"), ("both", "OpenHAB")])
+@pytest.mark.parametrize("create_exit", [0, 1])
+def test_restart_warning_is_saved_and_notified_without_changing_archive_result(run_backup, monkeypatch, kind, name, create_exit):
+    import json
+    from lib import borg_runner
+
+    state = run_backup
+    state.fail_restart = kind
+    state.create_exit = create_exit
+    events = []
+    stats = borg_runner.BorgStats(archive_name="appdata-tested", original_size=1024, files=3)
+    monkeypatch.setattr(borg_runner, "parse_borg_stats", lambda *_: stats)
+    monkeypatch.setattr(BackupJob, "_do_finish", REAL_FINISH)
+    monkeypatch.setattr(BackupJob, "_get_repository_size", lambda _: 1024)
+    monkeypatch.setattr(BackupJob, "_get_repo_check_info", lambda _: ("unknown", "unknown", "unknown"))
+    monkeypatch.setattr(BackupJob, "_send_notification_event", lambda _, *args: events.append(args))
+    assert state.run() == 1
+    status = json.loads(next(state.config.status_dir.glob("*.status")).read_text())
+    assert status["status"] == "warning"
+    assert status["exit_code"] == 1 and status["backup_exit_code"] == create_exit
+    assert status["archive_name"] == "appdata-tested" and status["files_count"] == 3
+    assert name in status["error_message"]
+    assert len(events) == 1 and events[0][0] == "backup_warning"
+    assert name in events[0][2] and name in events[0][6]["error"]
+    assert "Borg exited with warning status 1" not in events[0][2]
+    if create_exit == 1:
+        assert "Borg completed with warnings" in status["error_message"]
+        assert "Borg completed with warnings" in events[0][2]
+    if kind == "both":
+        assert "test-vm" in status["error_message"] and "test-vm" in events[0][2]
+
+
+def test_maintenance_exception_keeps_error_and_restart_warning(run_backup, monkeypatch):
+    state = run_backup
+    state.fail_restart = "docker"
+    messages = []
+
+    def fail(*_args, **_kwargs):
+        raise RuntimeError("maintenance process failed")
+
+    monkeypatch.setattr(BorgRunner, "maintenance", fail)
+    monkeypatch.setattr(BackupJob, "_do_finish", lambda job: messages.append((job.exit_code, job._final_msg)))
+    with pytest.raises(RuntimeError, match="maintenance process failed"):
+        state.run()
+    assert messages[0][0] == 2
+    assert "aborted by exception" in messages[0][1] and "OpenHAB" in messages[0][1]
 
 
 @pytest.mark.parametrize("docker_mode,vm_mode", [("all", "none"), ("none", "all"), ("none", "none")])
