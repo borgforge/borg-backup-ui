@@ -52,6 +52,7 @@ def test_restore_runner_discovers_usb_profile_repository(tmp_path, monkeypatch) 
             "runner": "scriptless-wizard-runner",
             "job_key": job_id('testjob_usb'),
             "backup_type": "testjob",
+            "archive_prefixes": ["old-testjob-backup"],
             "location": "usb",
             "repository_key": "repo_testjob_usb",
         })),
@@ -99,6 +100,8 @@ def test_restore_runner_discovers_usb_profile_repository(tmp_path, monkeypatch) 
         "unmount_after_run": True,
     }]
     assert repos[0]["storage"]["storage_key"] == "storage_usb_test"
+    assert repos[0]["archive_prefix"] == "testjob-backup"
+    assert repos[0]["archive_prefixes"] == ["old-testjob-backup"]
 
 
 def _restore_test_instance(runner, monkeypatch, tmp_path):
@@ -126,8 +129,8 @@ def test_restore_runner_tests_unencrypted_repository_without_passphrase(tmp_path
         return {}
 
     def fake_borg(args, _env, timeout=None, consume=None):
-        if args[:3] == ["list", "--short", "--last"]:
-            return SimpleNamespace(returncode=0, stdout="archive-1\n", stderr="")
+        if args[:2] == ["list", "--json"]:
+            return SimpleNamespace(returncode=0, stdout=json.dumps({"archives": [{"name": "archive-1", "start": "2026-11-01T00:00:00"}]}), stderr="")
         if args[:2] == ["info", "--json"]:
             return SimpleNamespace(returncode=0, stdout=json.dumps({"archives": [{"stats": {}}]}), stderr="")
         raise AssertionError(f"Unexpected Borg call: {args}, timeout={timeout}")
@@ -142,6 +145,7 @@ def test_restore_runner_tests_unencrypted_repository_without_passphrase(tmp_path
 
     result = instance.test_repo({
         "job_key": "testdata_local",
+        "archive_prefix": "archive",
         "type": "testdata",
         "location": "local",
         "path": str(repository),
@@ -177,6 +181,7 @@ def test_restore_runner_keeps_passphrase_requirement_for_encrypted_repository(tm
 
     result = instance.test_repo({
         "job_key": "testdata_local",
+        "archive_prefix": "archive",
         "type": "testdata",
         "location": "local",
         "path": str(repository),
@@ -299,8 +304,8 @@ def test_restore_probe_uses_size_and_regular_file_limits(tmp_path, monkeypatch, 
     rows += [{"type": "l", "path": "symbolic-link"}]
     calls, results = [], []
     def fake_borg(args, _env, timeout=None, consume=None):
-        if args[:3] == ["list", "--short", "--last"]:
-            output = "archive-1\n"
+        if args[:2] == ["list", "--json"]:
+            output = json.dumps({"archives": [{"name": "archive-1", "start": "2026-11-01T00:00:00"}]})
         elif args[:2] == ["info", "--json"]:
             output = json.dumps({"archives": [{"stats": {"original_size": size_gb * 1024**3}}]})
         elif args[:2] == ["list", "--json-lines"]:
@@ -316,7 +321,7 @@ def test_restore_probe_uses_size_and_regular_file_limits(tmp_path, monkeypatch, 
     monkeypatch.setattr(instance, "_env", lambda *_args, **_kwargs: {})
     monkeypatch.setattr(instance, "_borg", fake_borg)
     monkeypatch.setattr(instance, "_write", lambda *args, **kwargs: results.append((args, kwargs)))
-    result = instance.test_repo({"job_key": job_id("photos_local"), "type": "photos", "name": "Renamed job",
+    result = instance.test_repo({"job_key": job_id("photos_local"), "archive_prefix": "archive", "type": "photos", "name": "Renamed job",
                                  "location": "local", "path": str(tmp_path), "encryption": "none", "passphrase_file": ""})
     assert result == 0
     args, details = results[-1]

@@ -114,7 +114,8 @@ def _tester(tmp_path, monkeypatch):
     monkeypatch.setattr(runner.RestoreTest, '_load_notification_config', lambda _s: {})
     tester = runner.RestoreTest(conf, args)
     monkeypatch.setattr(tester, '_notify_event', lambda *_a: None)
-    repo = {'job_key': job_id('flash_local'), 'path': str(tmp_path / 'repository'), 'location': 'local',
+    repo = {'job_key': job_id('flash_local'), 'archive_prefix': 'flash-backup',
+            'path': str(tmp_path / 'repository'), 'location': 'local',
             'restore_test_policy': {'mode': 'scheduled', 'cron': '0 14 * * 0', 'level': 3}}
     return tester, repo
 

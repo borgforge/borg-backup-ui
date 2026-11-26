@@ -1016,6 +1016,10 @@ explains dry-run and standard output. It is optional for routine operation.
 
 ### 8.4 Start Tests
 
+Manual and scheduled tests select the newest archive belonging to the selected job, using its current and stored historical archive prefixes in the configured repository. The archive's timestamp decides which matching archive is newest. If no matching archive exists, the test fails with `RT_ARCHIVE_MISSING`; invalid prefix metadata or archive-list output fails with `RT_ARCHIVE_SELECTION_FAILED`. Another job's archive is never used as a fallback.
+
+**Existing reports after updating (#753):** Earlier versions could test another job's newest archive when several jobs shared one repository. Review the archive names in those reports and rerun affected jobs with **Test now**. Existing reports are retained unchanged; the update does not retroactively validate them.
+
 Use **Test now** next to a job to start it manually with its configured test level. Watch the live log and review **Test reports** afterwards. Fixed schedules run automatically through cron. If an existing global interval schedule is active, **Run due interval tests** remains available for its due jobs. Repeated manual starts of the same job open the existing run; repository conflicts are recorded as skipped.
 
 Started tests are marked directly beside the job with **Running**, **Waiting for test slot**, or **Status unknown** and a red **Cancel** button. After confirmation, the test stops its processes and releases its resources. The button shows **Cancelling…** until cleanup finishes, then **Test now** becomes available again. The log and report explicitly identify the cancellation; it is not successful restore evidence. Status refreshes when opening the page and every ten seconds. Independently started parallel tests continue. Cancelling a global interval run also stops the remaining batch, as explained in the confirmation. The button remains disabled for starting runs or runs started before this update without cancellation control.

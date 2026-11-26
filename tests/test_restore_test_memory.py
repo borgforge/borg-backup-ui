@@ -390,7 +390,8 @@ def test_timeout_never_becomes_successful_test_evidence(tmp_path, monkeypatch, f
     monkeypatch.setattr(tester, "_env", lambda *_args, **_kw: {})
     def borg(args, _env, timeout=None, consume=None):
         if args[0] == "list" and "--json-lines" not in args:
-            return subprocess.CompletedProcess(args, 0, "archive\n", "")
+            return subprocess.CompletedProcess(args, 0,
+                '{"archives":[{"name":"appdata-backup-1","start":"2026-11-01T00:00:00"}]}', "")
         if args[0] == "info":
             return subprocess.CompletedProcess(args, 124 if failure == "metadata" else 0,
                                                '{"archives":[{"stats":{"original_size":1}}]}', "timed out")
@@ -399,7 +400,8 @@ def test_timeout_never_becomes_successful_test_evidence(tmp_path, monkeypatch, f
             return subprocess.CompletedProcess(args, 0, "", "")
         return subprocess.CompletedProcess(args, 124, "", "timed out")
     monkeypatch.setattr(tester, "_borg", borg)
-    repo = {"job_key": job_id("appdata_local"), "path": str(tmp_path), "location": "local",
+    repo = {"job_key": job_id("appdata_local"), "archive_prefix": "appdata-backup",
+            "path": str(tmp_path), "location": "local",
             "encryption": "none", "passphrase_file": ""}
     try:
         assert tester._test_repo_locked(repo) == 1

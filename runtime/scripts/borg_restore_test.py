@@ -26,12 +26,13 @@ import json
 import os
 import random
 import re
+import shlex
 import stat
 import subprocess
 import sys
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 VERSION = "1.0.0"
@@ -172,7 +173,11 @@ def _refresh_unraid_dashboard_widget_cache(conf: dict, reason: str, log_fn=None)
 
 
 def discover_repos(conf: dict) -> list:
-    """Build the restore-test list from canonical job/repository links."""
+    """Build restore-test entries with repository links and stored job prefixes.
+
+    Preserve invalid/missing prefixes so execution records a failed test instead
+    of silently omitting the job or selecting another job's archive.
+    """
     data_root = _repository_data_root()
     jobs_dir = data_root / "config" / "jobs"
     repos = []
@@ -213,6 +218,8 @@ def discover_repos(conf: dict) -> list:
         seen.add(key)
         repos.append({
             "job_key": job_key,
+            "archive_prefix": raw.get("archive_prefix"),
+            "archive_prefixes": raw.get("archive_prefixes", []),
             "restore_test_policy": raw.get("restore_test_policy") or {},
             "type": "",
             "name": str(raw.get("name") or "Backup"),
@@ -713,11 +720,55 @@ class RestoreTest:
             pending.unlink(missing_ok=True)
             self._cleanup_smb_mount(repo, mounted)
 
+    def _latest_job_archive(self, repo: dict, env: dict, commands: list) -> str:
+        """Return the newest archive across the job's explicit prefix history.
+
+        Append executed Borg argument lists to ``commands`` for report evidence.
+        Return an empty string if no prefix matches. Raise ValueError for invalid
+        prefixes/listings or CalledProcessError for any failed prefix query; a
+        partial result must never be treated as the newest matching archive.
+        Captured output stays bounded to one archive per prefix.
+        """
+        from archive_prefix import job_archive_prefixes
+
+        if not isinstance(repo.get("archive_prefixes", []), list):
+            raise ValueError("Invalid job archive prefix history; check the job configuration")
+        prefixes = job_archive_prefixes(repo)
+        latest = None
+        for prefix in prefixes:
+            command = ["list", "--json", "--sort-by", "timestamp", "--last", "1",
+                       f"--glob-archives={prefix}-*", repo["path"]]
+            commands.append(command)
+            result = self._borg(command, env)
+            if result.returncode != 0:
+                raise subprocess.CalledProcessError(result.returncode, command, stderr=result.stderr)
+            try:
+                archives = json.loads(result.stdout)["archives"]
+                if not isinstance(archives, list) or len(archives) > 1:
+                    raise ValueError
+                if not archives:
+                    continue
+                archive = archives[0]
+                name = archive["name"]
+                if not isinstance(name, str) or not name.startswith(prefix + "-"):
+                    raise ValueError
+                timestamp = datetime.fromisoformat(archive["start"])
+                # Borg's archive timestamps without an offset represent UTC.
+                timestamp = timestamp.replace(tzinfo=timezone.utc) if timestamp.tzinfo is None else timestamp
+            except (ValueError, TypeError, KeyError):
+                raise ValueError("Invalid Borg archive listing; job archive selection could not be verified") from None
+            candidate = (timestamp, name)
+            if latest is None or candidate > latest:
+                latest = candidate
+        return latest[1] if latest else ""
+
     def _test_repo_locked(self, repo: dict) -> int:
         """Verify under an existing lock; propagate cancellation after SMB cleanup.
 
         Returns 0=success, 1=failure, 2=skipped or 3=unavailable. Local path
         access errors are reported as unavailable before Borg or secrets are read.
+        Only the newest archive matching the job's stored prefixes is tested;
+        missing matches or invalid selection data fail without restore evidence.
         """
         location = repo["location"]
         path     = repo["path"]
@@ -802,62 +853,68 @@ class RestoreTest:
 
             self.log("Level 1: Repository integrity")
             s0 = time.time()
-            r = self._borg(["list", "--short", "--last", "1", path], env)
-            if r.returncode != 0:
-                self.log(f"  ERROR: borg list failed (exit {r.returncode})")
-                self.log(f"  {r.stderr[:300]}")
-                err = self._analyze_error(r.stderr)
-                code = self._failure_code_from_category(err["category"])
+            list_commands = []
+            try:
+                last_archive = self._latest_job_archive(repo, env, list_commands)
+            except (subprocess.CalledProcessError, ValueError) as exc:
+                output = exc.stderr if isinstance(exc, subprocess.CalledProcessError) else str(exc)
+                self.log(f"  ERROR: Job archive selection failed: {output[:300]}")
+                err = self._analyze_error(output) if isinstance(exc, subprocess.CalledProcessError) else {
+                    "category": "archive_selection", "details": output,
+                }
+                code = (self._failure_code_from_category(err["category"])
+                        if isinstance(exc, subprocess.CalledProcessError) else "RT_ARCHIVE_SELECTION_FAILED")
                 steps.append({
                     "step_id": "repo_reachable",
                     "status": "failed",
                     "duration_ms": int((time.time() - s0) * 1000),
-                    "message": "Repository check failed",
-                    "command": f"borg list --short --last 1 {path}",
+                    "message": "Job archive selection failed",
+                    "command": "\n".join(shlex.join(["borg", *cmd]) for cmd in list_commands),
                     "error_code": code,
                     "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 })
                 self._mark_not_tested(steps, "repo_reachable")
                 self._write(key, repo, "failed", int(time.time()-t0), 0, 0, 0, "unknown", "", {}, [],
                             exit_code=1, error_category=err["category"],
-                            error_details=err["details"], error_output=r.stderr[:500],
+                            error_details=err["details"], error_output=output[:500],
                             steps=steps, failure_code=code, failure_hint=err["details"])
                 return 1
+            list_command = "\n".join(shlex.join(["borg", *cmd]) for cmd in list_commands)
             steps.append({
                 "step_id": "repo_reachable",
                 "status": "passed",
                 "duration_ms": int((time.time() - s0) * 1000),
                 "message": "Repository reachable",
-                "command": f"borg list --short --last 1 {path}",
+                "command": list_command,
                 "error_code": "",
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             })
 
-            last_archive = r.stdout.strip().splitlines()[-1] if r.stdout.strip() else ""
             if not last_archive:
-                self.log("  ERROR: No archive found")
+                missing_hint = "No archive matching this job's current or historical prefixes was found in the repository"
+                self.log(f"  ERROR: {missing_hint}")
                 steps.append({
                     "step_id": "archive_readable",
                     "status": "failed",
                     "duration_ms": 0,
-                    "message": "No archive found",
-                    "command": f"borg list --short --last 1 {path}",
+                    "message": missing_hint,
+                    "command": list_command,
                     "error_code": "RT_ARCHIVE_MISSING",
                     "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 })
                 self._mark_not_tested(steps, "archive_readable")
                 self._write(key, repo, "failed", int(time.time()-t0), 0, 0, 0, "unknown", "", {}, [],
                             exit_code=1, error_category="archive_missing",
-                            error_details="No archive found in repository",
+                            error_details=missing_hint,
                             steps=steps, failure_code="RT_ARCHIVE_MISSING",
-                            failure_hint="No archive found in repository")
+                            failure_hint=missing_hint)
                 return 1
             steps.append({
                 "step_id": "archive_readable",
                 "status": "passed",
                 "duration_ms": 0,
                 "message": f"Archive found: {last_archive}",
-                "command": f"borg list --short --last 1 {path}",
+                "command": list_command,
                 "error_code": "",
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             })
