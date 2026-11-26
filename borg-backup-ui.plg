@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "borg-backup-ui">
 <!ENTITY author    "Thorsten Steinberg">
-<!ENTITY version   "2026.11.13.1206">
+<!ENTITY version   "2026.11.26.1157">
 <!ENTITY github    "https://raw.githubusercontent.com/borgforge/borg-backup-ui">
 <!ENTITY pluginURL "&github;/main/&name;.plg">
 <!ENTITY bootdir   "/boot/config/plugins/&name;">
@@ -20,6 +20,12 @@
 
 <CHANGES>
 <![CDATA[
+###2026.11.26.1157###
+### Bug Fixes
+
+- Continue configured prune, compact and repository checks when Docker containers or VMs cannot restart after successful archive creation. Report the affected workloads as a warning and retain pending recovery details, without hiding backup, maintenance or unexpected recovery errors. (#747)
+- Restore tests now select the newest archive matching the selected job's current or historical prefixes, including when jobs share a repository. Missing matches or invalid selection data fail instead of testing another job's backup. Review archive names in older shared-repository test reports and rerun affected jobs after updating. (#753)
+
 ###2026.11.13.1206###
 ### Security
 
@@ -33,29 +39,6 @@
 ### Improvements
 
 - Show SMB mount status automatically while the settings page is visible, using passive local mount observations over one live connection without repeated authentication-file reads. Keep Mount drive and Unmount drive as compact manual actions and distinguish the explicit connection/write test. No mount paths are changed. (#730)
-
-###2026.11.08.1742###
-### Migration and compatibility
-
-- Include an isolated private Python runtime for Unraid 6.12.5 through 7.x. Python 3 for Unraid is no longer required by Borg Backup UI in this release. A compatible external interpreter remains preferred; the private fallback works without a Python download at boot. Other plugins may still need their own Python provider. Unraid 8 is not supported. Existing jobs, configuration, secrets and repositories are preserved. (#548)
-
-### Bug Fixes
-
-- Distinguish running restore tests from tests waiting for the shared memory-protected execution slot. Show running/waiting counts and per-test status in the dashboard and test plan, with unknown states explicitly identified and dashboard status badges aligned in a right-hand column. (#722)
-
-### Security
-
-- Include upstream Apprise YAML configuration parser hardening for GHSA-cfp4-m43r-v9q4. Borg Backup UI uses notification URLs rather than Apprise YAML configuration imports. (#721)
-
-### Improvements
-
-- Show the selected Python runtime source, version and path in system health. Keep service, backup, restore and administrative helpers on the selected interpreter, with packaged dependencies isolated from host Python packages. (#548)
-
-- Show bundled CPython and the active interpreter separately under Settings > About > Third-party. Group full original license notices by bundle and log the actual Python version, source and executable in backup and restore-test runs. (#548)
-
-- Fix private Python startup on Unraid systems mounting `/run` with `noexec`: keep executable files in the plugin-owned `/usr` overlay. Show extraction/reuse and the selected Python interpreter during installation and service start; distinguish BorgBackup from the application interpreter and report unavailable account checks accurately. (#548)
-- Include a sanitized database profile inventory in support bundles so diagnostic tools can resolve profile IDs and current backup settings. Exclude credentials and distinguish unavailable profile data from an empty inventory or a failed backup. (#703)
-- Update bundled Apprise to 2.2.0 with 170 available notification providers, including 12 new services. Burst SMS is now listed as Kudosity; existing URLs, profiles and secrets remain supported without migration. (#721)
 
 ]]>
 </CHANGES>
@@ -82,8 +65,8 @@ PLUGIN_DIR="/boot/config/plugins/${NAME}"
 PACKAGE_FILE="${PLUGIN_DIR}/${NAME}-${VERSION}.txz"
 PACKAGE_TMP="${PACKAGE_FILE}.tmp"
 PACKAGE_URL="&pkgurl;"
-EXPECTED_MD5="d63ed9ecaa0070b01d1a8d1334250d0d"
-EXPECTED_SHA256="2050c306cf327b90ea0710230e56a7ffe35d7175fdef636a506010974757665a"
+EXPECTED_MD5="28d1bcd25fb1fc5968dbfb652f1f4035"
+EXPECTED_SHA256="75dbc82938b14c1075fccd195a992c1851469f2f882aa9f3d36c5cd6d65f07ea"
 INSTALLED_MD5_FILE="${PLUGIN_DIR}/.installed-package-md5"
 VENDOR_DIR="${PLUGIN_DIR}/runtime/vendor"
 VENDOR_BUNDLE_DIR="${PLUGIN_DIR}/runtime/vendor-bundles"
