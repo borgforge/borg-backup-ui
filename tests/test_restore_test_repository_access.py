@@ -76,7 +76,7 @@ def test_access_error_records_unavailable_and_releases_lock(tmp_path, monkeypatc
 @pytest.mark.parametrize("exists", [False, True])
 def test_missing_path_or_regular_file_stays_unavailable(tmp_path, monkeypatch, exists):
     tester, repo = _tester(tmp_path, monkeypatch)
-    repo.update(passphrase_file="", encryption="none")
+    repo.update(passphrase_file="", encryption="none", archive_prefix="flash-backup")
     if exists:
         Path(repo["path"]).write_text("not a directory")
     monkeypatch.setattr(tester, "_borg", lambda *_a, **_k: pytest.fail("Must not start Borg"))
@@ -91,7 +91,7 @@ def test_missing_path_or_regular_file_stays_unavailable(tmp_path, monkeypatch, e
 @pytest.mark.parametrize("remote", [False, True])
 def test_reachable_directory_and_ssh_proceed_to_borg(tmp_path, monkeypatch, remote):
     tester, repo = _tester(tmp_path, monkeypatch)
-    repo.update(passphrase_file="", encryption="none")
+    repo.update(passphrase_file="", encryption="none", archive_prefix="flash-backup")
     if remote:
         repo["path"] = "ssh://backup@example.invalid/repository"
         fail_repository_stat(monkeypatch, str(Path(repo["path"])), errno.EIO)
@@ -102,12 +102,13 @@ def test_reachable_directory_and_ssh_proceed_to_borg(tmp_path, monkeypatch, remo
 
     def borg(command, _env):
         calls.append(command)
-        return subprocess.CompletedProcess(command, 0, "", "")
+        return subprocess.CompletedProcess(command, 0, '{"archives": []}', "")
 
     monkeypatch.setattr(tester, "_borg", borg)
     try:
         assert tester.test_repo(repo) == 1  # Reachable but deliberately empty repository.
-        assert calls == [["list", "--short", "--last", "1", repo["path"]]]
+        assert calls == [["list", "--json", "--sort-by", "timestamp", "--last", "1",
+                          "--glob-archives=flash-backup-*", repo["path"]]]
         report = json.loads((tester.status_dir / f"{repo['job_key']}.test").read_text())
         assert report["failure_code"] == "RT_ARCHIVE_MISSING"
     finally:

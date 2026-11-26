@@ -247,9 +247,12 @@ Planning combines the information into four columns, grouped by location with jo
 - **L2:** `borg extract --dry-run` reads data and checks it with Borg, but writes no restored user files.
 - **L3:** Additionally stream selected files through `--stdout` and calculate SHA-256; no independent expected-hash comparison.
 
-> [!WARNING] Selection uses the newest repository archive, not necessarily the
-> job's archive. Check its name and individual steps. Metadata failures,
-> timeout and memory interruptions produce a failed test.
+Tests select the newest archive matching the job's current or historical
+archive prefixes. Without a match, the test fails.
+
+> [!WARNING] Older reports could test another job's archive in a shared
+> repository (#753). Check archive names and rerun affected tests after updating.
+> Metadata failures, timeout and memory interruptions also produce a failed test.
 
 Archive listings use bounded memory. Defaults are a 2048 MiB RAM limit and a
 1024 MiB host reserve; limited tests run sequentially and require cgroup v2.

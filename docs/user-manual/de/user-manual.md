@@ -960,16 +960,13 @@ Verpasste oder übersprungene Kalendertermine werden nicht automatisch nachgehol
 
 ### 8.3 Testlevel
 
-**Der Bericht ist jobbezogen gespeichert; die Archivauswahl ist repositoryweit.**
-Der Runner fragt mit `borg list --short --last 1` das neueste Archiv ab, ohne den
-Archivpräfix des Jobs zu filtern. Teilen sich Jobs ein Repository, kann das
-getestete Archiv zu einem anderen Job gehören. Prüfen Sie im Bericht immer
-**das tatsächlich getestete Archiv**. Für einen bestimmten Sicherungsstand
-verwenden Sie die explizite Archivauswahl in **Browse & Restore**.
+**Der Bericht und die Archivauswahl sind jobbezogen.** Manuelle und geplante Tests wählen das neueste Archiv des ausgewählten Jobs im konfigurierten Repository. Dabei gelten das aktuelle und die gespeicherten historischen Archivpräfixe; maßgeblich ist der Archivzeitpunkt. Fehlt ein passendes Archiv, schlägt der Test mit `RT_ARCHIVE_MISSING` fehl. Ungültige Präfixdaten oder Archivlisten führen zu `RT_ARCHIVE_SELECTION_FAILED`. Ein Archiv eines anderen Jobs wird nicht ersatzweise geprüft.
+
+Prüfen Sie im Bericht das tatsächlich getestete Archiv. Für einen bestimmten Sicherungsstand verwenden Sie die explizite Archivauswahl in **Browse & Restore**.
 
 | Level | Tatsächliches Verfahren | Umfang und Schreibzugriffe | Last und Aussagegrenze |
 | --- | --- | --- | --- |
-| L1 | Archivliste abrufen, neuestes Archiv auswählen, `borg info --json` versuchen | Metadaten, keine Nutzdateien am Restore-Ziel; Logs/Status und Borg-Verwaltungsdaten können geschrieben werden | Geringer als L2; kein `borg check`, keine vollständige Datenprüfung. Ein Fehler im Info-Schritt beendet den Test als fehlgeschlagen. |
+| L1 | Job-Archive abrufen, neuestes passendes Archiv auswählen, `borg info --json` versuchen | Metadaten, keine Nutzdateien am Restore-Ziel; Logs/Status und Borg-Verwaltungsdaten können geschrieben werden | Geringer als L2; kein `borg check`, keine vollständige Datenprüfung. Ein Fehler im Info-Schritt beendet den Test als fehlgeschlagen. |
 | L2 | L1, Dateiliste und `borg extract --dry-run` | Liest Metadaten und Datenblöcke, Borg prüft Hash/HMAC, entschlüsselt und dekomprimiert. Schreibt keine wiederhergestellten Nutzdateien. Unter dem Größenschwellwert vollständiger Dry-Run, darüber begrenzte Auswahl regulärer Dateien | Kann viel I/O und Netzwerkverkehr verursachen. Prüft weder Ziel-Dateisystem, Schreibrechte, freien Restore-Platz noch Anwendungsstart. |
 | L3 | L2, danach ausgewählte reguläre Dateien mit `borg extract --stdout` lesen und SHA-256 berechnen | Dateiinhalte werden durch eine Pipe gelesen; Hashes landen im Bericht. Kein unabhängiger Soll-Hash-Vergleich und keine Dateien im Restore-Ziel | Zusätzlicher Datenabruf; Stichprobe standardmäßig 5 Dateien. Keine Garantie für alle Dateien oder einen vollständigen Anwendungs-Restore. Pro Datei gilt ebenfalls der Dry-Run-Timeout (0 = unbegrenzt). |
 
@@ -1026,6 +1023,8 @@ Die [Borg-1.4.5-Referenz zu extract](https://borgbackup.readthedocs.io/en/1.4.5/
 erläutert Dry-Run und Standardausgabe. Für die normale Bedienung ist sie nicht erforderlich.
 
 ### 8.4 Tests starten
+
+**Bestehende Berichte nach dem Update (#753):** Frühere Versionen konnten bei gemeinsam genutzten Repositorys das neueste Archiv eines anderen Jobs prüfen. Kontrollieren Sie die Archivnamen in diesen Berichten und wiederholen Sie betroffene Tests mit **Jetzt testen**. Vorhandene Berichte bleiben unverändert erhalten; das Update bestätigt ihre Gültigkeit nicht nachträglich.
 
 Mit **Jetzt testen** neben einem Job starten Sie den Test manuell mit seinem konfigurierten Testlevel. Verfolgen Sie das Live-Protokoll und prüfen Sie anschließend die **Prüfberichte**. Feste Zeitpläne werden automatisch über Cron ausgeführt. Bei einem aktiven bisherigen globalen Intervallplan steht zusätzlich **Fällige Intervalltests ausführen** zur Verfügung. Wiederholte manuelle Starts desselben Jobs öffnen den vorhandenen Lauf; Repository-Konflikte werden als übersprungen protokolliert.
 
