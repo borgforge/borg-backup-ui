@@ -40,14 +40,15 @@ def test_bilingual_safety_contracts_match_executable_formats_and_methods():
     """Require each language's explicit limitations alongside implementation tokens."""
     transfer = (ROOT / 'api/settings_transfer_api.py').read_text()
     runner = (ROOT / 'runtime/scripts/borg_restore_test.py').read_text()
-    assert '["list", "--short", "--last", "1", path]' in runner
+    assert 'job_archive_prefixes(repo)' in runner
+    assert 'f"--glob-archives={prefix}-*"' in runner
     assert '"extract", "--dry-run"' in runner and '"extract", "--stdout"' in runner
     formats = ('bbui-job-bundle-v3', 'bbui-job-bundle-v4', 'bbui-job-bundle-secure-v3',
                'bbui-profile-secrets-v2', 'bbui-secrets-backup-v1', 'bbui-repository-keys-v1')
     required = {
-        'de': ('kein unabhängiger Soll-Hash-Vergleich', 'die Archivauswahl ist repositoryweit',
+        'de': ('kein unabhängiger Soll-Hash-Vergleich', 'die Archivauswahl sind jobbezogen',
                'Exit-Code 124', 'keine zentralen Skriptdefinitionen', 'Job-ID', 'cmp /mnt/user/demo'),
-        'en': ('No independent expected-hash comparison', 'archive selection is repository-wide',
+        'en': ('No independent expected-hash comparison', 'archive selection are job-specific',
                'exit 124', 'central script definitions', 'Job ID', 'cmp /mnt/user/demo'),
     }
     for language in ('de', 'en'):
@@ -62,6 +63,8 @@ def test_bilingual_safety_contracts_match_executable_formats_and_methods():
         short = (ROOT / ('ui/docs/help.md' if language == 'de' else 'ui/docs/help.en.md')).read_text()
         for term in ('--dry-run', '--stdout', 'SHA-256', 'L1', 'L2', 'L3', 'Timeout' if language == 'de' else 'timeout'):
             assert term in short
+        assert '#753' in short and '#753' in text
+        assert 'RT_ARCHIVE_MISSING' in text and 'RT_ARCHIVE_SELECTION_FAILED' in text
         assert f'../../docs/user-manual/{language}/user-manual.md#16-' in short
         assert re.search(r'^10\. \*\*Flow', short, re.M)
 

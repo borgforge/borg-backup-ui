@@ -952,15 +952,13 @@ Missed or skipped calendar runs are not automatically retried. Use **Test now** 
 
 ### 8.3 Test Levels
 
-**Reports are stored per job; archive selection is repository-wide.** The runner
-uses `borg list --short --last 1` to select the newest archive without filtering
-by the job's archive prefix. In a shared repository, the tested archive may
-belong to another job. Always check **the archive actually tested** in the report.
-Use explicit archive selection in **Browse & Restore** to test a particular backup.
+**Reports and archive selection are job-specific.** Manual and scheduled tests select the newest archive belonging to the selected job, using its current and stored historical archive prefixes in the configured repository. The archive's timestamp decides which matching archive is newest. If no matching archive exists, the test fails with `RT_ARCHIVE_MISSING`; invalid prefix metadata or archive-list output fails with `RT_ARCHIVE_SELECTION_FAILED`. Another job's archive is never used as a fallback.
+
+Check the archive actually tested in the report. Use explicit archive selection in **Browse & Restore** to test a particular backup.
 
 | Level | Actual method | Scope and writes | Cost and limits |
 | --- | --- | --- | --- |
-| L1 | List archives, select newest, attempt `borg info --json` | Metadata only; no restored user files. Logs/status and Borg management data may be written | Lower cost than L2; neither `borg check` nor full data verification. An info-step failure ends the test as failed. |
+| L1 | List job archives, select newest match, attempt `borg info --json` | Metadata only; no restored user files. Logs/status and Borg management data may be written | Lower cost than L2; neither `borg check` nor full data verification. An info-step failure ends the test as failed. |
 | L2 | L1, file listing and `borg extract --dry-run` | Reads metadata and chunks; Borg checks hash/HMAC, decrypts and decompresses. Writes no restored user files. Full archive below the size threshold; bounded regular-file selection above it | Potentially substantial I/O/network traffic. Does not test destination filesystem, write permissions, restore free space or application startup. |
 | L3 | L2, then read selected regular files through `borg extract --stdout` and calculate SHA-256 | Streams content through a pipe and records hashes. No independent expected-hash comparison and no restored destination files | Additional reads; default sample 5 files. No guarantee for all files or full application recovery. The dry-run timeout also applies per file (0 = unlimited). |
 
@@ -1015,8 +1013,6 @@ The [Borg 1.4.5 extract reference](https://borgbackup.readthedocs.io/en/1.4.5/us
 explains dry-run and standard output. It is optional for routine operation.
 
 ### 8.4 Start Tests
-
-Manual and scheduled tests select the newest archive belonging to the selected job, using its current and stored historical archive prefixes in the configured repository. The archive's timestamp decides which matching archive is newest. If no matching archive exists, the test fails with `RT_ARCHIVE_MISSING`; invalid prefix metadata or archive-list output fails with `RT_ARCHIVE_SELECTION_FAILED`. Another job's archive is never used as a fallback.
 
 **Existing reports after updating (#753):** Earlier versions could test another job's newest archive when several jobs shared one repository. Review the archive names in those reports and rerun affected jobs with **Test now**. Existing reports are retained unchanged; the update does not retroactively validate them.
 

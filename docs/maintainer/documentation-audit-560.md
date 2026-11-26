@@ -73,6 +73,13 @@ incorrect workflows/navigation; P2 editorial quality.
 
 These are source findings, not claims of a reproduced production incident.
 
+Follow-up #753 resolves finding 1: restore tests now select the newest archive
+matching the job's current or historical prefixes and fail without a match.
+The manuals and quick help describe the corrected behavior and require reviewing
+and rerunning affected historical shared-repository reports. Real Borg 1.4.5
+regressions cover manual/scheduled L1-L3 selection; the original findings above
+remain a record of the audited baseline.
+
 ## Coverage matrix
 
 C = executable code inspected; S = documentation/static checks; P = practical

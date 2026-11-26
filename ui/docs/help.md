@@ -248,9 +248,13 @@ Die Planung bündelt die Informationen in vier Spalten, gegliedert nach Standort
 - **L2:** `borg extract --dry-run` liest Daten und prüft sie mit Borg, schreibt aber keine wiederhergestellten Nutzdateien.
 - **L3:** Zusätzlich ausgewählte Dateien über `--stdout` lesen und SHA-256 berechnen; kein unabhängiger Soll-Hash-Vergleich.
 
-> [!WARNING] Die Auswahl ist das neueste Archiv des Repositorys, nicht zwingend
-> des Jobs. Prüfen Sie den Archivnamen und die Einzelschritte. Metadatenfehler,
-> Timeout und Speicherabbruch ergeben einen fehlgeschlagenen Test.
+Tests wählen das neueste Archiv passend zu den aktuellen oder historischen
+Archivpräfixen des Jobs. Fehlt ein Treffer, schlägt der Test fehl.
+
+> [!WARNING] Ältere Berichte konnten bei gemeinsam genutzten Repositorys ein
+> fremdes Archiv prüfen (#753). Archivnamen kontrollieren und betroffene Tests
+> nach dem Update wiederholen. Metadatenfehler, Timeout und Speicherabbruch
+> ergeben ebenfalls einen fehlgeschlagenen Test.
 
 Dateilisten werden speichersparend verarbeitet. Standardmäßig gelten 2048 MiB
 RAM-Limit und 1024 MiB Hostreserve; begrenzte Tests laufen nacheinander und
