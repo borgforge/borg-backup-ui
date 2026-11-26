@@ -56,6 +56,14 @@ USER_CANCELLED = "user_cancelled"
 USB_MOUNT_ACCESS_FAILED = "usb_mount_access_failed"
 
 
+class RuntimeRestartError(RuntimeError):
+    """A workload manager reported an incomplete restart after recording recovery.
+
+    The message identifies affected workloads. Unexpected execution or recovery
+    persistence errors must propagate as their original exception instead.
+    """
+
+
 def _path_uses_symlink(path: Path) -> bool:
     current = Path(path.anchor or "/")
     for part in path.parts[1:]:
@@ -320,6 +328,7 @@ class BackupJob:
         self._skip_reason_code: str = ""
         self._skip_status_written: bool = False
         self._failure_code: str = ""
+        self._runtime_recovery_warning: str = ""
         self._cancelled: bool = False
         self._missing_source_paths: List[str] = []
         self._last_status_file: Path | None = None
@@ -400,6 +409,11 @@ class BackupJob:
                     logger.error("%s", exc_val)
                 else:
                     logger.error("Job aborted by exception: %s", exc_val)
+                    if self._runtime_recovery_warning:
+                        self._final_msg = (
+                            f"Backup job aborted by exception ({exc_type.__name__}); check the backup log. "
+                            + self._final_msg
+                        )
 
             if not self._skip_finish:
                 _log_section("PHASE 5: CLEANUP & COMPLETION")
@@ -483,13 +497,25 @@ class BackupJob:
         borg_stats: Optional["BorgStats"] = None,
         final_msg: str = "",
     ) -> None:
-        """Set the outcome before finalization, preserving VM preparation failures."""
+        """Set Borg outcome/stats, retaining preparation failures and restart warnings.
+
+        A recorded restart warning raises successful results to job exit 1,
+        without changing the separately stored create exit or masking errors.
+        """
         self._borg_exit = max(2, borg_exit) if self._failure_code == VmShutdownError.failure_code else borg_exit
         self._borg_stats = borg_stats
         if self._failure_code == VmShutdownError.failure_code:
             self._final_msg = " ".join(filter(None, (self._final_msg, final_msg)))
         else:
             self._final_msg = final_msg
+        if self._runtime_recovery_warning:
+            self._borg_exit = max(1, self._borg_exit)
+            if borg_exit >= 2 and not self._final_msg:
+                self._final_msg = f"Borg operation failed (exit {borg_exit})."
+            elif borg_exit == 1 and not self._final_msg:
+                self._final_msg = "Borg completed with warnings (exit 1)."
+            if self._runtime_recovery_warning not in self._final_msg:
+                self._final_msg = " ".join(filter(None, (self._final_msg, self._runtime_recovery_warning)))
 
     @property
     def exit_code(self) -> int:
@@ -538,8 +564,14 @@ class BackupJob:
         self._final_msg = (self._final_msg + " " + message).strip()
 
     def set_cancelled(self, message: str = "Backup cancelled by user request.") -> None:
-        """Mark deliberate cancellation without hiding a VM preparation failure."""
+        """Mark cancellation without hiding preparation or unresolved restart failures."""
         if self._failure_code == VmShutdownError.failure_code:
+            return
+        if self._runtime_recovery_warning:
+            self._cancelled = False
+            self._borg_exit = 2
+            self._failure_code = RUNTIME_RECOVERY_FAILED
+            self._final_msg = f"{message} {self._runtime_recovery_warning}"
             return
         self._cancelled = True
         self._borg_exit = 130
@@ -590,23 +622,46 @@ class BackupJob:
         Also used by ``__exit__`` after errors or cancellation. Each workload
         type is attempted independently and at most once. Emits recovery phases
         and uses the start methods to update persistent recovery records.
-        Any restart failure marks the run as failed and raises RuntimeError
-        after attempting both Docker and VM recovery.
+        Reported restart failures after create exit 0/1 become job warnings and
+        leave maintenance enabled. Recovery records remain pending. Unexpected
+        errors, preparation failures and recovery after failure/cancellation
+        remain fatal; both workload types are attempted before RuntimeError.
         """
         cleanup_errors: List[Tuple[str, Exception]] = []
         recovery_failures: List[str] = []
-        if not self._docker_restarted and self._docker_stop_result is not None:
-            self._emit_phase("recovering_docker")
-            if self._run_cleanup_step(
-                "Docker recovery", self.start_docker, cleanup_errors
-            ):
-                recovery_failures.append("Docker")
-        if not self._vms_restarted and self._vm_shutdown_result is not None:
-            self._emit_phase("recovering_vms")
-            if self._run_cleanup_step(
-                "VM recovery", self.start_vms, cleanup_errors
-            ):
-                recovery_failures.append("VM")
+        warnings: List[str] = []
+        allow_warning = (
+            self.backup_exit_code in (0, 1) and self._borg_exit in (0, 1)
+            and not self._cancelled and not self._skip_finish
+        )
+        for kind, pending, phase, step, action in (
+            ("Docker", not self._docker_restarted and self._docker_stop_result is not None,
+             "recovering_docker", "start_docker", self.start_docker),
+            ("VM", not self._vms_restarted and self._vm_shutdown_result is not None,
+             "recovering_vms", "start_vms", self.start_vms),
+        ):
+            if not pending:
+                continue
+            self._emit_phase(phase)
+            try:
+                action()
+            except Exception as exc:
+                if allow_warning and isinstance(exc, RuntimeRestartError):
+                    warnings.append(str(exc))
+                    logger.warning("%s Recovery remains pending; repository maintenance may continue.", exc)
+                    if self.workflow is not None:
+                        self.workflow.update(step, status="warning")
+                else:
+                    self._record_cleanup_error(f"{kind} recovery", exc, cleanup_errors)
+                    recovery_failures.append(kind)
+
+        if warnings:
+            self._runtime_recovery_warning = (
+                "Runtime recovery warning: " + " ".join(warnings)
+                + " Check the runtime recovery status and backup log."
+            )
+            self._failure_code = RUNTIME_RECOVERY_FAILED
+            self.set_result(self._borg_exit, self._borg_stats, self._final_msg)
 
         if recovery_failures and not self._skip_finish:
             self._borg_exit = 2
@@ -628,7 +683,11 @@ class BackupJob:
 
     @tracked_runtime_step("start_docker")
     def start_docker(self) -> None:
-        """Attempt Docker restart once; record the result and raise on failure."""
+        """Attempt Docker restart once and persist its result.
+
+        Raise RuntimeRestartError for reported restart failures; execution and
+        persistence exceptions propagate unchanged.
+        """
         if (
             self.docker_manager is not None
             and self._docker_stop_result is not None
@@ -641,19 +700,20 @@ class BackupJob:
                                      "completed_count": max(0, start_result.count_before - len(start_result.failed_ids))},
                                      **({"status": "skipped", "reason": "unavailable"}
                                         if not self._docker_stop_result.available else {}))
+            names = dict(zip(self._docker_stop_result.container_ids, self._docker_stop_result.container_names))
+            failed_names = ", ".join(names.get(cid) or cid for cid in start_result.failed_ids) or "unknown"
+            message = (
+                "Docker containers restarted successfully."
+                if start_result.success
+                else f"{len(start_result.failed_ids)} Docker container(s) could not be restarted: {failed_names}."
+            )
             self._mark_runtime_restarted(
                 self._docker_recovery_id,
                 success=bool(start_result.success),
-                message=(
-                    "Docker containers restarted successfully."
-                    if start_result.success
-                    else f"{len(start_result.failed_ids)} Docker container(s) could not be restarted."
-                ),
+                message=message,
             )
             if not start_result.success:
-                raise RuntimeError(
-                    f"{len(start_result.failed_ids)} Docker container(s) could not be restarted"
-                )
+                raise RuntimeRestartError(message)
 
     @tracked_runtime_step("stop_vms")
     def shutdown_vms(self, selected_names: Optional[List[str]] = None) -> None:
@@ -681,7 +741,11 @@ class BackupJob:
 
     @tracked_runtime_step("start_vms")
     def start_vms(self) -> None:
-        """Attempt VM restart once; record the result and raise on failure."""
+        """Attempt VM restart once and persist its result.
+
+        Raise RuntimeRestartError for reported restart failures; execution and
+        persistence exceptions propagate unchanged.
+        """
         if (
             self.vm_manager is not None
             and self._vm_shutdown_result is not None
@@ -706,7 +770,7 @@ class BackupJob:
                 message=message,
             )
             if not start_result.success:
-                raise RuntimeError(message)
+                raise RuntimeRestartError(message)
 
     def check_usb_mount(self, mount_path: Path) -> None:
         """
@@ -1064,8 +1128,9 @@ class BackupJob:
                 build_backup_notification_context(**details, exit_code=exit_code),
             )
         elif exit_code == 1:
-            logger.info("Borg backup completed with warnings (exit 1)")
-            details = self._backup_notification_details("Warning", duration, "Borg exited with warning status 1.")
+            logger.info("Backup job completed with warnings (job exit 1)")
+            warning = self._final_msg if self._runtime_recovery_warning else "Borg exited with warning status 1."
+            details = self._backup_notification_details("Warning", duration, warning)
             self._send_notification_event(
                 "backup_warning",
                 BACKUP_NOTIFICATION_TITLES["backup_warning"],

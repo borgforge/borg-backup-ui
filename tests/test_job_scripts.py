@@ -409,12 +409,12 @@ def test_post_failure_after_cancel_is_reported_as_failure(run_backup, monkeypatc
     assert state.result == (2, 'POST_SCRIPT_FAILED')
 
 
-def test_recovery_failure_still_runs_post_always(run_backup, monkeypatch):
+@pytest.mark.parametrize('mode', ['success', 'always'])
+def test_recovery_warning_still_runs_post(run_backup, monkeypatch, mode):
     state = run_backup; state.fail_restart = 'docker'
-    configure_hooks(monkeypatch, state, mode='always')
-    with pytest.raises(RuntimeError):
-        state.run()
-    assert 'post' in state.actions and state.result[0] == 2
+    configure_hooks(monkeypatch, state, mode=mode)
+    assert state.run() == 1
+    assert 'post' in state.actions and state.result[0] == 1
 
 
 def test_resource_conflict_does_not_run_hooks(run_backup, monkeypatch):
