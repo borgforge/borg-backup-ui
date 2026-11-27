@@ -606,6 +606,43 @@ class JobManager:
             **_control_state_for_run(state.run_id),
         }
 
+    def output_tail(self, job_key: str, run_id: str) -> dict | None:
+        """Read a bounded original memory-log tail for one exact run.
+
+        File-backed and recovered runs return None for the confined file reader.
+        Copy at most 200 trailing lines / 8192 characters, without masking text.
+        """
+        job_key = _validate_job_key(job_key)
+        with self._lock:
+            state = self._states.get(job_key)
+        if state is None or state.run_id != run_id or state.log_file is not None:
+            return None
+        with state._lock:
+            pieces, remaining = [], 8192
+            for line in reversed(state.lines[-200:]):
+                fragment = (line[-remaining:] + "\n")[-remaining:]
+                pieces.append(fragment)
+                remaining -= len(fragment)
+                if not remaining:
+                    break
+            return {"text": "".join(reversed(pieces)), "running": not state.finished}
+
+    def output_window(self, job_key: str, run_id: str, request: dict) -> dict | None:
+        """Navigate complete memory output for an exact run under its state lock.
+
+        Copies one bounded window; file-backed/replaced runs return None for
+        confined file resolution. Invalid cursors raise MobileError (400/409).
+        """
+        from mobile_log_window import memory_window, options
+        request = options(request)
+        job_key = _validate_job_key(job_key)
+        with self._lock:
+            state = self._states.get(job_key)
+        if state is None or state.run_id != run_id or state.log_file is not None:
+            return None
+        with state._lock:
+            return memory_window(state.lines, request, f'memory:{job_key}:{run_id}:{id(state)}', not state.finished)
+
     def get_all_states(self) -> dict:
         with self._lock:
             keys = list(self._states.keys())

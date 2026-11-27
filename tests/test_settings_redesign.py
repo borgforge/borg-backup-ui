@@ -371,7 +371,8 @@ def test_settings_primary_tab_switch_reuses_existing_dom() -> None:
     assert "function activateSettingsTab(tabKey)" in script
     assert "panel.dataset.settingsPanel !== active.key" in script
     assert "activateSettingsTab(tab);" in script
-    assert "usersPanel.innerHTML = renderSettingsUsers();" in script
+    assert "usersPanel.innerHTML = renderSettingsUserAccounts();" in script
+    assert "document.getElementById('settings-user-admin')" in script
 
 
 def test_settings_menu_translations_live_in_settings_namespace() -> None:

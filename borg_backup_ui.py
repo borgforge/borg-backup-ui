@@ -810,6 +810,10 @@ class BackupUIHandler(BaseHTTPRequestHandler):
             )
             return False
 
+        if path.startswith(("/api/mobile/", "/api/auth/mobile/")):
+            from mobile_api import authorize
+            return authorize(self, path, request_id)
+
         if path == "/api/widget/summary":
             if self.command == "GET" and self._is_homepage_widget_authorized():
                 return self._authorize_maintenance_request(path, request_id)
@@ -901,6 +905,20 @@ class BackupUIHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path
+
+        if path.startswith(("/api/mobile/", "/api/auth/mobile/")):
+            from mobile_api import handle
+            self._handle_api(lambda: handle(self))
+            return
+
+        if path == "/ui/mobile-devices.html":
+            # Existing app links enter the normal shell and keep a fixed login target.
+            target = "/#mobile-devices" if self._is_ui_session_valid() else "/login#mobile-devices"
+            self.send_response(302)
+            self.send_header("Location", target)
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            return
 
         if path == "/metrics":
             self._serve_prometheus_metrics()
@@ -1029,6 +1047,10 @@ class BackupUIHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path
+        if path.startswith(("/api/mobile/", "/api/auth/mobile/")):
+            from mobile_api import handle
+            self._handle_api(lambda: handle(self))
+            return
         routes = {
             "/api/jobs/run": self._post_run_job,
             "/api/job-groups": self._save_job_group,
@@ -1543,6 +1565,9 @@ class BackupUIHandler(BaseHTTPRequestHandler):
                     cls._UI_SESSIONS.pop(sid, None)
                 removed = len(stale)
         self._persist_sessions()
+
+        from mobile_auth import revoke_users
+        revoke_users(self.config, None if scope == "all" else {current_username})
 
         if scope == "all" or current_sid:
             self._extra_response_headers.append(("Set-Cookie", "bbui_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict"))
@@ -3883,7 +3908,7 @@ function authApiError(data,fallback){const code=String(data?.code||'').trim();if
 function showErr(t){msg.textContent=t;msg.className='status-message error login-msg';}
 async function doLogin(){btn.classList.add('loading');msg.className='status-message hidden login-msg';
 try{await i18nReady;const pw=document.getElementById('login-password').value||'';__LOGIN_PAYLOAD__const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-const d=await r.json();if(!r.ok||!d.ok)throw new Error(authApiError(d,'auth.loginFailed'));window.location.href='/';}
+const d=await r.json();if(!r.ok||!d.ok)throw new Error(authApiError(d,'auth.loginFailed'));window.location.href=window.location.hash==='#mobile-devices'?'/#mobile-devices':'/';}
 catch(e){showErr(e.message||authT('auth.loginFailed'));}
 finally{btn.classList.remove('loading');}}
 btn.addEventListener('click',doLogin);
@@ -4132,7 +4157,7 @@ btn.addEventListener('click',doRecovery);
             self.send_header("Content-Length", str(len(content)))
             cache_control = (
                 "no-store"
-                if path in {"/api/widget/summary", "/api/settings/scripts", "/api/settings/scripts/import", "/api/settings/scripts/export", "/api/settings/scripts/catalog", "/api/settings/scripts/source", "/api/settings/homepage-widget-token", "/api/settings/prometheus", "/api/repositories/key-export", "/api/wizard/new-job-id"}
+                if path.startswith(("/api/mobile/", "/api/auth/mobile/")) or path in {"/api/widget/summary", "/api/settings/scripts", "/api/settings/scripts/import", "/api/settings/scripts/export", "/api/settings/scripts/catalog", "/api/settings/scripts/source", "/api/settings/homepage-widget-token", "/api/settings/prometheus", "/api/repositories/key-export", "/api/wizard/new-job-id"}
                 else "no-cache"
             )
             self.send_header("Cache-Control", cache_control)
